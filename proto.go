@@ -6,13 +6,13 @@ import (
 )
 
 const (
-	// RPCCmdNone .
+	// RPCCmdNone is invalid
 	RPCCmdNone byte = 0
-	// RPCCmdReq .
+	// RPCCmdReq Call/Notify
 	RPCCmdReq byte = 1
-	// RPCCmdRsp .
+	// RPCCmdRsp normal response
 	RPCCmdRsp byte = 2
-	// RPCCmdErr .
+	// RPCCmdErr error response
 	RPCCmdErr byte = 3
 )
 

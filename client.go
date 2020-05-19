@@ -11,6 +11,13 @@ import (
 	"time"
 )
 
+const (
+	// TimeZero definition
+	TimeZero time.Duration = 0
+	// TimeForever definition
+	TimeForever time.Duration = 1<<63 - 1
+)
+
 type rpcSession struct {
 	seq  uint64
 	done chan Message
@@ -141,6 +148,37 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration) 
 	return nil
 }
 
+// PushMsg push msg to client's send queue
+func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
+	if !c.running {
+		return ErrClientStopped
+	}
+	if c.reconnecting {
+		return ErrClientReconnecting
+	}
+
+	switch timeout {
+	case TimeForever:
+		c.chSend <- msg
+	case TimeZero:
+		select {
+		case c.chSend <- msg:
+		default:
+			return ErrClientQueueIsFull
+		}
+	default:
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case c.chSend <- msg:
+		case <-timer.C:
+			return ErrClientTimeout
+		}
+	}
+
+	return nil
+}
+
 func (c *Client) addSession(seq uint64, session *rpcSession) {
 	c.mux.Lock()
 	c.sessionMap[seq] = session
@@ -167,14 +205,14 @@ func (c *Client) recvLoop() {
 		addr = c.Conn.RemoteAddr()
 	)
 
-	// DefaultLogger.Info("[Arpc] Client: \"%v\" recvLoop start", c.Conn.RemoteAddr())
-	// defer DefaultLogger.Info("[Arpc] Client: \"%v\" recvLoop stop", c.Conn.RemoteAddr())
+	// DefaultLogger.Info("[ARPC] Client: \"%v\" recvLoop start", c.Conn.RemoteAddr())
+	// defer DefaultLogger.Info("[ARPC] Client: \"%v\" recvLoop stop", c.Conn.RemoteAddr())
 
 	if c.Dialer == nil {
 		for {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
-				DefaultLogger.Info("[Arpc] Client \"%v\" Disconnected", addr)
+				DefaultLogger.Info("[ARPC] Client \"%v\" Disconnected", addr)
 				c.Stop()
 				return
 			}
@@ -195,10 +233,10 @@ func (c *Client) recvLoop() {
 			c.Conn = nil
 
 			for {
-				DefaultLogger.Info("[Arpc] Client \"%v\" Reconnecting ...", addr)
+				DefaultLogger.Info("[ARPC] Client \"%v\" Reconnecting ...", addr)
 				c.Conn, err = c.Dialer()
 				if err == nil {
-					DefaultLogger.Info("[Arpc] Client \"%v\" Connected", addr)
+					DefaultLogger.Info("[ARPC] Client \"%v\" Connected", addr)
 					c.Reader = c.Handler.WrapReader(c.Conn)
 
 					c.reconnecting = false
@@ -221,7 +259,7 @@ func (c *Client) recvLoop() {
 
 func (c *Client) sendLoop() {
 	// DefaultLogger.Info("[Arpc】 Client: %v sendLoop start", c.Conn.RemoteAddr())
-	// defer DefaultLogger.Info("[Arpc] Client: %v sendLoop stop", c.Conn.RemoteAddr())
+	// defer DefaultLogger.Info("[ARPC] Client: %v sendLoop stop", c.Conn.RemoteAddr())
 
 	var conn net.Conn
 	for msg := range c.chSend {
@@ -230,35 +268,6 @@ func (c *Client) sendLoop() {
 			c.Handler.Send(conn, msg)
 		}
 	}
-}
-
-func (c *Client) pushMsg(msg Message, timeout time.Duration) error {
-	if !c.running {
-		return ErrClientStopped
-	}
-	if c.reconnecting {
-		return ErrClientReconnecting
-	}
-
-	if timeout < 0 {
-		c.chSend <- msg
-	} else if timeout == 0 {
-		select {
-		case c.chSend <- msg:
-		default:
-			return ErrClientQueueIsFull
-		}
-	} else {
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-		select {
-		case c.chSend <- msg:
-		case <-timer.C:
-			return ErrClientTimeout
-		}
-	}
-
-	return nil
 }
 
 func (c *Client) newReqMessage(method string, req interface{}) Message {
@@ -286,7 +295,7 @@ func (c *Client) newReqMessage(method string, req interface{}) Message {
 
 // newClientWithConn factory
 func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func() int64) *Client {
-	DefaultLogger.Info("[Arpc] New Client \"%v\" Connected", conn.RemoteAddr())
+	DefaultLogger.Info("[ARPC] New Client \"%v\" Connected", conn.RemoteAddr())
 
 	return &Client{
 		Conn:       conn,
@@ -309,7 +318,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 		return nil, err
 	}
 
-	DefaultLogger.Info("[Arpc] Client \"%v\" Connected", conn.RemoteAddr())
+	DefaultLogger.Info("[ARPC] Client \"%v\" Connected", conn.RemoteAddr())
 
 	return &Client{
 		Conn:       conn,

@@ -7,7 +7,7 @@ import (
 	"net"
 )
 
-// DefaultHandler .
+// DefaultHandler instance
 var DefaultHandler = &handler{}
 
 // Handler defines net message handler

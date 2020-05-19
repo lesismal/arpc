@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Server .
+// Server definition
 type Server struct {
 	ln       net.Listener
 	chStop   chan error
@@ -20,15 +20,10 @@ type Server struct {
 }
 
 func (s *Server) addLoad() int64 {
-	// load := atomic.AddInt64(&s.CurrLoad, 1)
-	// log.Println("addLoad:", load)
-	// return load
 	return atomic.AddInt64(&s.CurrLoad, 1)
 }
 
 func (s *Server) subLoad() int64 {
-	// load := atomic.AddInt64(&s.CurrLoad, -1)
-	// log.Println("subLoad:", load)
 	return atomic.AddInt64(&s.CurrLoad, -1)
 }
 
@@ -65,10 +60,10 @@ func (s *Server) runLoop() error {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
-				DefaultLogger.Info("[Arpc] Server Accept error: %v; retrying in %v", err, tempDelay)
+				DefaultLogger.Info("[ARPC] Server Accept error: %v; retrying in %v", err, tempDelay)
 				time.Sleep(tempDelay)
 			} else {
-				DefaultLogger.Error("[Arpc] Server Accept error:", err)
+				DefaultLogger.Error("[ARPC] Server Accept error:", err)
 				break
 			}
 		}
@@ -81,14 +76,14 @@ func (s *Server) runLoop() error {
 func (s *Server) Serve(ln net.Listener) error {
 	s.ln = ln
 	s.chStop = make(chan error)
-	DefaultLogger.Info("[Arpc] Server Running On: \"%v\"", ln.Addr())
-	defer DefaultLogger.Info("[Arpc] Server Stopped")
+	DefaultLogger.Info("[ARPC] Server Running On: \"%v\"", ln.Addr())
+	defer DefaultLogger.Info("[ARPC] Server Stopped")
 	return s.runLoop()
 }
 
 // Shutdown stop rpc service
 func (s *Server) Shutdown(timeout time.Duration) error {
-	DefaultLogger.Info("[Arpc] Server \"%v\" Shutdown...", s.ln.Addr())
+	DefaultLogger.Info("[ARPC] Server \"%v\" Shutdown...", s.ln.Addr())
 	s.running = false
 	s.ln.Close()
 	select {
@@ -99,7 +94,7 @@ func (s *Server) Shutdown(timeout time.Duration) error {
 	return nil
 }
 
-// NewServer .
+// NewServer factory
 func NewServer() *Server {
 	return &Server{
 		Codec:   DefaultCodec,

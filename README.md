@@ -9,6 +9,14 @@
 [5]: https://goreportcard.com/badge/github.com/lesismal/arpc
 [6]: https://goreportcard.com/report/github.com/lesismal/arpc
 
+## Protocol
+
+- Header: LittleEndian
+
+| bodylen |  cmd   | methodlen |  null   | sequence |       method         | body |
+|  -----  |  ----  |   ----    |  ----   |   ----   |        ----          | ---- |
+| 4 bytes | 1 byte |  1 byte   | 2 bytes |  8 bytes | 0 or methodlen bytes | ...  |
+
 ## Examples
 
 - server
