@@ -90,6 +90,9 @@ func (h *handler) Handle(method string, cb func(*Context)) {
 	if len(h.routes) == 0 {
 		h.routes = map[string]func(*Context){}
 	}
+	if len(method) > MaxMethodLen {
+		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
+	}
 	if _, ok := h.routes[method]; ok {
 		panic(fmt.Errorf("handler exist for method %v ", method))
 	}

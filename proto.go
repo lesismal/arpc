@@ -20,6 +20,9 @@ const (
 	// HeadLen defines rpc packet's head length
 	HeadLen int = 16
 
+	// MaxMethodLen limit
+	MaxMethodLen = 255
+
 	// MaxBodyLen limit
 	MaxBodyLen int = 1024 * 1024 * 64
 )
