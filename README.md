@@ -13,9 +13,9 @@
 
 - Header: LittleEndian
 
-| bodylen |  cmd   | methodlen |  null   | sequence |       method         | body |
-|  -----  |  ----  |   ----    |  ----   |   ----   |        ----          | ---- |
-| 4 bytes | 1 byte |  1 byte   | 2 bytes |  8 bytes | 0 or methodlen bytes | ...  |
+|  cmd   | async  | methodlen |  null   | bodylen | sequence |       method         | body |
+| -----  |  ----  |   ----    |   ----  |  ----   |   ----   |        ----          | ---- |
+| 1 byte | 1 byte |  1 bytes  | 1 bytes | 4 bytes |  8 bytes | 0 or methodlen bytes | ...  |
 
 ## Examples
 

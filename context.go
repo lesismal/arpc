@@ -54,9 +54,10 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}) Message {
 
 	bodyLen = len(data)
 	msg = Message(make([]byte, HeadLen+bodyLen))
-	binary.LittleEndian.PutUint32(msg[:4], uint32(bodyLen))
-	binary.LittleEndian.PutUint64(msg[8:16], ctx.Message.Seq())
-	msg[4] = cmd
+	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
+	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
+	msg[headerIndexCmd] = cmd
+	msg[headerIndexAsync] = ctx.Message.Async()
 	copy(msg[HeadLen:], data)
 
 	return msg

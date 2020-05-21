@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultHandler instance
-var DefaultHandler = &handler{}
+var DefaultHandler = NewHandler()
 
 // Handler defines net message handler
 type Handler interface {
@@ -27,6 +27,11 @@ type Handler interface {
 	// Send writes a message to a connection
 	Send(c net.Conn, m Message) (int, error)
 
+	// SendQueueSize returns Client's chSend capacity
+	SendQueueSize() int
+	// SetSendQueueSize sets Client's chSend capacity
+	SetSendQueueSize(size int)
+
 	// Handle registers method handler
 	Handle(m string, h func(*Context))
 
@@ -35,9 +40,10 @@ type Handler interface {
 }
 
 type handler struct {
-	beforeRecv func(net.Conn) error
-	beforeSend func(net.Conn) error
-	routes     map[string]func(*Context)
+	beforeRecv    func(net.Conn) error
+	beforeSend    func(net.Conn) error
+	routes        map[string]func(*Context)
+	sendQueueSize int
 }
 
 func (h *handler) BeforeRecv(bh func(net.Conn) error) {
@@ -86,8 +92,16 @@ func (h *handler) Send(conn net.Conn, m Message) (int, error) {
 	return conn.Write(m)
 }
 
+func (h *handler) SendQueueSize() int {
+	return h.sendQueueSize
+}
+
+func (h *handler) SetSendQueueSize(size int) {
+	h.sendQueueSize = size
+}
+
 func (h *handler) Handle(method string, cb func(*Context)) {
-	if len(h.routes) == 0 {
+	if h.routes == nil {
 		h.routes = map[string]func(*Context){}
 	}
 	if len(method) > MaxMethodLen {
@@ -100,7 +114,7 @@ func (h *handler) Handle(method string, cb func(*Context)) {
 }
 
 func (h *handler) OnMessage(c *Client, msg Message) {
-	cmd, seq, method, body, err := msg.Parse()
+	cmd, seq, isAsync, method, body, err := msg.Parse()
 	switch cmd {
 	case RPCCmdReq:
 		if cb, ok := h.routes[method]; ok {
@@ -110,13 +124,28 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 			DefaultLogger.Info("invalid method: [%v], %v, %v", method, body, err)
 		}
 	case RPCCmdRsp, RPCCmdErr:
-		session, ok := c.getSession(seq)
-		if ok {
-			session.done <- msg
+		if !isAsync {
+			session, ok := c.getSession(seq)
+			if ok {
+				session.done <- msg
+			} else {
+				DefaultLogger.Info("session not exist or expired: [seq: %v] [len(body): %v] [%v]", seq, len(body), err)
+			}
 		} else {
-			DefaultLogger.Info("session expired: [%v] [%v] [%v] [%v]", seq, method, string(body), err)
+			handler, ok := c.getAndDeleteAsyncHandler(seq)
+			if ok {
+				handler(&Context{Client: c, Message: msg})
+			} else {
+				DefaultLogger.Info("asyncHandler not exist or expired: [seq: %v] [len(body): %v, %v] [%v]", seq, len(body), string(body), err)
+			}
 		}
 	default:
 		DefaultLogger.Info("invalid cmd: [%v]", cmd)
+	}
+}
+
+func NewHandler() *handler {
+	return &handler{
+		sendQueueSize: 1024,
 	}
 }

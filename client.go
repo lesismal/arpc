@@ -25,20 +25,25 @@ type rpcSession struct {
 
 // Client defines rpc client struct
 type Client struct {
-	mux          sync.RWMutex
-	Conn         net.Conn
-	Head         Header
-	Handler      Handler
-	Dialer       func() (net.Conn, error)
-	Codec        Codec
-	sessionMap   map[uint64]*rpcSession
-	seq          uint64
-	chSend       chan Message
+	mux sync.RWMutex
+
 	running      bool
 	reconnecting bool
-	onStop       func() int64
-	onConnected  func(*Client)
-	Reader       io.Reader
+	chSend       chan Message
+
+	seq             uint64
+	sessionMap      map[uint64]*rpcSession
+	asyncHandlerMap map[uint64]func(*Context)
+
+	onStop      func() int64
+	onConnected func(*Client)
+
+	Conn    net.Conn
+	Reader  io.Reader
+	Head    Header
+	Codec   Codec
+	Handler Handler
+	Dialer  func() (net.Conn, error)
 }
 
 // OnConnected registers callback on connected
@@ -52,7 +57,7 @@ func (c *Client) Run() {
 	defer c.mux.Unlock()
 	if !c.running {
 		c.running = true
-
+		c.chSend = make(chan Message, c.Handler.SendQueueSize())
 		go c.sendLoop()
 		go c.recvLoop()
 	}
@@ -85,7 +90,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
-	msg := c.newReqMessage(method, req)
+	msg := c.newReqMessage(method, req, 0)
 	seq := msg.Seq()
 
 	session := &rpcSession{seq: seq, done: make(chan Message, 1)}
@@ -124,8 +129,8 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	return nil
 }
 
-// Notify make rpc notify
-func (c *Client) Notify(method string, data interface{}, timeout time.Duration) error {
+// CallAsync make async rpc call
+func (c *Client) CallAsync(method string, req interface{}, handler func(*Context), timeout time.Duration) error {
 	if !c.running {
 		return ErrClientStopped
 	}
@@ -137,7 +142,12 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration) 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
-	msg := c.newReqMessage(method, data)
+	msg := c.newReqMessage(method, req, 1)
+
+	if handler != nil {
+		seq := msg.Seq()
+		c.addAsyncHandler(seq, handler)
+	}
 
 	select {
 	case c.chSend <- msg:
@@ -146,6 +156,11 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration) 
 	}
 
 	return nil
+}
+
+// Notify make rpc notify
+func (c *Client) Notify(method string, data interface{}, timeout time.Duration) error {
+	return c.CallAsync(method, data, nil, timeout)
 }
 
 // PushMsg push msg to client's send queue
@@ -198,6 +213,22 @@ func (c *Client) deleteSession(seq uint64) {
 	c.mux.Unlock()
 }
 
+func (c *Client) addAsyncHandler(seq uint64, handler func(*Context)) {
+	c.mux.Lock()
+	c.asyncHandlerMap[seq] = handler
+	c.mux.Unlock()
+}
+
+func (c *Client) getAndDeleteAsyncHandler(seq uint64) (func(*Context), bool) {
+	c.mux.Lock()
+	handler, ok := c.asyncHandlerMap[seq]
+	if ok {
+		delete(c.asyncHandlerMap, seq)
+	}
+	c.mux.Unlock()
+	return handler, ok
+}
+
 func (c *Client) recvLoop() {
 	var (
 		err  error
@@ -212,7 +243,7 @@ func (c *Client) recvLoop() {
 		for {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
-				DefaultLogger.Info("[ARPC] Client \"%v\" Disconnected", addr)
+				DefaultLogger.Info("[ARPC] Client \"%v\" Disconnected: %v", addr, err)
 				c.Stop()
 				return
 			}
@@ -223,6 +254,7 @@ func (c *Client) recvLoop() {
 			for {
 				msg, err = c.Handler.Recv(c)
 				if err != nil {
+					DefaultLogger.Info("[ARPC] Client \"%v\" Disconnected: %v", addr, err)
 					break
 				}
 				c.Handler.OnMessage(c, msg)
@@ -260,7 +292,6 @@ func (c *Client) recvLoop() {
 func (c *Client) sendLoop() {
 	// DefaultLogger.Info("[Arpc】 Client: %v sendLoop start", c.Conn.RemoteAddr())
 	// defer DefaultLogger.Info("[ARPC] Client: %v sendLoop stop", c.Conn.RemoteAddr())
-
 	var conn net.Conn
 	for msg := range c.chSend {
 		conn = c.Conn
@@ -270,7 +301,7 @@ func (c *Client) sendLoop() {
 	}
 }
 
-func (c *Client) newReqMessage(method string, req interface{}) Message {
+func (c *Client) newReqMessage(method string, req interface{}, async byte) Message {
 	var (
 		data    []byte
 		msg     Message
@@ -282,11 +313,12 @@ func (c *Client) newReqMessage(method string, req interface{}) Message {
 	bodyLen = len(method) + len(data)
 
 	msg = Message(make([]byte, HeadLen+bodyLen))
-	binary.LittleEndian.PutUint32(msg[:4], uint32(bodyLen))
-	binary.LittleEndian.PutUint64(msg[8:16], atomic.AddUint64(&c.seq, 1))
+	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
+	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
 
-	msg[4] = RPCCmdReq
-	msg[5] = byte(len(method))
+	msg[headerIndexCmd] = RPCCmdReq
+	msg[headerIndexMethodLen] = byte(len(method))
+	msg[headerIndexAsync] = async
 	copy(msg[HeadLen:HeadLen+len(method)], method)
 	copy(msg[HeadLen+len(method):], data)
 
@@ -298,16 +330,15 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 	DefaultLogger.Info("[ARPC] New Client \"%v\" Connected", conn.RemoteAddr())
 
 	return &Client{
-		Conn:       conn,
-		Reader:     handler.WrapReader(conn),
-		Head:       newHeader(),
-		Codec:      codec,
-		Handler:    handler,
-		onStop:     onStop,
-		sessionMap: make(map[uint64]*rpcSession),
-		seq:        0,
-		chSend:     make(chan Message, 1024*8),
-		running:    false,
+		Conn:    conn,
+		Reader:  handler.WrapReader(conn),
+		Head:    newHeader(),
+		Codec:   codec,
+		Handler: handler,
+
+		sessionMap:      make(map[uint64]*rpcSession),
+		asyncHandlerMap: make(map[uint64]func(*Context)),
+		onStop:          onStop,
 	}
 }
 
@@ -321,15 +352,14 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 	DefaultLogger.Info("[ARPC] Client \"%v\" Connected", conn.RemoteAddr())
 
 	return &Client{
-		Conn:       conn,
-		Reader:     DefaultHandler.WrapReader(conn),
-		Head:       newHeader(),
-		Handler:    DefaultHandler,
-		Dialer:     dialer,
-		Codec:      DefaultCodec,
-		sessionMap: make(map[uint64]*rpcSession, 1024*4),
-		seq:        0,
-		chSend:     make(chan Message, 1024*8),
-		running:    false,
+		Conn:    conn,
+		Reader:  DefaultHandler.WrapReader(conn),
+		Head:    newHeader(),
+		Codec:   DefaultCodec,
+		Handler: DefaultHandler,
+		Dialer:  dialer,
+
+		sessionMap:      make(map[uint64]*rpcSession),
+		asyncHandlerMap: make(map[uint64]func(*Context)),
 	}, nil
 }
