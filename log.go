@@ -7,7 +7,7 @@ package arpc
 import "log"
 
 // DefaultLogger instance
-var DefaultLogger Logger = &logger{}
+var DefaultLogger Logger = &StdLogger{Enable: true}
 
 // Logger defines log interface
 type Logger interface {
@@ -22,20 +22,30 @@ func SetLogger(l Logger) {
 	DefaultLogger = l
 }
 
-type logger struct{}
-
-func (l *logger) Debug(format string, v ...interface{}) {
-	log.Printf(format, v...)
+type StdLogger struct {
+	Enable bool
 }
 
-func (l *logger) Info(format string, v ...interface{}) {
-	log.Printf(format, v...)
+func (l *StdLogger) Debug(format string, v ...interface{}) {
+	if l.Enable {
+		log.Printf(format, v...)
+	}
 }
 
-func (l *logger) Warn(format string, v ...interface{}) {
-	log.Printf(format, v...)
+func (l *StdLogger) Info(format string, v ...interface{}) {
+	if l.Enable {
+		log.Printf(format, v...)
+	}
 }
 
-func (l *logger) Error(format string, v ...interface{}) {
-	log.Printf(format, v...)
+func (l *StdLogger) Warn(format string, v ...interface{}) {
+	if l.Enable {
+		log.Printf(format, v...)
+	}
+}
+
+func (l *StdLogger) Error(format string, v ...interface{}) {
+	if l.Enable {
+		log.Printf(format, v...)
+	}
 }

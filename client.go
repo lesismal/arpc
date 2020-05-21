@@ -284,6 +284,9 @@ func (c *Client) sendLoop() {
 	// defer DefaultLogger.Info("[ARPC] Client: %v sendLoop stop", c.Conn.RemoteAddr())
 	var conn net.Conn
 	for msg := range c.chSend {
+		if !c.running {
+			return
+		}
 		conn = c.Conn
 		if !c.reconnecting {
 			c.Handler.Send(conn, msg.Payload())
