@@ -24,6 +24,8 @@ type Handler interface {
 
 	// WrapReader wraps net.Conn to Read data with io.Reader, buffer e.g.
 	WrapReader(conn net.Conn) io.Reader
+	// SetReaderWrapper sets reader wrapper
+	SetReaderWrapper(wrapper func(conn net.Conn) io.Reader)
 
 	// Recv reads and returns a message from a client
 	Recv(c *Client) (Message, error)
@@ -46,6 +48,7 @@ type Handler interface {
 type handler struct {
 	beforeRecv    func(net.Conn) error
 	beforeSend    func(net.Conn) error
+	wrapReader    func(conn net.Conn) io.Reader
 	routes        map[string]func(*Context)
 	sendQueueSize int
 }
@@ -59,7 +62,14 @@ func (h *handler) BeforeSend(bh func(net.Conn) error) {
 }
 
 func (h *handler) WrapReader(conn net.Conn) io.Reader {
-	return bufio.NewReaderSize(conn, 1024)
+	if h.wrapReader != nil {
+		return h.wrapReader(conn)
+	}
+	return conn
+}
+
+func (h *handler) SetReaderWrapper(wrapper func(conn net.Conn) io.Reader) {
+	h.wrapReader = wrapper
 }
 
 func (h *handler) Recv(c *Client) (Message, error) {
@@ -156,5 +166,8 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 func NewHandler() Handler {
 	return &handler{
 		sendQueueSize: 1024,
+		wrapReader: func(conn net.Conn) io.Reader {
+			return bufio.NewReaderSize(conn, 1024)
+		},
 	}
 }

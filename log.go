@@ -22,28 +22,33 @@ func SetLogger(l Logger) {
 	DefaultLogger = l
 }
 
+// StdLogger defines default logger
 type StdLogger struct {
 	Enable bool
 }
 
+// Debug simply printf
 func (l *StdLogger) Debug(format string, v ...interface{}) {
 	if l.Enable {
 		log.Printf(format, v...)
 	}
 }
 
+// Info simply printf
 func (l *StdLogger) Info(format string, v ...interface{}) {
 	if l.Enable {
 		log.Printf(format, v...)
 	}
 }
 
+// Warn simply printf
 func (l *StdLogger) Warn(format string, v ...interface{}) {
 	if l.Enable {
 		log.Printf(format, v...)
 	}
 }
 
+// Error simply printf
 func (l *StdLogger) Error(format string, v ...interface{}) {
 	if l.Enable {
 		log.Printf(format, v...)
