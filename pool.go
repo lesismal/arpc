@@ -16,6 +16,13 @@ var (
 			return &Context{}
 		},
 	}
+
+	// Client Pool
+	clientPool = sync.Pool{
+		New: func() interface{} {
+			return &Client{}
+		},
+	}
 )
 
 func memGet(size int) []byte {

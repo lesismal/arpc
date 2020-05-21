@@ -333,17 +333,17 @@ func (c *Client) newReqMessage(method string, req interface{}, async byte) Messa
 func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func() int64) *Client {
 	DefaultLogger.Info("[ARPC] New Client \"%v\" Connected", conn.RemoteAddr())
 
-	return &Client{
-		Conn:    conn,
-		Reader:  handler.WrapReader(conn),
-		Head:    newHeader(),
-		Codec:   codec,
-		Handler: handler,
+	client := clientPool.Get().(*Client)
+	client.Conn = conn
+	client.Reader = handler.WrapReader(conn)
+	client.Head = newHeader()
+	client.Codec = codec
+	client.Handler = handler
+	client.sessionMap = make(map[uint64]*rpcSession)
+	client.asyncHandlerMap = make(map[uint64]func(*Context))
+	client.onStop = onStop
 
-		sessionMap:      make(map[uint64]*rpcSession),
-		asyncHandlerMap: make(map[uint64]func(*Context)),
-		onStop:          onStop,
-	}
+	return client
 }
 
 // NewClient factory
@@ -355,15 +355,15 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 
 	DefaultLogger.Info("[ARPC] Client \"%v\" Connected", conn.RemoteAddr())
 
-	return &Client{
-		Conn:    conn,
-		Reader:  DefaultHandler.WrapReader(conn),
-		Head:    newHeader(),
-		Codec:   DefaultCodec,
-		Handler: DefaultHandler,
-		Dialer:  dialer,
+	client := clientPool.Get().(*Client)
+	client.Conn = conn
+	client.Reader = DefaultHandler.WrapReader(conn)
+	client.Head = newHeader()
+	client.Codec = DefaultCodec
+	client.Handler = DefaultHandler
+	client.Dialer = dialer
+	client.sessionMap = make(map[uint64]*rpcSession)
+	client.asyncHandlerMap = make(map[uint64]func(*Context))
 
-		sessionMap:      make(map[uint64]*rpcSession),
-		asyncHandlerMap: make(map[uint64]func(*Context)),
-	}, nil
+	return client, nil
 }
