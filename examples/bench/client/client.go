@@ -16,10 +16,12 @@ var (
 	method = "Hello"
 )
 
+// HelloReq .
 type HelloReq struct {
 	Msg string
 }
 
+// HelloRsp .
 type HelloRsp struct {
 	Msg string
 }
@@ -59,7 +61,7 @@ func main() {
 					rsp := &HelloRsp{}
 					err = client.Call(method, req, rsp, time.Second*5)
 					if err != nil {
-						log.Println("Call failed: %v", err)
+						log.Printf("Call failed: %v", err)
 					} else {
 						//log.Printf("Call Response: \"%v\"", rsp.Msg)
 						atomic.AddUint64(&qpsSec, 1)

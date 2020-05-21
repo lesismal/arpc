@@ -18,6 +18,7 @@ const (
 
 var notifyCount = 3
 
+// OnServerNotify .
 func OnServerNotify(ctx *arpc.Context) {
 	ret := ""
 	ctx.Bind(&ret)

@@ -15,6 +15,7 @@ const (
 	methodNotify = "Notify"
 )
 
+// OnClientHello .
 func OnClientHello(ctx *arpc.Context) {
 	str := ""
 	ctx.Bind(&str)

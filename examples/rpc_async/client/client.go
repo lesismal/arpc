@@ -15,6 +15,7 @@ const (
 	method = "Hello"
 )
 
+// OnClientCallAsyncResponse .
 func OnClientCallAsyncResponse(ctx *arpc.Context) {
 	ret := ""
 	ctx.Bind(&ret)

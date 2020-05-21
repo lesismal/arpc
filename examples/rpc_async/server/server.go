@@ -13,6 +13,7 @@ const (
 	method = "Hello"
 )
 
+// OnClientHello .
 func OnClientHello(ctx *arpc.Context) {
 	str := ""
 	ctx.Bind(&str)

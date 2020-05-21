@@ -13,14 +13,17 @@ const (
 	method = "Hello"
 )
 
+// HelloReq .
 type HelloReq struct {
 	Msg string
 }
 
+// HelloRsp .
 type HelloRsp struct {
 	Msg string
 }
 
+// OnHello .
 func OnHello(ctx *arpc.Context) {
 	req := &HelloReq{}
 	rsp := &HelloRsp{}
