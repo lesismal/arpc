@@ -183,7 +183,3 @@ func NewRefMessage(codec Codec, method string, v interface{}) Message {
 
 	return msg
 }
-
-func newHeader() Header {
-	return Header(make([]byte, HeadLen))
-}

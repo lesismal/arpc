@@ -39,11 +39,13 @@ type Client struct {
 	sessionMap      map[uint64]*rpcSession
 	asyncHandlerMap map[uint64]func(*Context)
 
-	onStop      func() int64
-	onConnected func(*Client)
+	onStop         func() int64
+	onConnected    func(*Client)
+	onDisConnected func(*Client)
 
 	Conn    net.Conn
 	Reader  io.Reader
+	head    [HeadLen]byte
 	Head    Header
 	Codec   Codec
 	Handler Handler
@@ -53,6 +55,11 @@ type Client struct {
 // OnConnected registers callback on connected
 func (c *Client) OnConnected(onConnected func(*Client)) {
 	c.onConnected = onConnected
+}
+
+// OnDisconnected registers callback on disconnected
+func (c *Client) OnDisconnected(onDisConnected func(*Client)) {
+	c.onDisConnected = onDisConnected
 }
 
 // Run client
@@ -71,12 +78,16 @@ func (c *Client) Run() {
 func (c *Client) Stop() {
 	c.mux.Lock()
 	defer c.mux.Unlock()
+
 	if c.running {
 		c.running = false
 		c.Conn.Close()
 		close(c.chSend)
 		if c.onStop != nil {
 			c.onStop()
+		}
+		if c.onDisConnected != nil {
+			c.onDisConnected(c)
 		}
 	}
 }
@@ -95,10 +106,11 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	defer timer.Stop()
 
 	msg := c.newReqMessage(method, req, 0)
-	seq := msg.Seq()
 
-	session := &rpcSession{seq: seq, done: make(chan Message, 1)}
-	c.addSession(seq, session)
+	seq := msg.Seq()
+	sess := sessionGet(seq)
+	defer sessionPut(sess)
+	c.addSession(seq, sess)
 	defer c.deleteSession(seq)
 
 	select {
@@ -108,7 +120,8 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	}
 
 	select {
-	case msg = <-session.done:
+	// response msg
+	case msg = <-sess.done:
 		defer memPut(msg)
 	case <-timer.C:
 		return ErrClientTimeout
@@ -284,9 +297,6 @@ func (c *Client) sendLoop() {
 	// defer DefaultLogger.Info("[ARPC] Client: %v sendLoop stop", c.Conn.RemoteAddr())
 	var conn net.Conn
 	for msg := range c.chSend {
-		if !c.running {
-			return
-		}
 		conn = c.Conn
 		if !c.reconnecting {
 			c.Handler.Send(conn, msg.Payload())
@@ -323,10 +333,10 @@ func (c *Client) newReqMessage(method string, req interface{}, async byte) Messa
 func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func() int64) *Client {
 	DefaultLogger.Info("[ARPC] New Client \"%v\" Connected", conn.RemoteAddr())
 
-	client := clientPool.Get().(*Client)
+	client := &Client{}
 	client.Conn = conn
 	client.Reader = handler.WrapReader(conn)
-	client.Head = newHeader()
+	client.Head = Header(client.head[:])
 	client.Codec = codec
 	client.Handler = handler
 	client.sessionMap = make(map[uint64]*rpcSession)
@@ -345,10 +355,10 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 
 	DefaultLogger.Info("[ARPC] Client \"%v\" Connected", conn.RemoteAddr())
 
-	client := clientPool.Get().(*Client)
+	client := &Client{}
 	client.Conn = conn
 	client.Reader = DefaultHandler.WrapReader(conn)
-	client.Head = newHeader()
+	client.Head = Header(client.head[:])
 	client.Codec = DefaultCodec
 	client.Handler = DefaultHandler
 	client.Dialer = dialer

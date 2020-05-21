@@ -131,11 +131,14 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 	cmd, seq, isAsync, method, body, err := msg.Parse()
 	switch cmd {
 	case RPCCmdReq:
-		defer memPut(msg)
 		if cb, ok := h.routes[method]; ok {
+			defer memPut(msg)
 			defer handlePanic()
 			cb(NewContext(c, msg))
+			// cb(NewContext(c, msg))
+			// memPut(msg)
 		} else {
+			memPut(msg)
 			DefaultLogger.Info("invalid method: [%v], %v, %v", method, body, err)
 		}
 	case RPCCmdRsp, RPCCmdErr:
@@ -144,6 +147,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 			if ok {
 				session.done <- msg
 			} else {
+				memPut(msg)
 				DefaultLogger.Info("session not exist or expired: [seq: %v] [len(body): %v] [%v]", seq, len(body), err)
 			}
 		} else {
@@ -152,12 +156,15 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				defer memPut(msg)
 				defer handlePanic()
 				handler(&Context{Client: c, Message: msg})
+				// handler(&Context{Client: c, Message: msg})
+				// memPut(msg)
 			} else {
+				memPut(msg)
 				DefaultLogger.Info("asyncHandler not exist or expired: [seq: %v] [len(body): %v, %v] [%v]", seq, len(body), string(body), err)
 			}
 		}
 	default:
-		defer memPut(msg)
+		memPut(msg)
 		DefaultLogger.Info("invalid cmd: [%v]", cmd)
 	}
 }
