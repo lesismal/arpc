@@ -17,3 +17,11 @@ var (
 		},
 	}
 )
+
+func memGet(size int) []byte {
+	return memPool.Get(size)
+}
+
+func memPut(b []byte) {
+	memPool.Put(b)
+}

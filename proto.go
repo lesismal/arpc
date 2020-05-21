@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sync/atomic"
+	"unsafe"
 )
 
 const (
@@ -15,6 +17,11 @@ const (
 	RPCCmdRsp byte = 2
 	// RPCCmdErr error response
 	RPCCmdErr byte = 3
+)
+
+var (
+	refFlagByte    byte  = 0x80
+	refMsgZeroFlag int32 = atomic.LoadInt32((*int32)(unsafe.Pointer(&([]byte{refFlagByte, 0, 0, 0}[0]))))
 )
 
 const (
@@ -55,7 +62,7 @@ func (h Header) message() (Message, error) {
 	if l < 0 || l > MaxBodyLen {
 		return nil, fmt.Errorf("invalid body length: %v", l)
 	}
-	m := Message(memPool.Get(HeadLen + l))
+	m := Message(memGet(HeadLen + l))
 	copy(m, h)
 
 	return m, nil
@@ -89,6 +96,38 @@ func (m Message) IsAsync() bool {
 	return m[headerIndexAsync] == 1
 }
 
+// Payload returns Message's real payload to send
+func (m Message) Payload() Message {
+	if m[0]&refFlagByte == 0 {
+		return m
+	}
+	return Message(m[4:])
+}
+
+// Body returns data after method
+func (m Message) Body() []byte {
+	payload := m.Payload()
+	return payload[HeadLen+payload.MethodLen():]
+}
+
+// Retain adds ref count
+func (m Message) Retain() {
+	if m[0]&refFlagByte != 0 {
+		atomic.AddInt32((*int32)(unsafe.Pointer(&(m[0]))), 1)
+	}
+}
+
+// Release payback mem to MemPool
+func (m Message) Release() {
+	if m[0]&refFlagByte == 0 {
+		memPut(m)
+	} else {
+		if atomic.AddInt32((*int32)(unsafe.Pointer(&(m[0]))), -1) == refMsgZeroFlag {
+			memPut(m)
+		}
+	}
+}
+
 // Parse head and body, return cmd && seq && isAsync && method && body && err
 func (m Message) Parse() (byte, uint64, bool, string, []byte, error) {
 	cmd := m.Cmd()
@@ -112,6 +151,33 @@ func (m Message) Parse() (byte, uint64, bool, string, []byte, error) {
 	}
 
 	return RPCCmdNone, m.Seq(), m.IsAsync(), "", nil, ErrInvalidMessage
+}
+
+// NewRefMessage factory
+func NewRefMessage(codec Codec, method string, v interface{}) Message {
+	var (
+		data    []byte
+		msg     Message
+		bodyLen int
+	)
+
+	data = valueToBytes(codec, v)
+
+	bodyLen = len(method) + len(data)
+
+	msg = Message(memGet(4 + HeadLen + bodyLen))
+	msg[0], msg[1], msg[2], msg[3] = refFlagByte, 0, 0, 0
+	binary.LittleEndian.PutUint32(msg[4+headerIndexBodyLenBegin:4+headerIndexBodyLenEnd], uint32(bodyLen))
+	// binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
+
+	msg[4+headerIndexCmd] = RPCCmdReq
+	msg[4+headerIndexMethodLen] = byte(len(method))
+	copy(msg[4+HeadLen:4+HeadLen+len(method)], method)
+	copy(msg[4+HeadLen+len(method):], data)
+
+	atomic.AddInt32((*int32)(unsafe.Pointer(&(msg[0]))), 1)
+
+	return msg
 }
 
 func newHeader() Header {

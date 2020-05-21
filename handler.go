@@ -115,7 +115,7 @@ func (h *handler) Handle(method string, cb func(*Context)) {
 
 func (h *handler) OnMessage(c *Client, msg Message) {
 	cmd, seq, isAsync, method, body, err := msg.Parse()
-	defer memPool.Put(msg)
+	defer memPut(msg)
 	switch cmd {
 	case RPCCmdReq:
 		if cb, ok := h.routes[method]; ok {

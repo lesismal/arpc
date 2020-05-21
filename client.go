@@ -175,9 +175,11 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 	switch timeout {
 	case TimeForever:
 		c.chSend <- msg
+		msg.Retain()
 	case TimeZero:
 		select {
 		case c.chSend <- msg:
+			msg.Retain()
 		default:
 			return ErrClientQueueIsFull
 		}
@@ -186,6 +188,7 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 		defer timer.Stop()
 		select {
 		case c.chSend <- msg:
+			msg.Retain()
 		case <-timer.C:
 			return ErrClientTimeout
 		}
@@ -296,8 +299,8 @@ func (c *Client) sendLoop() {
 	for msg := range c.chSend {
 		conn = c.Conn
 		if !c.reconnecting {
-			c.Handler.Send(conn, msg)
-			memPool.Put(msg)
+			c.Handler.Send(conn, msg.Payload())
+			msg.Release()
 		}
 	}
 }
@@ -313,7 +316,7 @@ func (c *Client) newReqMessage(method string, req interface{}, async byte) Messa
 
 	bodyLen = len(method) + len(data)
 
-	msg = Message(memPool.Get(HeadLen + bodyLen))
+	msg = Message(memGet(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
 

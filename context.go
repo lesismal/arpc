@@ -28,7 +28,7 @@ func (ctx *Context) Body(v interface{}) ([]byte, error) {
 // Bind parses data to struct
 func (ctx *Context) Bind(v interface{}) error {
 	if v != nil {
-		data := ctx.Message[HeadLen+ctx.Message.MethodLen():]
+		data := ctx.Message.Body()
 		switch vt := v.(type) {
 		case *[]byte:
 			*vt = data
@@ -53,7 +53,7 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}) Message {
 	data = valueToBytes(ctx.Client.Codec, v)
 
 	bodyLen = len(data)
-	msg = Message(memPool.Get(HeadLen + bodyLen))
+	msg = Message(memGet(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
 	msg[headerIndexCmd] = cmd
