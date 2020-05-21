@@ -97,6 +97,9 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	if !c.running {
 		return ErrClientStopped
 	}
+	if c.reconnecting {
+		return ErrClientReconnecting
+	}
 
 	if timeout <= 0 {
 		return fmt.Errorf("invalid timeout arg: %v", timeout)
@@ -155,8 +158,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 func (c *Client) CallAsync(method string, req interface{}, handler func(*Context), timeout time.Duration) error {
 	msg := c.newReqMessage(method, req, 1)
 	if handler != nil {
-		seq := msg.Seq()
-		c.addAsyncHandler(seq, handler)
+		c.addAsyncHandler(msg.Seq(), handler)
 	}
 
 	return c.PushMsg(msg, timeout)
@@ -174,6 +176,10 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 	}
 	if c.reconnecting {
 		return ErrClientReconnecting
+	}
+
+	if timeout < 0 {
+		timeout = TimeForever
 	}
 
 	switch timeout {
@@ -310,8 +316,8 @@ func (c *Client) sendLoop() {
 		conn = c.Conn
 		if !c.reconnecting {
 			c.Handler.Send(conn, msg.Payload())
-			msg.Release()
 		}
+		msg.Release()
 	}
 }
 
