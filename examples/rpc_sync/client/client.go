@@ -29,21 +29,25 @@ func dialer() (net.Conn, error) {
 }
 
 func main() {
-	client, err := arpc.NewClient(dialer)
-	if err != nil {
-		log.Println("NewClient failed:", err)
-		return
-	}
+	func() {
+		client, err := arpc.NewClient(dialer)
+		if err != nil {
+			log.Println("NewClient failed:", err)
+			return
+		}
 
-	client.Run()
-	defer client.Stop()
+		client.Run()
+		defer client.Stop()
 
-	req := &HelloReq{Msg: "hello from client.Call"}
-	rsp := &HelloRsp{}
-	err = client.Call(method, req, rsp, time.Second*5)
-	if err != nil {
-		log.Printf("Call failed: %v", err)
-	} else {
-		log.Printf("Call Response: \"%v\"", rsp.Msg)
-	}
+		req := &HelloReq{Msg: "hello from client.Call"}
+		rsp := &HelloRsp{}
+		err = client.Call(method, req, rsp, time.Second*5)
+		if err != nil {
+			log.Printf("Call failed: %v", err)
+		} else {
+			log.Printf("Call Response: \"%v\"", rsp.Msg)
+		}
+	}()
+
+	<-make(chan int)
 }

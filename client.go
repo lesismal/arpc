@@ -239,25 +239,26 @@ func (c *Client) recvLoop() {
 		addr = c.Conn.RemoteAddr()
 	)
 
-	// DefaultLogger.Info("[ARPC] Client: \"%v\" recvLoop start", c.Conn.RemoteAddr())
-	// defer DefaultLogger.Info("[ARPC] Client: \"%v\" recvLoop stop", c.Conn.RemoteAddr())
-
 	if c.Dialer == nil {
-		for {
+		// DefaultLogger.Info("[ARPC SVR] Client\t%v\trecvLoop start", c.Conn.RemoteAddr())
+		// defer DefaultLogger.Info("[ARPC SVR] Client\t%v\trecvLoop stop", c.Conn.RemoteAddr())
+		for c.running {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
-				DefaultLogger.Info("[ARPC] Client \"%v\" Disconnected: %v", addr, err)
+				DefaultLogger.Info("[ARPC SVR] Client\t%v\tDisconnected: %v", addr, err)
 				c.Stop()
 				return
 			}
 			c.Handler.OnMessage(c, msg)
 		}
 	} else {
+		// DefaultLogger.Info("[ARPC CLI]\t%v\trecvLoop start", c.Conn.RemoteAddr())
+		// defer DefaultLogger.Info("[ARPC CLI]\t%v\trecvLoop stop", c.Conn.RemoteAddr())
 		for c.running {
 			for {
 				msg, err = c.Handler.Recv(c)
 				if err != nil {
-					DefaultLogger.Info("[ARPC] Client \"%v\" Disconnected: %v", addr, err)
+					DefaultLogger.Info("[ARPC CLI]\t%v\tDisconnected: %v", addr, err)
 					break
 				}
 				c.Handler.OnMessage(c, msg)
@@ -267,11 +268,11 @@ func (c *Client) recvLoop() {
 			c.Conn.Close()
 			c.Conn = nil
 
-			for {
-				DefaultLogger.Info("[ARPC] Client \"%v\" Reconnecting ...", addr)
+			for c.running {
+				DefaultLogger.Info("[ARPC CLI]\t%v\tReconnecting ...", addr)
 				c.Conn, err = c.Dialer()
 				if err == nil {
-					DefaultLogger.Info("[ARPC] Client \"%v\" Connected", addr)
+					DefaultLogger.Info("[ARPC CLI]\t%v\tConnected", addr)
 					c.Reader = c.Handler.WrapReader(c.Conn)
 
 					c.reconnecting = false
@@ -293,8 +294,13 @@ func (c *Client) recvLoop() {
 }
 
 func (c *Client) sendLoop() {
-	// DefaultLogger.Info("[Arpc】 Client: %v sendLoop start", c.Conn.RemoteAddr())
-	// defer DefaultLogger.Info("[ARPC] Client: %v sendLoop stop", c.Conn.RemoteAddr())
+	// if c.Dialer == nil {
+	// 	DefaultLogger.Info("[ARPC SVR] Client\t%v\tsendLoop start", c.Conn.RemoteAddr())
+	// 	defer DefaultLogger.Info("[ARPC SVR] Client\t%v\tsendLoop stop", c.Conn.RemoteAddr())
+	// } else {
+	// 	DefaultLogger.Info("[ARPC CLI]\t%v\tsendLoop start", c.Conn.RemoteAddr())
+	// 	defer DefaultLogger.Info("[ARPC CLI]\t%v\tsendLoop stop", c.Conn.RemoteAddr())
+	// }
 	var conn net.Conn
 	for msg := range c.chSend {
 		conn = c.Conn
@@ -331,7 +337,7 @@ func (c *Client) newReqMessage(method string, req interface{}, async byte) Messa
 
 // newClientWithConn factory
 func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func() int64) *Client {
-	DefaultLogger.Info("[ARPC] New Client \"%v\" Connected", conn.RemoteAddr())
+	DefaultLogger.Info("[ARPC SVR]\t%v\tConnected", conn.RemoteAddr())
 
 	client := &Client{}
 	client.Conn = conn
@@ -353,7 +359,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 		return nil, err
 	}
 
-	DefaultLogger.Info("[ARPC] Client \"%v\" Connected", conn.RemoteAddr())
+	DefaultLogger.Info("[ARPC CLI]\t%v\tConnected", conn.RemoteAddr())
 
 	client := &Client{}
 	client.Conn = conn
