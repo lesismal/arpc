@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultHandler instance
-var DefaultHandler = NewHandler()
+var DefaultHandler Handler = NewHandler()
 
 // Handler defines net message handler
 type Handler interface {
@@ -75,7 +75,7 @@ func (h *handler) Recv(c *Client) (Message, error) {
 		return nil, err
 	}
 
-	message, err = c.Head.Message()
+	message, err = c.Head.message()
 	if err == nil && len(message) > HeadLen {
 		_, err = io.ReadFull(c.Reader, message[HeadLen:])
 	}
@@ -115,6 +115,7 @@ func (h *handler) Handle(method string, cb func(*Context)) {
 
 func (h *handler) OnMessage(c *Client, msg Message) {
 	cmd, seq, isAsync, method, body, err := msg.Parse()
+	defer memPool.Put(msg)
 	switch cmd {
 	case RPCCmdReq:
 		if cb, ok := h.routes[method]; ok {
@@ -144,7 +145,8 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 	}
 }
 
-func NewHandler() *handler {
+// NewHandler factory
+func NewHandler() Handler {
 	return &handler{
 		sendQueueSize: 1024,
 	}

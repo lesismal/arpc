@@ -297,6 +297,7 @@ func (c *Client) sendLoop() {
 		conn = c.Conn
 		if !c.reconnecting {
 			c.Handler.Send(conn, msg)
+			memPool.Put(msg)
 		}
 	}
 }
@@ -312,7 +313,7 @@ func (c *Client) newReqMessage(method string, req interface{}, async byte) Messa
 
 	bodyLen = len(method) + len(data)
 
-	msg = Message(make([]byte, HeadLen+bodyLen))
+	msg = Message(memPool.Get(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
 

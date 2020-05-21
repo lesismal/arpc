@@ -32,10 +32,10 @@ const (
 	HeadLen int = 16
 
 	// MaxMethodLen limit
-	MaxMethodLen = 255
+	MaxMethodLen int = 255
 
 	// MaxBodyLen limit
-	MaxBodyLen int = 1024 * 1024 * 64
+	MaxBodyLen int = 1024*1024*64 - 16
 )
 
 // Header defines rpc head
@@ -46,8 +46,8 @@ func (h Header) BodyLen() int {
 	return int(binary.LittleEndian.Uint32(h[headerIndexBodyLenBegin:headerIndexBodyLenEnd]))
 }
 
-// Message clones header with body length
-func (h Header) Message() (Message, error) {
+// message clones header with body length
+func (h Header) message() (Message, error) {
 	l := h.BodyLen()
 	if l == 0 {
 		return Message(h), nil
@@ -55,7 +55,7 @@ func (h Header) Message() (Message, error) {
 	if l < 0 || l > MaxBodyLen {
 		return nil, fmt.Errorf("invalid body length: %v", l)
 	}
-	m := Message(make([]byte, HeadLen+l))
+	m := Message(memPool.Get(HeadLen + l))
 	copy(m, h)
 
 	return m, nil

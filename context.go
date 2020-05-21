@@ -53,7 +53,7 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}) Message {
 	data = valueToBytes(ctx.Client.Codec, v)
 
 	bodyLen = len(data)
-	msg = Message(make([]byte, HeadLen+bodyLen))
+	msg = Message(memPool.Get(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
 	msg[headerIndexCmd] = cmd
