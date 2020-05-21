@@ -105,6 +105,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 
 	select {
 	case msg = <-session.done:
+		defer memPut(msg)
 	case <-timer.C:
 		return ErrClientTimeout
 	}
@@ -131,31 +132,13 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 
 // CallAsync make async rpc call
 func (c *Client) CallAsync(method string, req interface{}, handler func(*Context), timeout time.Duration) error {
-	if !c.running {
-		return ErrClientStopped
-	}
-
-	if timeout <= 0 {
-		return fmt.Errorf("invalid timeout arg: %v", timeout)
-	}
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
 	msg := c.newReqMessage(method, req, 1)
-
 	if handler != nil {
 		seq := msg.Seq()
 		c.addAsyncHandler(seq, handler)
 	}
 
-	select {
-	case c.chSend <- msg:
-	case <-timer.C:
-		return ErrClientTimeout
-	}
-
-	return nil
+	return c.PushMsg(msg, timeout)
 }
 
 // Notify make rpc notify

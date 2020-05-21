@@ -115,9 +115,9 @@ func (h *handler) Handle(method string, cb func(*Context)) {
 
 func (h *handler) OnMessage(c *Client, msg Message) {
 	cmd, seq, isAsync, method, body, err := msg.Parse()
-	defer memPut(msg)
 	switch cmd {
 	case RPCCmdReq:
+		defer memPut(msg)
 		if cb, ok := h.routes[method]; ok {
 			defer handlePanic()
 			cb(NewContext(c, msg))
@@ -135,12 +135,15 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(seq)
 			if ok {
+				defer memPut(msg)
+				defer handlePanic()
 				handler(&Context{Client: c, Message: msg})
 			} else {
 				DefaultLogger.Info("asyncHandler not exist or expired: [seq: %v] [len(body): %v, %v] [%v]", seq, len(body), string(body), err)
 			}
 		}
 	default:
+		defer memPut(msg)
 		DefaultLogger.Info("invalid cmd: [%v]", cmd)
 	}
 }

@@ -17,8 +17,75 @@
 | -----  |  ----  |   ----    |   ----  |  ----   |   ----   |        ----          | ---- |
 | 1 byte | 1 byte |  1 bytes  | 1 bytes | 4 bytes |  8 bytes | 0 or methodlen bytes | ...  |
 
+
+
+
+
+
 ## Examples
 
+
+### 一、Rpc Sync
+
+- server
+
+```sh
+go run github.com/lesismal/arpc/examples/bench/server
+```
+
+- client
+
+```sh
+go run github.com/lesismal/arpc/examples/bench/client
+```
+
+
+### 二、Rpc Async
+
+- server
+
+```sh
+go run github.com/lesismal/arpc/examples/bench/server
+```
+
+- client
+
+```sh
+go run github.com/lesismal/arpc/examples/bench/client
+```
+
+
+### 三、Notify
+
+- server
+
+```sh
+go run github.com/lesismal/arpc/examples/notify/server
+```
+
+- client
+
+```sh
+go run github.com/lesismal/arpc/examples/notify/client
+```
+
+
+### 四、Benchmark
+
+- server
+
+```sh
+go run github.com/lesismal/arpc/examples/bench/server
+```
+
+- client
+
+```sh
+go run github.com/lesismal/arpc/examples/bench/client
+```
+
+
+### 五、Echo
 - server
 
 ```golang
