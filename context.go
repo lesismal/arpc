@@ -86,9 +86,9 @@ func (ctx *Context) Error(err interface{}) error {
 	return ctx.Client.PushMsg(msg, TimeForever)
 }
 
-// Clone a new Contex
+// Clone a new Contex, new Context's lifecycle depends on user, not manage by pool
 func (ctx *Context) Clone() *Context {
-	return NewContext(ctx.Client, ctx.Message)
+	return &Context{Client: ctx.Client, Message: ctx.Message}
 }
 
 // NewContext factory

@@ -9,6 +9,20 @@
 [5]: https://goreportcard.com/badge/github.com/lesismal/arpc
 [6]: https://goreportcard.com/report/github.com/lesismal/arpc
 
+
+
+## Features
+- [x] Client call Server Sync
+- [x] Client call Server Async
+- [x] Client notify Server
+- [x] Server call Client Sync
+- [x] Server call Client Async
+- [x] Server notify Client
+- [x] Mem Pools for Buffers and Objects
+- [x] Broadcast Ref Count Message
+
+
+
 ## Protocol
 
 - Header: LittleEndian
@@ -19,11 +33,7 @@
 
 
 
-
-
-
 ## Examples
-
 
 ### 一、[Rpc Sync](https://github.com/lesismal/arpc/tree/master/examples/rpc_sync)
 

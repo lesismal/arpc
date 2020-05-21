@@ -103,15 +103,19 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	}
 
 	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 
 	msg := c.newReqMessage(method, req, 0)
 
 	seq := msg.Seq()
 	sess := sessionGet(seq)
-	defer sessionPut(sess)
 	c.addSession(seq, sess)
-	defer c.deleteSession(seq)
+	defer func() {
+		timer.Stop()
+		c.mux.Lock()
+		delete(c.sessionMap, seq)
+		sessionPut(sess)
+		c.mux.Unlock()
+	}()
 
 	select {
 	case c.chSend <- msg:
