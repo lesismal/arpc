@@ -38,14 +38,10 @@
 ### 一、[Rpc Sync](https://github.com/lesismal/arpc/tree/master/examples/rpc_sync)
 
 - [server](https://github.com/lesismal/arpc/blob/master/examples/rpc_sync/server/server.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/rpc_sync/server
-```
-
 - [client](https://github.com/lesismal/arpc/blob/master/examples/rpc_sync/client/client.go)
 
 ```sh
+go run github.com/lesismal/arpc/examples/rpc_sync/server
 go run github.com/lesismal/arpc/examples/rpc_sync/client
 ```
 
@@ -53,14 +49,10 @@ go run github.com/lesismal/arpc/examples/rpc_sync/client
 ### 二、[Rpc Async](https://github.com/lesismal/arpc/tree/master/examples/rpc_async)
 
 - [server](https://github.com/lesismal/arpc/blob/master/examples/rpc_async/server/server.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/rpc_async/server
-```
-
 - [client](https://github.com/lesismal/arpc/blob/master/examples/rpc_async/client/client.go)
 
 ```sh
+go run github.com/lesismal/arpc/examples/rpc_async/server
 go run github.com/lesismal/arpc/examples/rpc_async/client
 ```
 
@@ -68,14 +60,10 @@ go run github.com/lesismal/arpc/examples/rpc_async/client
 ### 三、[Notify](https://github.com/lesismal/arpc/tree/master/examples/notify)
 
 - [server](https://github.com/lesismal/arpc/blob/master/examples/notify/server/server.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/notify/server
-```
-
 - [client](https://github.com/lesismal/arpc/blob/master/examples/notify/client/client.go)
 
 ```sh
+go run github.com/lesismal/arpc/examples/notify/server
 go run github.com/lesismal/arpc/examples/notify/client
 ```
 
@@ -83,14 +71,10 @@ go run github.com/lesismal/arpc/examples/notify/client
 ### 四、[Benchmark](https://github.com/lesismal/arpc/tree/master/examples/bench)
 
 - [server](https://github.com/lesismal/arpc/blob/master/examples/bench/server/server.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/bench/server
-```
-
 - [client](https://github.com/lesismal/arpc/blob/master/examples/bench/client/client.go)
 
 ```sh
+go run github.com/lesismal/arpc/examples/bench/server
 go run github.com/lesismal/arpc/examples/bench/client
 ```
 
@@ -98,14 +82,10 @@ go run github.com/lesismal/arpc/examples/bench/client
 ### 五、[Mixed](https://github.com/lesismal/arpc/tree/master/examples/mixed)
 
 - [server](https://github.com/lesismal/arpc/blob/master/examples/mixed/server/server.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/mixed/server
-```
-
 - [client](https://github.com/lesismal/arpc/blob/master/examples/mixed/client/client.go)
 
 ```sh
+go run github.com/lesismal/arpc/examples/mixed/server
 go run github.com/lesismal/arpc/examples/mixed/client
 ```
 
