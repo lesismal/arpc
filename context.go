@@ -58,6 +58,7 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}) Message {
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
 	msg[headerIndexCmd] = cmd
 	msg[headerIndexAsync] = ctx.Message.Async()
+	msg[headerIndexMethodLen] = 0
 	copy(msg[HeadLen:], data)
 
 	return msg
@@ -79,4 +80,17 @@ func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error
 func (ctx *Context) Error(err interface{}) error {
 	msg := ctx.newRspMessage(RPCCmdErr, err)
 	return ctx.Client.PushMsg(msg, TimeForever)
+}
+
+// Clone a new Contex
+func (ctx *Context) Clone() *Context {
+	return NewContext(ctx.Client, ctx.Message)
+}
+
+// NewContext factory
+func NewContext(c *Client, msg Message) *Context {
+	ctx := ctxPool.Get().(*Context)
+	ctx.Client = c
+	ctx.Message = msg
+	return ctx
 }

@@ -120,7 +120,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 	case RPCCmdReq:
 		if cb, ok := h.routes[method]; ok {
 			defer handlePanic()
-			cb(&Context{Client: c, Message: msg})
+			cb(NewContext(c, msg))
 		} else {
 			DefaultLogger.Info("invalid method: [%v], %v, %v", method, body, err)
 		}

@@ -318,8 +318,8 @@ func (c *Client) newReqMessage(method string, req interface{}, async byte) Messa
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
 
 	msg[headerIndexCmd] = RPCCmdReq
-	msg[headerIndexMethodLen] = byte(len(method))
 	msg[headerIndexAsync] = async
+	msg[headerIndexMethodLen] = byte(len(method))
 	copy(msg[HeadLen:HeadLen+len(method)], method)
 	copy(msg[HeadLen+len(method):], data)
 
