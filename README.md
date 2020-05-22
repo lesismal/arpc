@@ -23,6 +23,7 @@
 		- [Async Response](#async-response)
 		- [Client Call, CallAsync, Notify](#client-call-callasync-notify)
 		- [Server Call, CallAsync, Notify](#server-call-callasync-notify)
+		- [Broadcast && Ref Count Message](#broadcast--ref-count-message)
 		- [Custom Net Protocol](#custom-net-protocol)
 		- [Custom Codec](#custom-codec)
 		- [Custom Logger](#custom-logger)
@@ -231,6 +232,26 @@ go func() {
 2. Then Call/CallAsync/Notify
 
 - [See Previous](#client-call-callasync-notify)
+
+### Broadcast && Ref Count Message
+
+- for more details:	[**server**](https://github.com/lesismal/arpc/blob/master/examples/broadcast/server/server.go) [**client**](https://github.com/lesismal/arpc/blob/master/examples/broadcast/client/client.go)
+
+```golang
+var mux = sync.RWMutex{}
+var clientMap = make(map[*arpc.Client]struct{})
+
+func broadcast() {
+	msg := arpc.NewRefMessage(arpc.DefaultCodec, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
+	defer msg.Release()
+
+	mux.RLock()
+	for client := range clientMap {
+		client.PushMsg(msg, arpc.TimeZero)
+	}
+	mux.RUnlock()
+}
+```
 
 ### Custom Net Protocol
 

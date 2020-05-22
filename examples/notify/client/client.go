@@ -50,7 +50,7 @@ func main() {
 	response := ""
 	err = client.Call(methodHello, payload, &response, time.Second*5)
 	if err != nil {
-		log.Println("Call failed: %v", err)
+		log.Printf("Call failed: %v", err)
 	} else {
 		log.Printf("Call Response: \"%v\"", response)
 	}
