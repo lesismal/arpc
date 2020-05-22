@@ -105,7 +105,6 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	if c.reconnecting {
 		return ErrClientReconnecting
 	}
-
 	if timeout <= 0 {
 		return fmt.Errorf("invalid timeout arg: %v", timeout)
 	}
@@ -161,18 +160,21 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 
 // CallAsync make async rpc call
 func (c *Client) CallAsync(method string, req interface{}, h RouterFunc, timeout time.Duration) error {
-	var (
-		msg     = c.newReqMessage(method, req, 1)
-		seq     = msg.Seq()
-		handler *asyncHandler
-	)
-
 	if !c.running {
 		return ErrClientStopped
 	}
 	if c.reconnecting {
 		return ErrClientReconnecting
 	}
+	if timeout < 0 {
+		return fmt.Errorf("invalid timeout arg: %v", timeout)
+	}
+
+	var (
+		msg     = c.newReqMessage(method, req, 1)
+		seq     = msg.Seq()
+		handler *asyncHandler
+	)
 
 	if h != nil {
 		handler = asyncHandlerGet(h)
@@ -188,6 +190,11 @@ func (c *Client) CallAsync(method string, req interface{}, h RouterFunc, timeout
 		select {
 		case c.chSend <- msg:
 			msg.Retain()
+			if h != nil {
+				handler.t = time.AfterFunc(time.Second*10, func() {
+					c.deleteAsyncHandler(seq)
+				})
+			}
 		default:
 			msg.Release()
 			c.deleteAsyncHandler(seq)
@@ -228,15 +235,14 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 	if c.reconnecting {
 		return ErrClientReconnecting
 	}
-
 	if timeout < 0 {
-		timeout = TimeForever
+		return fmt.Errorf("invalid timeout arg: %v", timeout)
 	}
 
 	switch timeout {
-	case TimeForever:
-		c.chSend <- msg
-		msg.Retain()
+	// case TimeForever:
+	// 	c.chSend <- msg
+	// 	msg.Retain()
 	case TimeZero:
 		select {
 		case c.chSend <- msg:
@@ -288,9 +294,12 @@ func (c *Client) deleteAsyncHandler(seq uint64) {
 	handler, ok := c.asyncHandlerMap[seq]
 	if ok {
 		delete(c.asyncHandlerMap, seq)
+		c.mux.Unlock()
+		handler.t.Stop()
 		asyncHandlerPut(handler)
+	} else {
+		c.mux.Unlock()
 	}
-	c.mux.Unlock()
 }
 
 func (c *Client) getAndDeleteAsyncHandler(seq uint64) (*asyncHandler, bool) {
@@ -298,10 +307,24 @@ func (c *Client) getAndDeleteAsyncHandler(seq uint64) (*asyncHandler, bool) {
 	handler, ok := c.asyncHandlerMap[seq]
 	if ok {
 		delete(c.asyncHandlerMap, seq)
+		c.mux.Unlock()
+		handler.t.Stop()
+		asyncHandlerPut(handler)
+	} else {
+		c.mux.Unlock()
+	}
+
+	return handler, ok
+}
+
+func (c *Client) clearAsyncHandler() {
+	c.mux.Lock()
+	for _, handler := range c.asyncHandlerMap {
+		handler.t.Stop()
 		asyncHandlerPut(handler)
 	}
+	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
 	c.mux.Unlock()
-	return handler, ok
 }
 
 func (c *Client) recvLoop() {

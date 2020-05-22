@@ -176,7 +176,6 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(seq)
 			if ok {
-				handler.t.Stop()
 				ctx := ctxGet(c, msg)
 				defer func() {
 					ctxPut(ctx)
