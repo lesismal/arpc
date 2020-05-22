@@ -42,6 +42,7 @@
 - [x] Server notify Client
 - [x] Mem Pools for Buffers and Objects
 - [x] Broadcast Ref Count Message
+- [x] Batch Write | Writev | net.Buffers 
 
 
 ## Header Layout

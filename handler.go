@@ -35,6 +35,8 @@ type Handler interface {
 
 	// Send writes a message to a connection
 	Send(c net.Conn, m Message) (int, error)
+	// SendN writes batch messages to a connection
+	SendN(conn net.Conn, buffers net.Buffers) (int, error)
 
 	// SendQueueSize returns Client's chSend capacity
 	SendQueueSize() int
@@ -134,6 +136,16 @@ func (h *handler) Send(conn net.Conn, m Message) (int, error) {
 		}
 	}
 	return conn.Write(m)
+}
+
+func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
+	if h.beforeSend != nil {
+		if err := h.beforeSend(conn); err != nil {
+			return -1, err
+		}
+	}
+	n64, err := buffers.WriteTo(conn)
+	return int(n64), err
 }
 
 func (h *handler) OnMessage(c *Client, msg Message) {

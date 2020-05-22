@@ -373,13 +373,72 @@ func (c *Client) sendLoop() {
 	// 	DefaultLogger.Info("[ARPC CLI]\t%v\tsendLoop start", c.Conn.RemoteAddr())
 	// 	defer DefaultLogger.Info("[ARPC CLI]\t%v\tsendLoop stop", c.Conn.RemoteAddr())
 	// }
+
+	var i int
 	var conn net.Conn
+	var buffers net.Buffers = make([][]byte, 10)
+	var messages = make([]Message, 10)
 	for msg := range c.chSend {
 		conn = c.Conn
 		if !c.reconnecting {
-			c.Handler.Send(conn, msg.Payload())
+			buffers[0] = msg.Payload()
+			messages[0] = msg
+			for i = 1; i < 10; i++ {
+				select {
+				case msg = <-c.chSend:
+					buffers[i] = msg.Payload()
+					messages[i] = msg
+				default:
+					goto SEND
+				}
+			}
+		SEND:
+			if i == 1 {
+				c.Handler.Send(conn, msg.Payload())
+				msg.Release()
+			} else {
+				c.Handler.SendN(conn, buffers[:i])
+				for ; i > 0; i-- {
+					messages[i-1].Release()
+				}
+			}
+		} else {
+			msg.Release()
 		}
-		msg.Release()
+
+		// var i int
+		// var conn net.Conn
+		// var buffers net.Buffers = make([][]byte, 10)[0:0]
+		// var messages = make([]Message, 10)[0:0]
+		// for msg := range c.chSend {
+		// 	conn = c.Conn
+		// 	if !c.reconnecting {
+		// 		buffers = append(buffers, msg.Payload())
+		// 		messages = append(messages, msg)
+		// 		for i = 1; i < 10; i++ {
+		// 			select {
+		// 			case msg = <-c.chSend:
+		// 				buffers = append(buffers, msg.Payload())
+		// 				messages = append(messages, msg)
+		// 			default:
+		// 				goto SEND
+		// 			}
+		// 		}
+		// 	SEND:
+		// 		if len(buffers) == 1 {
+		// 			c.Handler.Send(conn, buffers[0])
+		// 			msg.Release()
+		// 		} else {
+		// 			c.Handler.SendN(conn, buffers)
+		// 			for _, v := range messages {
+		// 				v.Release()
+		// 			}
+		// 		}
+		// 		buffers = buffers[0:0]
+		// 		messages = messages[0:0]
+		// 	} else {
+		// 		msg.Release()
+		// 	}
 	}
 }
 
