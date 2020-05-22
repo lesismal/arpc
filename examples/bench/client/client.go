@@ -32,10 +32,10 @@ func dialer() (net.Conn, error) {
 
 func main() {
 	var (
-		qpsSec                 uint64 = 0
-		qpsTotal               uint64 = 0
-		clientNum                     = runtime.NumCPU() * 2
-		eachClientCoroutineNum        = 10
+		qpsSec                 uint64
+		qpsTotal               uint64
+		clientNum              = runtime.NumCPU() * 2
+		eachClientCoroutineNum = 10
 	)
 
 	clients := make([]*arpc.Client, clientNum)
