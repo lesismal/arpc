@@ -370,6 +370,8 @@ func (c *Client) recvLoop() {
 					DefaultLogger.Info("[ARPC CLI]\t%v\tConnected", addr)
 					c.Reader = c.Handler.WrapReader(c.Conn)
 
+					c.clearAsyncHandler()
+
 					c.reconnecting = false
 
 					if c.onConnected != nil {
