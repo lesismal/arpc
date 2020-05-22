@@ -376,7 +376,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 	client.Reader = DefaultHandler.WrapReader(conn)
 	client.Head = Header(client.head[:])
 	client.Codec = DefaultCodec
-	client.Handler = DefaultHandler
+	client.Handler = DefaultHandler.Clone()
 	client.Dialer = dialer
 	client.sessionMap = make(map[uint64]*rpcSession)
 	client.asyncHandlerMap = make(map[uint64]func(*Context))

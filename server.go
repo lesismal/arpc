@@ -115,6 +115,6 @@ func (s *Server) Shutdown(timeout time.Duration) error {
 func NewServer() *Server {
 	return &Server{
 		Codec:   DefaultCodec,
-		Handler: DefaultHandler,
+		Handler: DefaultHandler.Clone(),
 	}
 }

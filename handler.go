@@ -16,6 +16,9 @@ var DefaultHandler Handler = NewHandler()
 
 // Handler defines net message handler
 type Handler interface {
+	// Clone returns a copy
+	Clone() Handler
+
 	// BeforeRecv registers callback before Recv
 	BeforeRecv(bh func(net.Conn) error)
 
@@ -51,6 +54,12 @@ type handler struct {
 	wrapReader    func(conn net.Conn) io.Reader
 	routes        map[string]func(*Context)
 	sendQueueSize int
+}
+
+// Clone returns a copy
+func (h *handler) Clone() Handler {
+	var cp = *h
+	return &cp
 }
 
 func (h *handler) BeforeRecv(bh func(net.Conn) error) {
