@@ -27,6 +27,11 @@ type rpcSession struct {
 	done chan Message
 }
 
+type asyncHandler struct {
+	h func(*Context)
+	t *time.Timer
+}
+
 // Client defines rpc client struct
 type Client struct {
 	mux sync.RWMutex
@@ -37,7 +42,7 @@ type Client struct {
 
 	seq             uint64
 	sessionMap      map[uint64]*rpcSession
-	asyncHandlerMap map[uint64]func(*Context)
+	asyncHandlerMap map[uint64]*asyncHandler
 
 	onStop         func() int64
 	onConnected    func(*Client)
@@ -155,13 +160,59 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 }
 
 // CallAsync make async rpc call
-func (c *Client) CallAsync(method string, req interface{}, handler func(*Context), timeout time.Duration) error {
-	msg := c.newReqMessage(method, req, 1)
-	if handler != nil {
-		c.addAsyncHandler(msg.Seq(), handler)
+func (c *Client) CallAsync(method string, req interface{}, h func(*Context), timeout time.Duration) error {
+	var (
+		msg     = c.newReqMessage(method, req, 1)
+		seq     = msg.Seq()
+		handler *asyncHandler
+	)
+
+	if !c.running {
+		return ErrClientStopped
+	}
+	if c.reconnecting {
+		return ErrClientReconnecting
 	}
 
-	return c.PushMsg(msg, timeout)
+	if h != nil {
+		handler = asyncHandlerGet(h)
+		c.addAsyncHandler(seq, handler)
+	}
+
+	switch timeout {
+	// should not block forever
+	// case TimeForever:
+	// 	c.chSend <- msg
+	// 	msg.Retain()
+	case TimeZero:
+		select {
+		case c.chSend <- msg:
+			msg.Retain()
+		default:
+			msg.Release()
+			c.deleteAsyncHandler(seq)
+			return ErrClientQueueIsFull
+		}
+	default:
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case c.chSend <- msg:
+			msg.Retain()
+			if h != nil {
+				// timeout * 2: [push to send queue] + [recv response]
+				handler.t = time.AfterFunc(timeout, func() {
+					c.deleteAsyncHandler(seq)
+				})
+			}
+		case <-timer.C:
+			msg.Release()
+			c.deleteAsyncHandler(seq)
+			return ErrClientTimeout
+		}
+	}
+
+	return nil
 }
 
 // Notify make rpc notify
@@ -226,17 +277,28 @@ func (c *Client) deleteSession(seq uint64) {
 	c.mux.Unlock()
 }
 
-func (c *Client) addAsyncHandler(seq uint64, handler func(*Context)) {
+func (c *Client) addAsyncHandler(seq uint64, h *asyncHandler) {
 	c.mux.Lock()
-	c.asyncHandlerMap[seq] = handler
+	c.asyncHandlerMap[seq] = h
 	c.mux.Unlock()
 }
 
-func (c *Client) getAndDeleteAsyncHandler(seq uint64) (func(*Context), bool) {
+func (c *Client) deleteAsyncHandler(seq uint64) {
 	c.mux.Lock()
 	handler, ok := c.asyncHandlerMap[seq]
 	if ok {
 		delete(c.asyncHandlerMap, seq)
+		asyncHandlerPut(handler)
+	}
+	c.mux.Unlock()
+}
+
+func (c *Client) getAndDeleteAsyncHandler(seq uint64) (*asyncHandler, bool) {
+	c.mux.Lock()
+	handler, ok := c.asyncHandlerMap[seq]
+	if ok {
+		delete(c.asyncHandlerMap, seq)
+		asyncHandlerPut(handler)
 	}
 	c.mux.Unlock()
 	return handler, ok
@@ -356,7 +418,7 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 	client.Codec = codec
 	client.Handler = handler
 	client.sessionMap = make(map[uint64]*rpcSession)
-	client.asyncHandlerMap = make(map[uint64]func(*Context))
+	client.asyncHandlerMap = make(map[uint64]*asyncHandler)
 	client.onStop = onStop
 
 	return client
@@ -379,7 +441,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 	client.Handler = DefaultHandler.Clone()
 	client.Dialer = dialer
 	client.sessionMap = make(map[uint64]*rpcSession)
-	client.asyncHandlerMap = make(map[uint64]func(*Context))
+	client.asyncHandlerMap = make(map[uint64]*asyncHandler)
 
 	return client, nil
 }

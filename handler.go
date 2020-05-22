@@ -162,15 +162,16 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				DefaultLogger.Info("session not exist or expired: [seq: %v] [len(body): %v] [%v]", seq, len(body), err)
 			}
 		} else {
-			h, ok := c.getAndDeleteAsyncHandler(seq)
+			handler, ok := c.getAndDeleteAsyncHandler(seq)
 			if ok {
+				handler.t.Stop()
 				ctx := ctxGet(c, msg)
 				defer func() {
 					ctxPut(ctx)
 					memPut(msg)
 				}()
 				defer handlePanic()
-				h(ctx)
+				handler.h(ctx)
 			} else {
 				memPut(msg)
 				DefaultLogger.Info("asyncHandler not exist or expired: [seq: %v] [len(body): %v, %v] [%v]", seq, len(body), string(body), err)
