@@ -72,6 +72,27 @@ func (h *handler) SetReaderWrapper(wrapper func(conn net.Conn) io.Reader) {
 	h.wrapReader = wrapper
 }
 
+func (h *handler) SendQueueSize() int {
+	return h.sendQueueSize
+}
+
+func (h *handler) SetSendQueueSize(size int) {
+	h.sendQueueSize = size
+}
+
+func (h *handler) Handle(method string, cb func(*Context)) {
+	if h.routes == nil {
+		h.routes = map[string]func(*Context){}
+	}
+	if len(method) > MaxMethodLen {
+		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
+	}
+	if _, ok := h.routes[method]; ok {
+		panic(fmt.Errorf("handler exist for method %v ", method))
+	}
+	h.routes[method] = cb
+}
+
 func (h *handler) Recv(c *Client) (Message, error) {
 	var (
 		err     error
@@ -104,27 +125,6 @@ func (h *handler) Send(conn net.Conn, m Message) (int, error) {
 		}
 	}
 	return conn.Write(m)
-}
-
-func (h *handler) SendQueueSize() int {
-	return h.sendQueueSize
-}
-
-func (h *handler) SetSendQueueSize(size int) {
-	h.sendQueueSize = size
-}
-
-func (h *handler) Handle(method string, cb func(*Context)) {
-	if h.routes == nil {
-		h.routes = map[string]func(*Context){}
-	}
-	if len(method) > MaxMethodLen {
-		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
-	}
-	if _, ok := h.routes[method]; ok {
-		panic(fmt.Errorf("handler exist for method %v ", method))
-	}
-	h.routes[method] = cb
 }
 
 func (h *handler) OnMessage(c *Client, msg Message) {

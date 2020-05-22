@@ -8,46 +8,23 @@ import (
 	"github.com/lesismal/arpc"
 )
 
-const (
-	addr = "localhost:8888"
-
-	method = "Hello"
-)
-
-// HelloReq .
-type HelloReq struct {
-	Msg string
-}
-
-// HelloRsp .
-type HelloRsp struct {
-	Msg string
-}
-
-func dialer() (net.Conn, error) {
-	return net.DialTimeout("tcp", addr, time.Second*3)
-}
-
 func main() {
-	func() {
-		client, err := arpc.NewClient(dialer)
-		if err != nil {
-			log.Println("NewClient failed:", err)
-			return
-		}
+	client, err := arpc.NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", "localhost:8888", time.Second*3)
+	})
+	if err != nil {
+		panic(err)
+	}
 
-		client.Run()
-		defer client.Stop()
+	client.Run()
+	defer client.Stop()
 
-		req := &HelloReq{Msg: "hello from client.Call"}
-		rsp := &HelloRsp{}
-		err = client.Call(method, req, rsp, time.Second*5)
-		if err != nil {
-			log.Printf("Call failed: %v", err)
-		} else {
-			log.Printf("Call Response: \"%v\"", rsp.Msg)
-		}
-	}()
-
-	<-make(chan int)
+	req := "hello"
+	rsp := ""
+	err = client.Call("/echo", &req, &rsp, time.Second*5)
+	if err != nil {
+		log.Fatalf("Call failed: %v", err)
+	} else {
+		log.Printf("Call Response: \"%v\"", rsp)
+	}
 }

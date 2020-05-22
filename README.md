@@ -10,8 +10,29 @@
 [6]: https://goreportcard.com/report/github.com/lesismal/arpc
 
 
+## Contents
+
+- [ARPC - Sync && Async Call supported](#arpc---sync--async-call-supported)
+	- [Contents](#contents)
+	- [Features](#features)
+	- [Header Layout](#header-layout)
+	- [Installation](#installation)
+	- [Quick start](#quick-start)
+	- [API Examples](#api-examples)
+		- [Register Routers](#register-routers)
+		- [Async Response](#async-response)
+		- [Client Call, CallAsync, Notify](#client-call-callasync-notify)
+		- [Server Call, CallAsync, Notify](#server-call-callasync-notify)
+		- [Custom Net Protocol](#custom-net-protocol)
+		- [Custom Codec](#custom-codec)
+		- [Custom Logger](#custom-logger)
+		- [Custom operations before conn's recv and send](#custom-operations-before-conns-recv-and-send)
+		- [Custom arpc.Client's Reader from wrapping net.Conn](#custom-arpcclients-reader-from-wrapping-netconn)
+		- [Custom arpc.Client's send queue capacity](#custom-arpcclients-send-queue-capacity)
+
 
 ## Features
+- [x] Async Response
 - [x] Client call Server Sync
 - [x] Client call Server Async
 - [x] Client notify Server
@@ -22,10 +43,9 @@
 - [x] Broadcast Ref Count Message
 
 
+## Header Layout
 
-## Protocol
-
-- Header: LittleEndian
+- LittleEndian
 
 |  cmd   | async  | methodlen |  null   | bodylen | sequence |       method         | body |
 | -----  |  ----  |   ----    |   ----  |  ----   |   ----   |        ----          | ---- |
@@ -33,114 +53,47 @@
 
 
 
-## Examples
+## Installation
 
-### 一、[Rpc Sync](https://github.com/lesismal/arpc/tree/master/examples/rpc_sync)
-
-- [server](https://github.com/lesismal/arpc/blob/master/examples/rpc_sync/server/server.go)
-- [client](https://github.com/lesismal/arpc/blob/master/examples/rpc_sync/client/client.go)
+1. Get and install arpc
 
 ```sh
-go run github.com/lesismal/arpc/examples/rpc_sync/server
-go run github.com/lesismal/arpc/examples/rpc_sync/client
+$ go get -u github.com/lesismal/arpc
+```
+
+2. Import in your code:
+
+```go
+import "github.com/lesismal/arpc"
 ```
 
 
-### 二、[Rpc Async](https://github.com/lesismal/arpc/tree/master/examples/rpc_async)
+## Quick start
+ 
+- start a [server](https://github.com/lesismal/arpc/blob/master/examples/rpc_sync/server/server.go)
 
-- [server](https://github.com/lesismal/arpc/blob/master/examples/rpc_async/server/server.go)
-- [client](https://github.com/lesismal/arpc/blob/master/examples/rpc_async/client/client.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/rpc_async/server
-go run github.com/lesismal/arpc/examples/rpc_async/client
-```
-
-
-### 三、[Notify](https://github.com/lesismal/arpc/tree/master/examples/notify)
-
-- [server](https://github.com/lesismal/arpc/blob/master/examples/notify/server/server.go)
-- [client](https://github.com/lesismal/arpc/blob/master/examples/notify/client/client.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/notify/server
-go run github.com/lesismal/arpc/examples/notify/client
-```
-
-
-### 四、[Benchmark](https://github.com/lesismal/arpc/tree/master/examples/bench)
-
-- [server](https://github.com/lesismal/arpc/blob/master/examples/bench/server/server.go)
-- [client](https://github.com/lesismal/arpc/blob/master/examples/bench/client/client.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/bench/server
-go run github.com/lesismal/arpc/examples/bench/client
-```
-
-
-### 五、[Mixed](https://github.com/lesismal/arpc/tree/master/examples/mixed)
-
-- [server](https://github.com/lesismal/arpc/blob/master/examples/mixed/server/server.go)
-- [client](https://github.com/lesismal/arpc/blob/master/examples/mixed/client/client.go)
-
-```sh
-go run github.com/lesismal/arpc/examples/mixed/server
-go run github.com/lesismal/arpc/examples/mixed/client
-```
-
-
-### 六、Echo
-- server
-
-```golang
+```go
 package main
 
-import (
-	"log"
-	"net"
-
-	"github.com/lesismal/arpc"
-)
-
-const (
-	addr = ":8888"
-)
-
-type HelloReq struct {
-	Msg string
-}
-
-type HelloRsp struct {
-	Msg string
-}
-
-func OnHello(ctx *arpc.Context) {
-	req := &HelloReq{}
-	rsp := &HelloRsp{}
-
-	ctx.Bind(req)
-	log.Printf("OnHello: \"%v\"", req.Msg)
-
-	rsp.Msg = req.Msg
-	ctx.Write(rsp)
-}
+import "github.com/lesismal/arpc"
 
 func main() {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
+	server := arpc.NewServer()
 
-	svr := arpc.NewServer()
-	svr.Handler.Handle("Hello", OnHello)
-	svr.Serve(ln)
+	// register router
+	server.Handler.Handle("/echo", func(ctx *arpc.Context) {
+		str := ""
+		ctx.Bind(&str)
+		ctx.Write(str)
+	})
+
+	server.Run(":8888")
 }
 ```
 
-- client
+- start a [client](https://github.com/lesismal/arpc/blob/master/examples/rpc_sync/client/client.go)
 
-```golang
+```go
 package main
 
 import (
@@ -151,39 +104,196 @@ import (
 	"github.com/lesismal/arpc"
 )
 
-const (
-	addr = "localhost:8888"
-)
-
-type HelloReq struct {
-	Msg string
-}
-
-type HelloRsp struct {
-	Msg string
-}
-
-func dialer() (net.Conn, error) {
-	return net.DialTimeout("tcp", addr, time.Second*3)
-}
-
 func main() {
-	client, err := arpc.NewClient(dialer)
+	client, err := arpc.NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", "localhost:8888", time.Second*3)
+	})
 	if err != nil {
-		log.Println("NewClient failed:", err)
-		return
+		panic(err)
 	}
 
 	client.Run()
 	defer client.Stop()
 
-	req := &HelloReq{Msg: "Hello"}
-	rsp := &HelloRsp{}
-	err = client.Call("Hello", req, rsp, time.Second*5)
+	req := "hello"
+	rsp := ""
+	err = client.Call("/echo", &req, &rsp, time.Second*5)
 	if err != nil {
-		log.Println("Call Hello failed: %v", err)
+		log.Fatalf("Call failed: %v", err)
 	} else {
-		log.Printf("HelloRsp: \"%v\"", rsp.Msg)
+		log.Printf("Call Response: \"%v\"", rsp)
 	}
 }
+```
+
+
+
+## API Examples
+
+### Register Routers
+
+```golang
+var handler arpc.Handler
+
+// package
+handler = arpc.DefaultHandler
+// server
+handler = server.Handler
+// client
+handler = client.Handler
+
+handler.Handle("/route", func(ctx *arpc.Context) { ... })
+handler.Handle("/route2", func(ctx *arpc.Context) { ... })
+handler.Handle("method", func(ctx *arpc.Context) { ... })
+```
+
+### Async Response
+
+```golang
+var handler arpc.Handler
+
+// package
+handler = arpc.DefaultHandler
+// server
+handler = server.Handler
+// client
+handler = client.Handler
+
+func asyncResponse(ctx *arpc.Context, data interface{}) {
+	defer ctx.Release()
+	ctx.Write(data)
+}
+
+handler.Handle("/echo", func(ctx *arpc.Context) {
+	req := ...
+	ctx.Bind(req)
+	clone := ctx.Clone()
+	go asyncResponse(clone, req)
+})
+```
+
+### Client Call, CallAsync, Notify
+
+1. Call (Block, with timeout)
+
+```golang
+request := &Echo{...}
+response := &Echo{}
+timeout := time.Second*5
+err := client.Call("/call/echo", request, response, timeout)
+```
+
+2. CallAsync (Nonblock, with callback and timeout)
+
+```golang
+request := &Echo{...}
+timeout := time.Second*5
+err := client.CallAsync("/call/echo", request, func(ctx *arpc.Context) {
+	response := &Echo{}
+	ctx.Bind(response)
+	...	
+}, timeout)
+```
+
+3. Notify (same as CallAsync without callback)
+
+```golang
+data := &Notify{...}
+client.Notify("/notify", data, time.Second)
+```
+
+### Server Call, CallAsync, Notify
+
+1. Get client and keep it in your application
+
+```golang
+var client *arpc.Client
+server.Handler.Handle("/route", func(ctx *arpc.Context) {
+	client = ctx.Client
+	// release client
+	client.OnDisconnected(func(c *arpc.Client){
+		client = nil
+	})
+})
+
+go func() {
+	for {
+		time.Sleep(time.Second)
+		if client != nil {
+			client.Call(...)
+			client.CallAsync(...)
+			client.Notify(...)
+		}
+	}
+}()
+```
+
+2. Then Call/CallAsync/Notify
+
+- [See Previous](#client-call-callasync-notify)
+
+### Custom Net Protocol
+
+```golang
+// server
+var ln net.Listener = ...
+svr := arpc.NewServer()
+svr.Serve(ln)
+
+// client
+dialer := func() (net.Conn, error) { 
+	return ... 
+}
+client, err := arpc.NewClient(dialer)
+```
+ 
+### Custom Codec
+
+```golang
+// server
+var codec arpc.Codec = ...
+
+// package
+arpc.DefaultCodec = codec
+
+// server
+svr := arpc.NewServer()
+svr.Codec = codec
+
+// client
+client, err := arpc.NewClient(...)
+client.Codec = codec
+```
+
+### Custom Logger
+
+```golang
+var logger arpc.Logger = ...
+arpc.SetLogger(logger) // arpc.DefaultLogger = logger
+``` 
+
+### Custom operations before conn's recv and send
+
+```golang
+arpc.DefaultHandler.BeforeRecv(func(conn net.Conn) error) {
+	// ...
+})
+
+arpc.DefaultHandler.BeforeSend(func(conn net.Conn) error) {
+	// ...
+})
+```
+
+### Custom arpc.Client's Reader from wrapping net.Conn 
+
+```golang
+arpc.DefaultHandler.SetReaderWrapper(func(conn net.Conn) io.Reader) {
+	// ...
+})
+```
+
+### Custom arpc.Client's send queue capacity 
+
+```golang
+arpc.DefaultHandler.SetSendQueueSize(4096)
 ```

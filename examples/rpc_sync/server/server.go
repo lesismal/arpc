@@ -1,47 +1,16 @@
 package main
 
-import (
-	"log"
-	"net"
-
-	"github.com/lesismal/arpc"
-)
-
-const (
-	addr = ":8888"
-
-	method = "Hello"
-)
-
-// HelloReq .
-type HelloReq struct {
-	Msg string
-}
-
-// HelloRsp .
-type HelloRsp struct {
-	Msg string
-}
-
-// OnHello .
-func OnHello(ctx *arpc.Context) {
-	req := &HelloReq{}
-	rsp := &HelloRsp{}
-
-	ctx.Bind(req)
-	log.Printf("OnHello: \"%v\"", req.Msg)
-
-	rsp.Msg = req.Msg
-	ctx.Write(rsp)
-}
+import "github.com/lesismal/arpc"
 
 func main() {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
 	svr := arpc.NewServer()
-	svr.Handler.Handle("Hello", OnHello)
-	svr.Serve(ln)
+
+	// register router
+	svr.Handler.Handle("/echo", func(ctx *arpc.Context) {
+		str := ""
+		ctx.Bind(&str)
+		ctx.Write(str)
+	})
+
+	svr.Run(":8888")
 }

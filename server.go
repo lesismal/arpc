@@ -85,6 +85,19 @@ func (s *Server) Serve(ln net.Listener) error {
 	return s.runLoop()
 }
 
+// Run starts a tcp service on addr
+func (s *Server) Run(addr string) error {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	s.ln = ln
+	s.chStop = make(chan error)
+	DefaultLogger.Info("[ARPC SVR] Running On: \"%v\"", ln.Addr())
+	defer DefaultLogger.Info("[ARPC SVR] Stopped")
+	return s.runLoop()
+}
+
 // Shutdown stop rpc service
 func (s *Server) Shutdown(timeout time.Duration) error {
 	DefaultLogger.Info("[ARPC SVR] %v Shutdown...", s.ln.Addr())
