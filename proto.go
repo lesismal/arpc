@@ -75,19 +75,17 @@ func (h Header) message() (Message, error) {
 // Message defines rpc packet
 type Message []byte
 
-// Cmd returns message cmd
+// Payload returns real Message to send
+func (m Message) Payload() Message {
+	if m[0]&refFlagByte == 0 {
+		return m
+	}
+	return Message(m[4:])
+}
+
+// Cmd returns cmd
 func (m Message) Cmd() byte {
 	return m[headerIndexCmd]
-}
-
-// MethodLen returns message cmd
-func (m Message) MethodLen() int {
-	return int(m[headerIndexMethodLen])
-}
-
-// Seq returns message sequence
-func (m Message) Seq() uint64 {
-	return binary.LittleEndian.Uint64(m[headerIndexSeqBegin:headerIndexSeqEnd])
 }
 
 // Async returns async flag value
@@ -100,18 +98,29 @@ func (m Message) IsAsync() bool {
 	return m[headerIndexAsync] == 1
 }
 
-// Payload returns Message's real payload to send
-func (m Message) Payload() Message {
-	if m[0]&refFlagByte == 0 {
-		return m
-	}
-	return Message(m[4:])
+// MethodLen returns method length
+func (m Message) MethodLen() int {
+	return int(m[headerIndexMethodLen])
+}
+
+// Method returns method
+func (m Message) Method() string {
+	return string(m[HeadLen : HeadLen+int(m[headerIndexMethodLen])])
+}
+
+// BodyLen return length of whole body[ method && body ]
+func (m Message) BodyLen() int {
+	return int(binary.LittleEndian.Uint32(m[headerIndexBodyLenBegin:headerIndexBodyLenEnd]))
+}
+
+// Seq returns sequence
+func (m Message) Seq() uint64 {
+	return binary.LittleEndian.Uint64(m[headerIndexSeqBegin:headerIndexSeqEnd])
 }
 
 // Body returns data after method
 func (m Message) Body() []byte {
-	payload := m.Payload()
-	return payload[HeadLen+payload.MethodLen():]
+	return m[HeadLen+m.MethodLen():]
 }
 
 // Retain adds ref count

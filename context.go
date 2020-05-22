@@ -16,17 +16,9 @@ type Context struct {
 	Message Message
 }
 
-// Body returns payload body
-func (ctx *Context) Body(v interface{}) ([]byte, error) {
-	msg := ctx.Message
-	switch msg.Cmd() {
-	case RPCCmdReq:
-		return msg[HeadLen+msg.MethodLen():], nil
-	case RPCCmdRsp, RPCCmdErr:
-		return msg[HeadLen:], nil
-	default:
-	}
-	return nil, ErrInvalidMessage
+// Body returns body
+func (ctx *Context) Body() []byte {
+	return ctx.Message.Body()
 }
 
 // Bind parses data to struct
@@ -45,6 +37,31 @@ func (ctx *Context) Bind(v interface{}) error {
 		}
 	}
 	return nil
+}
+
+// Write responses message to client
+func (ctx *Context) Write(v interface{}) error {
+	return ctx.write(RPCCmdRsp, v, TimeForever)
+}
+
+// WriteWithTimeout responses message to client with timeout
+func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error {
+	return ctx.write(RPCCmdRsp, v, timeout)
+}
+
+// Error responses error message to client
+func (ctx *Context) Error(err interface{}) error {
+	return ctx.write(RPCCmdErr, err, TimeForever)
+}
+
+// Clone a new Contex, new Context's lifecycle depends on user, should call Contex.Release after Contex.write
+func (ctx *Context) Clone() *Context {
+	return ctxGet(ctx.Client, ctx.Message)
+}
+
+// Release payback Contex to pool
+func (ctx *Context) Release() {
+	ctxPool.Put(ctx)
 }
 
 func (ctx *Context) newRspMessage(cmd byte, v interface{}) Message {
@@ -68,33 +85,7 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}) Message {
 	return msg
 }
 
-// Write responses message to client
-func (ctx *Context) Write(v interface{}) error {
-	msg := ctx.newRspMessage(RPCCmdRsp, v)
-	return ctx.Client.PushMsg(msg, TimeForever)
-}
-
-// WriteWithTimeout responses message to client with timeout
-func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error {
-	msg := ctx.newRspMessage(RPCCmdRsp, v)
+func (ctx *Context) write(cmd byte, v interface{}, timeout time.Duration) error {
+	msg := ctx.newRspMessage(cmd, v)
 	return ctx.Client.PushMsg(msg, timeout)
-}
-
-// Error responses error message to client
-func (ctx *Context) Error(err interface{}) error {
-	msg := ctx.newRspMessage(RPCCmdErr, err)
-	return ctx.Client.PushMsg(msg, TimeForever)
-}
-
-// Clone a new Contex, new Context's lifecycle depends on user, not manage by pool
-func (ctx *Context) Clone() *Context {
-	return &Context{Client: ctx.Client, Message: ctx.Message}
-}
-
-// NewContext factory
-func NewContext(c *Client, msg Message) *Context {
-	ctx := ctxPool.Get().(*Context)
-	ctx.Client = c
-	ctx.Message = msg
-	return ctx
 }

@@ -37,6 +37,17 @@ func memPut(b []byte) {
 	memPool.Put(b)
 }
 
+func ctxGet(c *Client, msg Message) *Context {
+	ctx := ctxPool.Get().(*Context)
+	ctx.Client = c
+	ctx.Message = msg
+	return ctx
+}
+
+func ctxPut(ctx *Context) {
+	ctxPool.Put(ctx)
+}
+
 func sessionGet(seq uint64) *rpcSession {
 	sess := sessionPool.Get().(*rpcSession)
 	sess.seq = seq

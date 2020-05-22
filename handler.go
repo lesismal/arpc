@@ -132,9 +132,9 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 	switch cmd {
 	case RPCCmdReq:
 		if h, ok := h.routes[method]; ok {
-			ctx := NewContext(c, msg)
+			ctx := ctxGet(c, msg)
 			defer func() {
-				ctxPool.Put(ctx)
+				ctxPut(ctx)
 				memPut(msg)
 			}()
 			defer handlePanic()
@@ -155,9 +155,9 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		} else {
 			h, ok := c.getAndDeleteAsyncHandler(seq)
 			if ok {
-				ctx := NewContext(c, msg)
+				ctx := ctxGet(c, msg)
 				defer func() {
-					ctxPool.Put(ctx)
+					ctxPut(ctx)
 					memPut(msg)
 				}()
 				defer handlePanic()
