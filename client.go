@@ -28,7 +28,7 @@ type rpcSession struct {
 }
 
 type asyncHandler struct {
-	h func(*Context)
+	h RouterFunc
 	t *time.Timer
 }
 
@@ -160,7 +160,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 }
 
 // CallAsync make async rpc call
-func (c *Client) CallAsync(method string, req interface{}, h func(*Context), timeout time.Duration) error {
+func (c *Client) CallAsync(method string, req interface{}, h RouterFunc, timeout time.Duration) error {
 	var (
 		msg     = c.newReqMessage(method, req, 1)
 		seq     = msg.Seq()

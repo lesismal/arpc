@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// RouterFunc type define
+type RouterFunc func(*Context)
+
 // Context definition
 type Context struct {
 	Client  *Client

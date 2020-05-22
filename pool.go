@@ -70,7 +70,7 @@ func sessionPut(sess *rpcSession) {
 	sessionPool.Put(sess)
 }
 
-func asyncHandlerGet(h func(*Context)) *asyncHandler {
+func asyncHandlerGet(h RouterFunc) *asyncHandler {
 	handler := asyncHandlerPool.Get().(*asyncHandler)
 	handler.h = h
 	return handler
