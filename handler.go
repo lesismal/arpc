@@ -50,9 +50,14 @@ type Handler interface {
 	// SendN writes batch messages to a connection
 	SendN(conn net.Conn, buffers net.Buffers) (int, error)
 
-	// SendQueueSize returns Client's chSend capacity
+	// RecvBufferSize returns Client.Reader size
+	RecvBufferSize() int
+	// SetRecvBufferSize sets Client.Reader size
+	SetRecvBufferSize(size int)
+
+	// SendQueueSize returns Client.chSend capacity
 	SendQueueSize() int
-	// SetSendQueueSize sets Client's chSend capacity
+	// SetSendQueueSize sets Client.chSend capacity
 	SetSendQueueSize(size int)
 
 	// Handle registers method handler
@@ -63,9 +68,10 @@ type Handler interface {
 }
 
 type handler struct {
-	batchRecv     bool
-	batchSend     bool
-	sendQueueSize int
+	batchRecv      bool
+	batchSend      bool
+	recvBufferSize int
+	sendQueueSize  int
 
 	beforeRecv func(net.Conn) error
 	beforeSend func(net.Conn) error
@@ -75,7 +81,6 @@ type handler struct {
 	routes map[string]HandlerFunc
 }
 
-// Clone returns a copy
 func (h *handler) Clone() Handler {
 	var cp = *h
 	return &cp
@@ -89,22 +94,18 @@ func (h *handler) BeforeSend(bh func(net.Conn) error) {
 	h.beforeSend = bh
 }
 
-// BatchRecv flag
 func (h *handler) BatchRecv() bool {
 	return h.batchRecv
 }
 
-// SetBatchRecv flag
 func (h *handler) SetBatchRecv(batch bool) {
 	h.batchRecv = batch
 }
 
-// BatchSend flag
 func (h *handler) BatchSend() bool {
 	return h.batchSend
 }
 
-// SetBatchSend flag
 func (h *handler) SetBatchSend(batch bool) {
 	h.batchSend = batch
 }
@@ -118,6 +119,14 @@ func (h *handler) WrapReader(conn net.Conn) io.Reader {
 
 func (h *handler) SetReaderWrapper(wrapper func(conn net.Conn) io.Reader) {
 	h.wrapReader = wrapper
+}
+
+func (h *handler) RecvBufferSize() int {
+	return h.recvBufferSize
+}
+
+func (h *handler) SetRecvBufferSize(size int) {
+	h.recvBufferSize = size
 }
 
 func (h *handler) SendQueueSize() int {
@@ -243,12 +252,14 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 
 // NewHandler factory
 func NewHandler() Handler {
-	return &handler{
-		batchRecv:     true,
-		batchSend:     true,
-		sendQueueSize: 1024,
-		wrapReader: func(conn net.Conn) io.Reader {
-			return bufio.NewReaderSize(conn, 4096)
-		},
+	h := &handler{
+		batchRecv:      true,
+		batchSend:      true,
+		recvBufferSize: 4096,
+		sendQueueSize:  1024,
 	}
+	h.wrapReader = func(conn net.Conn) io.Reader {
+		return bufio.NewReaderSize(conn, h.recvBufferSize)
+	}
+	return h
 }
