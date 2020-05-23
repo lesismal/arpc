@@ -31,7 +31,7 @@ func OnServerHello(ctx *arpc.Context) {
 	log.Printf("OnServerHello: \"%v\"", req.Msg)
 
 	rsp.Msg = req.Msg
-	go ctx.Clone().Write(rsp)
+	ctx.Write(rsp)
 }
 
 // OnServerNotify .
@@ -72,6 +72,13 @@ func InitClient(client *arpc.Client) {
 		log.Printf("ClientHello Call failed: %v", err)
 	} else {
 		log.Printf("ClientHello Call Rsp: \"%v\"", rsp.Msg)
+	}
+
+	err = client.Call("ClientWantError", "ClientWantError", nil, time.Second*5)
+	if err != nil {
+		log.Printf("ClientWantError Call success: %v", err)
+	} else {
+		log.Printf("ClientWantError Call failed: \"%v\"", rsp.Msg)
 	}
 
 	client.Notify("ClientNotify", "ClientNotify", time.Second)

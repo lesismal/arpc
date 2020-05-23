@@ -49,7 +49,7 @@ func main() {
 }
 
 func broadcast(i int) {
-	msg := arpc.NewRefMessage(arpc.DefaultCodec, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
+	msg := arpc.NewRefMessage(arpc.CmdNotify, arpc.DefaultCodec, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
 	defer msg.Release()
 
 	mux.RLock()

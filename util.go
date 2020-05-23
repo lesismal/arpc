@@ -52,29 +52,31 @@ func bytesToStr(b []byte) string {
 }
 
 func valueToBytes(codec Codec, v interface{}) []byte {
+	if v == nil {
+		return nil
+	}
+
 	var (
 		err  error
 		data []byte
 	)
-	if v != nil {
-		switch vt := v.(type) {
-		case []byte:
-			data = vt
-		case *[]byte:
-			data = *vt
-		case string:
-			data = strToBytes(vt)
-		case *string:
-			data = strToBytes(*vt)
-		case error:
-			data = strToBytes(vt.Error())
-		case *error:
-			data = strToBytes((*vt).Error())
-		default:
-			data, err = codec.Marshal(vt)
-			if err != nil {
-				panic(err)
-			}
+	switch vt := v.(type) {
+	case []byte:
+		data = vt
+	case *[]byte:
+		data = *vt
+	case string:
+		data = strToBytes(vt)
+	case *string:
+		data = strToBytes(*vt)
+	case error:
+		data = strToBytes(vt.Error())
+	case *error:
+		data = strToBytes((*vt).Error())
+	default:
+		data, err = codec.Marshal(vt)
+		if err != nil {
+			panic(err)
 		}
 	}
 

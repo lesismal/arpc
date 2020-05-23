@@ -13,25 +13,32 @@ import (
 )
 
 const (
-	// RPCCmdNone is invalid
-	RPCCmdNone byte = 0
-	// RPCCmdReq Call/Notify
-	RPCCmdReq byte = 1
-	// RPCCmdRsp normal response
-	RPCCmdRsp byte = 2
-	// RPCCmdErr error response
-	RPCCmdErr byte = 3
+	// CmdNone is invalid
+	CmdNone byte = 0
+
+	// CmdRequest the other side should response to a request message
+	CmdRequest byte = 1
+
+	// CmdResponse the other side should not response to a request message
+	CmdResponse byte = 2
+
+	// CmdNotify the other side should not response to a request message
+	CmdNotify byte = 3
 )
 
 var (
-	refFlagByte    byte  = 0x80
-	refMsgZeroFlag int32 = atomic.LoadInt32((*int32)(unsafe.Pointer(&([]byte{refFlagByte, 0, 0, 0}[0]))))
+	refHeadLen   int  = 8
+	refCntIndex  int  = 4
+	refFlagByte  byte = 0x80
+	refFlagIndex int  = 0
+	// refMsgZeroFlag int32 = atomic.LoadInt32((*int32)(unsafe.Pointer(&([]byte{0, 0, 0, refFlagByte}[0]))))
 )
 
 const (
 	headerIndexCmd          = 0
 	headerIndexAsync        = 1
-	headerIndexMethodLen    = 2
+	headerIndexError        = 2
+	headerIndexMethodLen    = 3
 	headerIndexBodyLenBegin = 4
 	headerIndexBodyLenEnd   = 8
 	headerIndexSeqBegin     = 8
@@ -75,12 +82,17 @@ func (h Header) message() (Message, error) {
 // Message defines rpc packet
 type Message []byte
 
+// IsRef returns ref flag
+func (m Message) IsRef() bool {
+	return m[refFlagIndex] == refFlagByte
+}
+
 // Payload returns real Message to send
 func (m Message) Payload() Message {
-	if m[0]&refFlagByte == 0 {
+	if !m.IsRef() {
 		return m
 	}
-	return Message(m[4:])
+	return Message(m[refHeadLen:])
 }
 
 // Cmd returns cmd
@@ -96,6 +108,19 @@ func (m Message) Async() byte {
 // IsAsync returns async flag
 func (m Message) IsAsync() bool {
 	return m[headerIndexAsync] == 1
+}
+
+// IsError returns error flag
+func (m Message) IsError() bool {
+	return m[headerIndexError] == 1
+}
+
+// Error returns error
+func (m Message) Error() error {
+	if !m.IsError() {
+		return nil
+	}
+	return errors.New(bytesToStr(m[HeadLen:]))
 }
 
 // MethodLen returns method length
@@ -120,54 +145,61 @@ func (m Message) Seq() uint64 {
 
 // Body returns data after method
 func (m Message) Body() []byte {
-	return m[HeadLen+m.MethodLen():]
+	length := HeadLen + m.MethodLen()
+	return m[length:]
 }
 
 // Retain adds ref count
 func (m Message) Retain() {
-	if m[0]&refFlagByte != 0 {
-		atomic.AddInt32((*int32)(unsafe.Pointer(&(m[0]))), 1)
+	if m.IsRef() {
+		atomic.AddInt32((*int32)(unsafe.Pointer(&(m[refCntIndex]))), 1)
 	}
 }
 
 // Release payback mem to MemPool
 func (m Message) Release() {
-	if m[0]&refFlagByte == 0 {
+	if !m.IsRef() {
 		memPut(m)
 	} else {
-		if atomic.AddInt32((*int32)(unsafe.Pointer(&(m[0]))), -1) == refMsgZeroFlag {
+		if atomic.AddInt32((*int32)(unsafe.Pointer(&(m[refCntIndex]))), -1) == 0 {
 			memPut(m)
 		}
 	}
 }
 
-// Parse head and body, return cmd && seq && isAsync && method && body && err
-func (m Message) Parse() (byte, uint64, bool, string, []byte, error) {
-	cmd := m.Cmd()
-	switch cmd {
-	case RPCCmdReq:
-		ml := m.MethodLen()
-		// have methond, return method and body
-		if ml > 0 {
-			if len(m) >= HeadLen+ml {
-				return cmd, m.Seq(), m.IsAsync(), string(m[HeadLen : HeadLen+ml]), m[HeadLen+ml:], nil
-			}
-		} else {
-			// no null method, return body
-			return cmd, m.Seq(), m.IsAsync(), "", m[HeadLen:], nil
-		}
-	case RPCCmdRsp:
-		return cmd, m.Seq(), m.IsAsync(), "", m[HeadLen:], nil
-	case RPCCmdErr:
-		return cmd, m.Seq(), m.IsAsync(), "", nil, errors.New(string(m[HeadLen]))
-	default:
-	}
-
-	return RPCCmdNone, m.Seq(), m.IsAsync(), "", nil, ErrInvalidMessage
+func (m Message) cloneHead() Message {
+	msg := Message(memGet(refHeadLen + HeadLen))
+	msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6], msg[7] = 0, 0, 0, 0, 0, 0, 0, 0
+	msg[refFlagIndex] = refFlagByte
+	copy(msg[refHeadLen:], m[:HeadLen])
+	return msg
 }
 
+// parse head and body, return cmd && seq && isAsync && method && body && err
+// func (m Message) parse() (byte, uint64, bool, string, []byte, error) {
+// 	cmd := m.Cmd()
+// 	switch cmd {
+// 	case CmdRequest:
+// 		ml := m.MethodLen()
+// 		// have methond, return method and body
+// 		if ml > 0 {
+// 			if len(m) >= HeadLen+ml {
+// 				return cmd, m.Seq(), m.IsAsync(), string(m[HeadLen : HeadLen+ml]), m[HeadLen+ml:], nil
+// 			}
+// 		} else {
+// 			// no null method, return body
+// 			return cmd, m.Seq(), m.IsAsync(), "", m[HeadLen:], ErrInvalidMessageMethod
+// 		}
+// 	case CmdResponse:
+// 		return cmd, m.Seq(), m.IsAsync(), "", m[HeadLen:], m.Error()
+// 	default:
+// 	}
+
+// 	return CmdNone, m.Seq(), m.IsAsync(), "", nil, ErrInvalidMessage
+// }
+
 // NewRefMessage factory
-func NewRefMessage(codec Codec, method string, v interface{}) Message {
+func NewRefMessage(cmd byte, codec Codec, method string, v interface{}) Message {
 	var (
 		data    []byte
 		msg     Message
@@ -178,17 +210,18 @@ func NewRefMessage(codec Codec, method string, v interface{}) Message {
 
 	bodyLen = len(method) + len(data)
 
-	msg = Message(memGet(4 + HeadLen + bodyLen))
-	msg[0], msg[1], msg[2], msg[3] = refFlagByte, 0, 0, 0
-	binary.LittleEndian.PutUint32(msg[4+headerIndexBodyLenBegin:4+headerIndexBodyLenEnd], uint32(bodyLen))
+	msg = Message(memGet(refHeadLen + HeadLen + bodyLen))
+	msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6], msg[7] = 0, 0, 0, 0, 0, 0, 0, 0
+	msg[refFlagIndex] = refFlagByte
+	binary.LittleEndian.PutUint32(msg[refHeadLen+headerIndexBodyLenBegin:refHeadLen+headerIndexBodyLenEnd], uint32(bodyLen))
 	// binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
 
-	msg[4+headerIndexCmd] = RPCCmdReq
-	msg[4+headerIndexMethodLen] = byte(len(method))
-	copy(msg[4+HeadLen:4+HeadLen+len(method)], method)
-	copy(msg[4+HeadLen+len(method):], data)
+	msg[refHeadLen+headerIndexCmd] = cmd
+	msg[refHeadLen+headerIndexMethodLen] = byte(len(method))
+	copy(msg[refHeadLen+HeadLen:refHeadLen+HeadLen+len(method)], method)
+	copy(msg[refHeadLen+HeadLen+len(method):], data)
 
-	atomic.AddInt32((*int32)(unsafe.Pointer(&(msg[0]))), 1)
+	atomic.AddInt32((*int32)(unsafe.Pointer(&(msg[refCntIndex]))), 1)
 
 	return msg
 }

@@ -19,22 +19,21 @@ const (
 func OnClientHello(ctx *arpc.Context) {
 	str := ""
 	ctx.Bind(&str)
+	ctx.Write(str)
 
 	log.Printf("OnClientHello: \"%v\"", str)
 
-	// async response should Clone a Context to Write
-	go ctx.Clone().Write(str)
-
+	client := ctx.Client
 	// send 3 notify messages
 	go func() {
 		notifyPayload := "notify from server, nonblock"
-		ctx.Client.Notify(methodNotify, notifyPayload, arpc.TimeZero)
+		client.Notify(methodNotify, notifyPayload, arpc.TimeZero)
 
 		notifyPayload = "notify from server, block"
-		ctx.Client.Notify(methodNotify, notifyPayload, arpc.TimeForever)
+		client.Notify(methodNotify, notifyPayload, arpc.TimeForever)
 
 		notifyPayload = "notify from server, with 1 second timeout"
-		ctx.Client.Notify(methodNotify, notifyPayload, time.Second)
+		client.Notify(methodNotify, notifyPayload, time.Second)
 	}()
 }
 

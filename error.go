@@ -24,9 +24,22 @@ var (
 	ErrInvalidBodyLen = errors.New("invalid body length")
 	// ErrInvalidMessage
 	ErrInvalidMessage = errors.New("invalid message")
+	// ErrInvalidMessageMethod
+	ErrInvalidMessageMethod = errors.New("invalid message method")
+	// ErrInvalidRspMessage
+	ErrInvalidRspMessage = errors.New("invalid response message cmd")
 )
 
-// other error
+// context error
+var (
+	// ErrBindClonedContex
+	ErrBindClonedContex = errors.New("invalid operation: bind a cloned Context, should only bind before Context.Clone to avoid more memory cost")
+
+	// ErrResponseToResponsedMessage
+	ErrResponseToResponsedMessage = errors.New("invalid operation: reply to a responsed message, should only reply to a request message")
+)
+
+// general errors
 var (
 	// ErrTimeout
 	ErrTimeout = errors.New("timeout")

@@ -12,8 +12,8 @@ import (
 // OnClientCallAsyncResponse .
 func OnClientCallAsyncResponse(ctx *arpc.Context) {
 	ret := ""
-	ctx.Bind(&ret)
-	log.Printf("OnClientCallAsyncResponse: \"%v\"", ret)
+	err := ctx.Bind(&ret)
+	log.Printf("OnClientCallAsyncResponse: \"%v\", error: %v", ret, err)
 	os.Exit(0)
 }
 

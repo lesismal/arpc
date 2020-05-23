@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -32,14 +33,22 @@ func OnClientHello(ctx *arpc.Context) {
 	log.Printf("OnClientHello: \"%v\"", req.Msg)
 
 	rsp.Msg = req.Msg
-	go ctx.Clone().Write(rsp)
+	ctx.Write(rsp)
+}
+
+// OnClientWantError .
+func OnClientWantError(ctx *arpc.Context) {
+	str := ""
+	ctx.Bind(&str)
+	log.Printf("OnClientWantError: \"%v\"", str)
+	ctx.Write(errors.New("error from server"))
 }
 
 // OnClientNotify .
 func OnClientNotify(ctx *arpc.Context) {
 	str := ""
-	ctx.Bind(&str)
-	log.Printf("OnClientNotify: \"%v\"", str)
+	err := ctx.Bind(&str)
+	log.Printf("OnClientNotify: \"%v\", %v", str, err)
 }
 
 // OnClientCallAsync .
@@ -71,7 +80,7 @@ func OnClientCallAsync(ctx *arpc.Context) {
 	go func() {
 		for i := 0; true; i++ {
 			time.Sleep(time.Second * 2)
-			msg := arpc.NewRefMessage(client.Codec, "ServerNotifyRefMessage", fmt.Sprintf("ServerNotifyRefMessage %v", i))
+			msg := arpc.NewRefMessage(arpc.CmdNotify, client.Codec, "ServerNotifyRefMessage", fmt.Sprintf("ServerNotifyRefMessage %v", i))
 			client.PushMsg(msg, arpc.TimeZero)
 			client.PushMsg(msg, arpc.TimeForever)
 			client.PushMsg(msg, time.Second)
@@ -103,10 +112,11 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	svr := arpc.NewServer()
-	svr.Handler.Handle("ClientHello", OnClientHello)
-	svr.Handler.Handle("ClientNotify", OnClientNotify)
-	svr.Handler.Handle("ClientCallAsync", OnClientCallAsync)
+	server := arpc.NewServer()
+	server.Handler.Handle("ClientHello", OnClientHello)
+	server.Handler.Handle("ClientWantError", OnClientWantError)
+	server.Handler.Handle("ClientNotify", OnClientNotify)
+	server.Handler.Handle("ClientCallAsync", OnClientCallAsync)
 
-	svr.Serve(ln)
+	server.Serve(ln)
 }

@@ -18,13 +18,23 @@ type Context struct {
 
 // Body returns body
 func (ctx *Context) Body() []byte {
-	return ctx.Message.Body()
+	if !ctx.Message.IsRef() {
+		return ctx.Message.Body()
+	}
+	return nil
 }
 
-// Bind parses data to struct
+// Bind body data to struct
 func (ctx *Context) Bind(v interface{}) error {
+	msg := ctx.Message
+	if msg.IsRef() {
+		panic(ErrBindClonedContex)
+	}
+	if msg.IsError() {
+		return msg.Error()
+	}
 	if v != nil {
-		data := ctx.Message.Body()
+		data := msg.Body()
 		switch vt := v.(type) {
 		case *[]byte:
 			*vt = data
@@ -41,51 +51,63 @@ func (ctx *Context) Bind(v interface{}) error {
 
 // Write responses message to client
 func (ctx *Context) Write(v interface{}) error {
-	return ctx.write(RPCCmdRsp, v, TimeForever)
+	return ctx.write(v, 0, TimeForever)
 }
 
 // WriteWithTimeout responses message to client with timeout
 func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error {
-	return ctx.write(RPCCmdRsp, v, timeout)
+	return ctx.write(v, 0, timeout)
 }
 
 // Error responses error message to client
-func (ctx *Context) Error(err interface{}) error {
-	return ctx.write(RPCCmdErr, err, TimeForever)
+func (ctx *Context) Error(err error) error {
+	return ctx.write(err, 1, TimeForever)
 }
 
 // Clone a new Contex, new Context's lifecycle depends on user, should call Contex.Release after Contex.write
 func (ctx *Context) Clone() *Context {
-	return ctxGet(ctx.Client, ctx.Message)
+	return ctxGet(ctx.Client, ctx.Message.cloneHead())
 }
 
 // Release payback Contex to pool
 func (ctx *Context) Release() {
+	if ctx.Message.IsRef() {
+		memPut(ctx.Message)
+	}
 	ctxPut(ctx)
 }
 
-func (ctx *Context) newRspMessage(cmd byte, v interface{}) Message {
+func (ctx *Context) newRspMessage(cmd byte, v interface{}, isError byte) Message {
 	var (
 		data    []byte
 		msg     Message
 		bodyLen int
+		realMsg = ctx.Message.Payload()
 	)
+
+	if _, ok := v.(error); ok {
+		isError = 1
+	}
 
 	data = valueToBytes(ctx.Client.Codec, v)
 
 	bodyLen = len(data)
 	msg = Message(memGet(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
-	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
+	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], realMsg.Seq())
 	msg[headerIndexCmd] = cmd
-	msg[headerIndexAsync] = ctx.Message.Async()
+	msg[headerIndexAsync] = realMsg.Async()
+	msg[headerIndexError] = isError
 	msg[headerIndexMethodLen] = 0
 	copy(msg[HeadLen:], data)
 
 	return msg
 }
 
-func (ctx *Context) write(cmd byte, v interface{}, timeout time.Duration) error {
-	msg := ctx.newRspMessage(cmd, v)
+func (ctx *Context) write(v interface{}, isError byte, timeout time.Duration) error {
+	if ctx.Message.Payload().Cmd() != CmdRequest {
+		panic(ErrResponseToResponsedMessage)
+	}
+	msg := ctx.newRspMessage(CmdResponse, v, isError)
 	return ctx.Client.PushMsg(msg, timeout)
 }

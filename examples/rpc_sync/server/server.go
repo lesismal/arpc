@@ -1,6 +1,10 @@
 package main
 
-import "github.com/lesismal/arpc"
+import (
+	"log"
+
+	"github.com/lesismal/arpc"
+)
 
 func main() {
 	svr := arpc.NewServer()
@@ -8,8 +12,9 @@ func main() {
 	// register router
 	svr.Handler.Handle("/echo", func(ctx *arpc.Context) {
 		str := ""
-		ctx.Bind(&str)
+		err := ctx.Bind(&str)
 		ctx.Write(str)
+		log.Printf("/echo: \"%v\", error: %v", str, err)
 	})
 
 	svr.Run(":8888")

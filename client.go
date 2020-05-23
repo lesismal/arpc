@@ -6,7 +6,6 @@ package arpc
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -111,7 +110,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 
 	timer := time.NewTimer(timeout)
 
-	msg := c.newReqMessage(method, req, 0)
+	msg := c.newReqMessage(CmdRequest, method, req, 0)
 
 	seq := msg.Seq()
 	sess := sessionGet(seq)
@@ -139,20 +138,22 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	}
 
 	switch msg.Cmd() {
-	case RPCCmdRsp:
+	case CmdResponse:
+		if msg.IsError() {
+			return msg.Error()
+		}
 		switch vt := rsp.(type) {
 		case *string:
 			*vt = string(msg[HeadLen:])
 		case *[]byte:
 			*vt = msg[HeadLen:]
-		case *error:
-			*vt = errors.New(bytesToStr(msg[HeadLen:]))
+		// case *error:
+		// 	*vt = msg.Error()
 		default:
 			return c.Codec.Unmarshal(msg[HeadLen:], rsp)
 		}
-	case RPCCmdErr:
-		return errors.New(string(msg[HeadLen:]))
 	default:
+		return ErrInvalidRspMessage
 	}
 
 	return nil
@@ -160,62 +161,12 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 
 // CallAsync make async rpc call
 func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, timeout time.Duration) error {
-	if !c.running {
-		return ErrClientStopped
-	}
-	if c.reconnecting {
-		return ErrClientReconnecting
-	}
-	if timeout < 0 {
-		return fmt.Errorf("invalid timeout arg: %v", timeout)
-	}
-
-	var (
-		msg = c.newReqMessage(method, req, 1)
-		seq = msg.Seq()
-	)
-
-	if handler != nil {
-		c.addAsyncHandler(seq, handler)
-	}
-
-	switch timeout {
-	// should not block forever
-	// case TimeForever:
-	// 	c.chSend <- msg
-	// 	msg.Retain()
-	case TimeZero:
-		select {
-		case c.chSend <- msg:
-			msg.Retain()
-		default:
-			msg.Release()
-			if handler != nil {
-				c.deleteAsyncHandler(seq)
-			}
-			return ErrClientQueueIsFull
-		}
-	default:
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-		select {
-		case c.chSend <- msg:
-			msg.Retain()
-		case <-timer.C:
-			msg.Release()
-			if handler != nil {
-				c.deleteAsyncHandler(seq)
-			}
-			return ErrClientTimeout
-		}
-	}
-
-	return nil
+	return c.callAsync(CmdRequest, method, req, handler, timeout)
 }
 
 // Notify make rpc notify
 func (c *Client) Notify(method string, data interface{}, timeout time.Duration) error {
-	return c.CallAsync(method, data, nil, timeout)
+	return c.callAsync(CmdNotify, method, data, nil, timeout)
 }
 
 // PushMsg push msg to client's send queue
@@ -231,9 +182,6 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 	}
 
 	switch timeout {
-	// case TimeForever:
-	// 	c.chSend <- msg
-	// 	msg.Retain()
 	case TimeZero:
 		select {
 		case c.chSend <- msg:
@@ -248,6 +196,56 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 		case c.chSend <- msg:
 			msg.Retain()
 		case <-timer.C:
+			return ErrClientTimeout
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) callAsync(cmd byte, method string, req interface{}, handler HandlerFunc, timeout time.Duration) error {
+	if !c.running {
+		return ErrClientStopped
+	}
+	if c.reconnecting {
+		return ErrClientReconnecting
+	}
+	if timeout < 0 {
+		return fmt.Errorf("invalid timeout arg: %v", timeout)
+	}
+
+	var (
+		msg = c.newReqMessage(cmd, method, req, 1)
+		seq = msg.Seq()
+	)
+
+	if handler != nil {
+		c.addAsyncHandler(seq, handler)
+	}
+
+	switch timeout {
+	case TimeZero:
+		select {
+		case c.chSend <- msg:
+			msg.Retain()
+		default:
+			msg.Release()
+			if handler != nil {
+				c.deleteAsyncHandler(seq)
+			}
+			return ErrClientQueueIsFull
+		}
+	default:
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case c.chSend <- msg:
+			msg.Retain()
+		case <-timer.C:
+			msg.Release()
+			if handler != nil {
+				c.deleteAsyncHandler(seq)
+			}
 			return ErrClientTimeout
 		}
 	}
@@ -437,7 +435,7 @@ func (c *Client) sendLoop() {
 	}
 }
 
-func (c *Client) newReqMessage(method string, req interface{}, async byte) Message {
+func (c *Client) newReqMessage(cmd byte, method string, req interface{}, async byte) Message {
 	var (
 		data    []byte
 		msg     Message
@@ -452,8 +450,9 @@ func (c *Client) newReqMessage(method string, req interface{}, async byte) Messa
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
 
-	msg[headerIndexCmd] = RPCCmdReq
+	msg[headerIndexCmd] = cmd
 	msg[headerIndexAsync] = async
+	msg[headerIndexError] = 0
 	msg[headerIndexMethodLen] = byte(len(method))
 	copy(msg[HeadLen:HeadLen+len(method)], method)
 	copy(msg[HeadLen+len(method):], data)

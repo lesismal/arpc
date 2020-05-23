@@ -85,8 +85,9 @@ func main() {
 	// register router
 	server.Handler.Handle("/echo", func(ctx *arpc.Context) {
 		str := ""
-		ctx.Bind(&str)
-		ctx.Write(str)
+		if err := ctx.Bind(&str); err == nil {
+			ctx.Write(str)
+		}
 	})
 
 	server.Run(":8888")
@@ -168,9 +169,11 @@ func asyncResponse(ctx *arpc.Context, data interface{}) {
 
 handler.Handle("/echo", func(ctx *arpc.Context) {
 	req := ...
-	ctx.Bind(req)
-	clone := ctx.Clone()
-	go asyncResponse(clone, req)
+	err := ctx.Bind(req)
+	if err == nil {
+		clone := ctx.Clone()
+		go asyncResponse(clone, req)
+	}
 })
 ```
 
@@ -243,7 +246,7 @@ var mux = sync.RWMutex{}
 var clientMap = make(map[*arpc.Client]struct{})
 
 func broadcast() {
-	msg := arpc.NewRefMessage(arpc.DefaultCodec, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
+	msg := arpc.NewRefMessage(arpc.CmdNotify, arpc.DefaultCodec, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
 	defer msg.Release()
 
 	mux.RLock()

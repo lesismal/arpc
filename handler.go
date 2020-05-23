@@ -186,32 +186,42 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 }
 
 func (h *handler) OnMessage(c *Client, msg Message) {
-	cmd, seq, isAsync, method, body, err := msg.Parse()
-	switch cmd {
-	case RPCCmdReq:
-		if h, ok := h.routes[method]; ok {
+	// cmd, seq, isAsync, method, body, err := msg.parse()
+	switch msg.Cmd() {
+	case CmdRequest, CmdNotify:
+		if msg.MethodLen() == 0 {
+			DefaultLogger.Warn("OnMessage: invalid request message with 0 method length, dropped")
+			return
+		}
+		method := msg.Method()
+		if handler, ok := h.routes[method]; ok {
 			ctx := ctxGet(c, msg)
 			defer func() {
 				ctxPut(ctx)
 				memPut(msg)
 			}()
 			defer handlePanic()
-			h(ctx)
+			handler(ctx)
 		} else {
 			memPut(msg)
-			DefaultLogger.Info("invalid method: [%v], %v, %v", method, body, err)
+			DefaultLogger.Warn("OnMessage: invalid method: [%v], no handler", method)
 		}
-	case RPCCmdRsp, RPCCmdErr:
-		if !isAsync {
+	case CmdResponse:
+		if msg.MethodLen() > 0 {
+			DefaultLogger.Warn("OnMessage: invalid response message with method length %v, dropped", msg.MethodLen())
+			return
+		}
+		if !msg.IsAsync() {
+			seq := msg.Seq()
 			session, ok := c.getSession(seq)
 			if ok {
 				session.done <- msg
 			} else {
 				memPut(msg)
-				DefaultLogger.Info("session not exist or expired: [seq: %v] [len(body): %v] [%v]", seq, len(body), err)
+				DefaultLogger.Warn("OnMessage: session not exist or expired")
 			}
 		} else {
-			handler, ok := c.getAndDeleteAsyncHandler(seq)
+			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
 			if ok {
 				ctx := ctxGet(c, msg)
 				defer func() {
@@ -222,12 +232,12 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				handler(ctx)
 			} else {
 				memPut(msg)
-				DefaultLogger.Info("asyncHandler not exist or expired: [seq: %v] [len(body): %v, %v] [%v]", seq, len(body), string(body), err)
+				DefaultLogger.Warn("OnMessage: async handler not exist or expired")
 			}
 		}
 	default:
 		memPut(msg)
-		DefaultLogger.Info("invalid cmd: [%v]", cmd)
+		DefaultLogger.Info("OnMessage: invalid cmd [%v]", msg.Cmd())
 	}
 }
 
