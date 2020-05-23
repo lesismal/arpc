@@ -25,6 +25,15 @@ type Handler interface {
 	// BeforeSend registers callback before Send
 	BeforeSend(bh func(net.Conn) error)
 
+	// BatchRecv flag
+	BatchRecv() bool
+	// SetBatchRecv flag
+	SetBatchRecv(batch bool)
+	// BatchSend flag
+	BatchSend() bool
+	// SetBatchSend flag
+	SetBatchSend(batch bool)
+
 	// WrapReader wraps net.Conn to Read data with io.Reader, buffer e.g.
 	WrapReader(conn net.Conn) io.Reader
 	// SetReaderWrapper sets reader wrapper
@@ -51,11 +60,16 @@ type Handler interface {
 }
 
 type handler struct {
-	beforeRecv    func(net.Conn) error
-	beforeSend    func(net.Conn) error
-	wrapReader    func(conn net.Conn) io.Reader
-	routes        map[string]RouterFunc
+	batchRecv     bool
+	batchSend     bool
 	sendQueueSize int
+
+	beforeRecv func(net.Conn) error
+	beforeSend func(net.Conn) error
+
+	wrapReader func(conn net.Conn) io.Reader
+
+	routes map[string]RouterFunc
 }
 
 // Clone returns a copy
@@ -70,6 +84,26 @@ func (h *handler) BeforeRecv(bh func(net.Conn) error) {
 
 func (h *handler) BeforeSend(bh func(net.Conn) error) {
 	h.beforeSend = bh
+}
+
+// BatchRecv flag
+func (h *handler) BatchRecv() bool {
+	return h.batchRecv
+}
+
+// SetBatchRecv flag
+func (h *handler) SetBatchRecv(batch bool) {
+	h.batchRecv = batch
+}
+
+// BatchSend flag
+func (h *handler) BatchSend() bool {
+	return h.batchSend
+}
+
+// SetBatchSend flag
+func (h *handler) SetBatchSend(batch bool) {
+	h.batchSend = batch
 }
 
 func (h *handler) WrapReader(conn net.Conn) io.Reader {
@@ -182,7 +216,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 					memPut(msg)
 				}()
 				defer handlePanic()
-				handler.h(ctx)
+				handler(ctx)
 			} else {
 				memPut(msg)
 				DefaultLogger.Info("asyncHandler not exist or expired: [seq: %v] [len(body): %v, %v] [%v]", seq, len(body), string(body), err)
@@ -197,6 +231,8 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 // NewHandler factory
 func NewHandler() Handler {
 	return &handler{
+		batchRecv:     true,
+		batchSend:     true,
 		sendQueueSize: 1024,
 		wrapReader: func(conn net.Conn) io.Reader {
 			return bufio.NewReaderSize(conn, 1024)

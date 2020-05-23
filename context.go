@@ -64,7 +64,7 @@ func (ctx *Context) Clone() *Context {
 
 // Release payback Contex to pool
 func (ctx *Context) Release() {
-	ctxPool.Put(ctx)
+	ctxPut(ctx)
 }
 
 func (ctx *Context) newRspMessage(cmd byte, v interface{}) Message {

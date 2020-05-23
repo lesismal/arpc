@@ -12,15 +12,17 @@ import (
 
 // Server definition
 type Server struct {
-	ln       net.Listener
-	chStop   chan error
-	running  bool
 	Accepted int64
 	CurrLoad int64
 	MaxLoad  int64
 
 	Codec   Codec
 	Handler Handler
+
+	Listener net.Listener
+
+	running bool
+	chStop  chan error
 }
 
 func (s *Server) addLoad() int64 {
@@ -43,7 +45,7 @@ func (s *Server) runLoop() error {
 	defer close(s.chStop)
 
 	for s.running {
-		conn, err = s.ln.Accept()
+		conn, err = s.Listener.Accept()
 		if err == nil {
 			load := s.addLoad()
 			if s.MaxLoad == 0 || load <= s.MaxLoad {
@@ -78,7 +80,7 @@ func (s *Server) runLoop() error {
 
 // Serve starts rpc service with listener
 func (s *Server) Serve(ln net.Listener) error {
-	s.ln = ln
+	s.Listener = ln
 	s.chStop = make(chan error)
 	DefaultLogger.Info("[ARPC SVR] Running On: \"%v\"", ln.Addr())
 	defer DefaultLogger.Info("[ARPC SVR] Stopped")
@@ -91,7 +93,7 @@ func (s *Server) Run(addr string) error {
 	if err != nil {
 		return err
 	}
-	s.ln = ln
+	s.Listener = ln
 	s.chStop = make(chan error)
 	DefaultLogger.Info("[ARPC SVR] Running On: \"%v\"", ln.Addr())
 	defer DefaultLogger.Info("[ARPC SVR] Stopped")
@@ -100,9 +102,9 @@ func (s *Server) Run(addr string) error {
 
 // Shutdown stop rpc service
 func (s *Server) Shutdown(timeout time.Duration) error {
-	DefaultLogger.Info("[ARPC SVR] %v Shutdown...", s.ln.Addr())
+	DefaultLogger.Info("[ARPC SVR] %v Shutdown...", s.Listener.Addr())
 	s.running = false
-	s.ln.Close()
+	s.Listener.Close()
 	select {
 	case <-s.chStop:
 	case <-time.After(timeout):

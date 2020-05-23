@@ -27,27 +27,13 @@ type rpcSession struct {
 	done chan Message
 }
 
-type asyncHandler struct {
-	h RouterFunc
-	t *time.Timer
-}
+// type asyncHandler struct {
+// 	h RouterFunc
+// 	t *time.Timer
+// }
 
 // Client defines rpc client struct
 type Client struct {
-	mux sync.RWMutex
-
-	running      bool
-	reconnecting bool
-	chSend       chan Message
-
-	seq             uint64
-	sessionMap      map[uint64]*rpcSession
-	asyncHandlerMap map[uint64]*asyncHandler
-
-	onStop         func() int64
-	onConnected    func(*Client)
-	onDisConnected func(*Client)
-
 	Conn    net.Conn
 	Reader  io.Reader
 	head    [HeadLen]byte
@@ -55,6 +41,20 @@ type Client struct {
 	Codec   Codec
 	Handler Handler
 	Dialer  func() (net.Conn, error)
+
+	running      bool
+	reconnecting bool
+
+	mux             sync.RWMutex
+	seq             uint64
+	sessionMap      map[uint64]*rpcSession
+	asyncHandlerMap map[uint64]RouterFunc
+
+	chSend chan Message
+
+	onStop         func() int64
+	onConnected    func(*Client)
+	onDisConnected func(*Client)
 }
 
 // OnConnected registers callback on connected
@@ -159,7 +159,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 }
 
 // CallAsync make async rpc call
-func (c *Client) CallAsync(method string, req interface{}, h RouterFunc, timeout time.Duration) error {
+func (c *Client) CallAsync(method string, req interface{}, handler RouterFunc, timeout time.Duration) error {
 	if !c.running {
 		return ErrClientStopped
 	}
@@ -171,13 +171,11 @@ func (c *Client) CallAsync(method string, req interface{}, h RouterFunc, timeout
 	}
 
 	var (
-		msg     = c.newReqMessage(method, req, 1)
-		seq     = msg.Seq()
-		handler *asyncHandler
+		msg = c.newReqMessage(method, req, 1)
+		seq = msg.Seq()
 	)
 
-	if h != nil {
-		handler = asyncHandlerGet(h)
+	if handler != nil {
 		c.addAsyncHandler(seq, handler)
 	}
 
@@ -190,14 +188,11 @@ func (c *Client) CallAsync(method string, req interface{}, h RouterFunc, timeout
 		select {
 		case c.chSend <- msg:
 			msg.Retain()
-			if h != nil {
-				handler.t = time.AfterFunc(time.Second*10, func() {
-					c.deleteAsyncHandler(seq)
-				})
-			}
 		default:
 			msg.Release()
-			c.deleteAsyncHandler(seq)
+			if handler != nil {
+				c.deleteAsyncHandler(seq)
+			}
 			return ErrClientQueueIsFull
 		}
 	default:
@@ -206,15 +201,11 @@ func (c *Client) CallAsync(method string, req interface{}, h RouterFunc, timeout
 		select {
 		case c.chSend <- msg:
 			msg.Retain()
-			if h != nil {
-				// timeout * 2: [push to send queue] + [recv response]
-				handler.t = time.AfterFunc(timeout, func() {
-					c.deleteAsyncHandler(seq)
-				})
-			}
 		case <-timer.C:
 			msg.Release()
-			c.deleteAsyncHandler(seq)
+			if handler != nil {
+				c.deleteAsyncHandler(seq)
+			}
 			return ErrClientTimeout
 		}
 	}
@@ -283,7 +274,7 @@ func (c *Client) deleteSession(seq uint64) {
 	c.mux.Unlock()
 }
 
-func (c *Client) addAsyncHandler(seq uint64, h *asyncHandler) {
+func (c *Client) addAsyncHandler(seq uint64, h RouterFunc) {
 	c.mux.Lock()
 	c.asyncHandlerMap[seq] = h
 	c.mux.Unlock()
@@ -291,25 +282,16 @@ func (c *Client) addAsyncHandler(seq uint64, h *asyncHandler) {
 
 func (c *Client) deleteAsyncHandler(seq uint64) {
 	c.mux.Lock()
-	handler, ok := c.asyncHandlerMap[seq]
-	if ok {
-		delete(c.asyncHandlerMap, seq)
-		c.mux.Unlock()
-		handler.t.Stop()
-		asyncHandlerPut(handler)
-	} else {
-		c.mux.Unlock()
-	}
+	delete(c.asyncHandlerMap, seq)
+	c.mux.Unlock()
 }
 
-func (c *Client) getAndDeleteAsyncHandler(seq uint64) (*asyncHandler, bool) {
+func (c *Client) getAndDeleteAsyncHandler(seq uint64) (RouterFunc, bool) {
 	c.mux.Lock()
 	handler, ok := c.asyncHandlerMap[seq]
 	if ok {
 		delete(c.asyncHandlerMap, seq)
 		c.mux.Unlock()
-		handler.t.Stop()
-		asyncHandlerPut(handler)
 	} else {
 		c.mux.Unlock()
 	}
@@ -319,11 +301,7 @@ func (c *Client) getAndDeleteAsyncHandler(seq uint64) (*asyncHandler, bool) {
 
 func (c *Client) clearAsyncHandler() {
 	c.mux.Lock()
-	for _, handler := range c.asyncHandlerMap {
-		handler.t.Stop()
-		asyncHandlerPut(handler)
-	}
-	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
+	c.asyncHandlerMap = make(map[uint64]RouterFunc)
 	c.mux.Unlock()
 }
 
@@ -334,9 +312,16 @@ func (c *Client) recvLoop() {
 		addr = c.Conn.RemoteAddr()
 	)
 
+	if c.Handler.BatchRecv() {
+		c.Reader = c.Handler.WrapReader(c.Conn)
+	} else {
+		c.Reader = c.Conn
+	}
+
 	if c.Dialer == nil {
 		// DefaultLogger.Info("[ARPC SVR] Client\t%v\trecvLoop start", c.Conn.RemoteAddr())
 		// defer DefaultLogger.Info("[ARPC SVR] Client\t%v\trecvLoop stop", c.Conn.RemoteAddr())
+
 		for c.running {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
@@ -349,6 +334,7 @@ func (c *Client) recvLoop() {
 	} else {
 		// DefaultLogger.Info("[ARPC CLI]\t%v\trecvLoop start", c.Conn.RemoteAddr())
 		// defer DefaultLogger.Info("[ARPC CLI]\t%v\trecvLoop stop", c.Conn.RemoteAddr())
+
 		for c.running {
 			for {
 				msg, err = c.Handler.Recv(c)
@@ -368,7 +354,11 @@ func (c *Client) recvLoop() {
 				c.Conn, err = c.Dialer()
 				if err == nil {
 					DefaultLogger.Info("[ARPC CLI]\t%v\tConnected", addr)
-					c.Reader = c.Handler.WrapReader(c.Conn)
+					if c.Handler.BatchRecv() {
+						c.Reader = c.Handler.WrapReader(c.Conn)
+					} else {
+						c.Reader = c.Conn
+					}
 
 					c.clearAsyncHandler()
 
@@ -399,71 +389,51 @@ func (c *Client) sendLoop() {
 	// 	defer DefaultLogger.Info("[ARPC CLI]\t%v\tsendLoop stop", c.Conn.RemoteAddr())
 	// }
 
-	var i int
-	var conn net.Conn
-	var buffers net.Buffers = make([][]byte, 10)
-	var messages = make([]Message, 10)
-	for msg := range c.chSend {
-		conn = c.Conn
-		if !c.reconnecting {
-			buffers[0] = msg.Payload()
-			messages[0] = msg
-			for i = 1; i < 10; i++ {
+	if !c.Handler.BatchSend() {
+		var conn net.Conn
+		for msg := range c.chSend {
+			conn = c.Conn
+			if !c.reconnecting {
+				c.Handler.Send(conn, msg)
+				msg.Release()
+			} else {
+				msg.Release()
+			}
+		}
+	} else {
+		var conn net.Conn
+		var buffers net.Buffers = make([][]byte, 10)[0:0]
+		var messages = make([]Message, 10)[0:0]
+		for msg := range c.chSend {
+			buffers = append(buffers, msg.Payload())
+			messages = append(messages, msg)
+			for i := 1; i < 10; i++ {
 				select {
 				case msg = <-c.chSend:
-					buffers[i] = msg.Payload()
-					messages[i] = msg
+					buffers = append(buffers, msg.Payload())
+					messages = append(messages, msg)
 				default:
 					goto SEND
 				}
 			}
 		SEND:
-			if i == 1 {
-				c.Handler.Send(conn, msg.Payload())
-				msg.Release()
-			} else {
-				c.Handler.SendN(conn, buffers[:i])
-				for ; i > 0; i-- {
-					messages[i-1].Release()
+			conn = c.Conn
+			if !c.reconnecting {
+				if len(buffers) == 1 {
+					c.Handler.Send(conn, buffers[0])
+					msg.Release()
+				} else {
+					c.Handler.SendN(conn, buffers)
+					for _, v := range messages {
+						v.Release()
+					}
 				}
+				buffers = buffers[0:0]
+				messages = messages[0:0]
+			} else {
+				msg.Release()
 			}
-		} else {
-			msg.Release()
 		}
-
-		// var i int
-		// var conn net.Conn
-		// var buffers net.Buffers = make([][]byte, 10)[0:0]
-		// var messages = make([]Message, 10)[0:0]
-		// for msg := range c.chSend {
-		// 	conn = c.Conn
-		// 	if !c.reconnecting {
-		// 		buffers = append(buffers, msg.Payload())
-		// 		messages = append(messages, msg)
-		// 		for i = 1; i < 10; i++ {
-		// 			select {
-		// 			case msg = <-c.chSend:
-		// 				buffers = append(buffers, msg.Payload())
-		// 				messages = append(messages, msg)
-		// 			default:
-		// 				goto SEND
-		// 			}
-		// 		}
-		// 	SEND:
-		// 		if len(buffers) == 1 {
-		// 			c.Handler.Send(conn, buffers[0])
-		// 			msg.Release()
-		// 		} else {
-		// 			c.Handler.SendN(conn, buffers)
-		// 			for _, v := range messages {
-		// 				v.Release()
-		// 			}
-		// 		}
-		// 		buffers = buffers[0:0]
-		// 		messages = messages[0:0]
-		// 	} else {
-		// 		msg.Release()
-		// 	}
 	}
 }
 
@@ -497,12 +467,16 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 
 	client := &Client{}
 	client.Conn = conn
-	client.Reader = handler.WrapReader(conn)
+	if handler.BatchRecv() {
+		client.Reader = handler.WrapReader(conn)
+	} else {
+		client.Reader = conn
+	}
 	client.Head = Header(client.head[:])
 	client.Codec = codec
 	client.Handler = handler
 	client.sessionMap = make(map[uint64]*rpcSession)
-	client.asyncHandlerMap = make(map[uint64]*asyncHandler)
+	client.asyncHandlerMap = make(map[uint64]RouterFunc)
 	client.onStop = onStop
 
 	return client
@@ -522,10 +496,10 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 	client.Reader = DefaultHandler.WrapReader(conn)
 	client.Head = Header(client.head[:])
 	client.Codec = DefaultCodec
-	client.Handler = DefaultHandler.Clone()
+	client.Handler = DefaultHandler
 	client.Dialer = dialer
 	client.sessionMap = make(map[uint64]*rpcSession)
-	client.asyncHandlerMap = make(map[uint64]*asyncHandler)
+	client.asyncHandlerMap = make(map[uint64]RouterFunc)
 
 	return client, nil
 }
