@@ -248,7 +248,7 @@ func NewHandler() Handler {
 		batchSend:     true,
 		sendQueueSize: 1024,
 		wrapReader: func(conn net.Conn) io.Reader {
-			return bufio.NewReaderSize(conn, 1024)
+			return bufio.NewReaderSize(conn, 4096)
 		},
 	}
 }

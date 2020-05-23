@@ -351,7 +351,7 @@ func (c *Client) recvLoop() {
 				DefaultLogger.Info("[ARPC CLI]\t%v\tReconnecting ...", addr)
 				c.Conn, err = c.Dialer()
 				if err == nil {
-					DefaultLogger.Info("[ARPC CLI]\t%v\tConnected", addr)
+					DefaultLogger.Info("[ARPC CLI]\t%v\tReconnected", addr)
 					if c.Handler.BatchRecv() {
 						c.Reader = c.Handler.WrapReader(c.Conn)
 					} else {
