@@ -14,6 +14,9 @@ import (
 // DefaultHandler instance
 var DefaultHandler Handler = NewHandler()
 
+// HandlerFunc type define
+type HandlerFunc func(*Context)
+
 // Handler defines net message handler
 type Handler interface {
 	// Clone returns a copy
@@ -53,7 +56,7 @@ type Handler interface {
 	SetSendQueueSize(size int)
 
 	// Handle registers method handler
-	Handle(m string, h RouterFunc)
+	Handle(m string, h HandlerFunc)
 
 	// OnMessage dispatches messages
 	OnMessage(c *Client, m Message)
@@ -69,7 +72,7 @@ type handler struct {
 
 	wrapReader func(conn net.Conn) io.Reader
 
-	routes map[string]RouterFunc
+	routes map[string]HandlerFunc
 }
 
 // Clone returns a copy
@@ -125,9 +128,9 @@ func (h *handler) SetSendQueueSize(size int) {
 	h.sendQueueSize = size
 }
 
-func (h *handler) Handle(method string, cb RouterFunc) {
+func (h *handler) Handle(method string, cb HandlerFunc) {
 	if h.routes == nil {
-		h.routes = map[string]RouterFunc{}
+		h.routes = map[string]HandlerFunc{}
 	}
 	if len(method) > MaxMethodLen {
 		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))

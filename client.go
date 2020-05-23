@@ -28,7 +28,7 @@ type rpcSession struct {
 }
 
 // type asyncHandler struct {
-// 	h RouterFunc
+// 	h HandlerFunc
 // 	t *time.Timer
 // }
 
@@ -48,7 +48,7 @@ type Client struct {
 	mux             sync.RWMutex
 	seq             uint64
 	sessionMap      map[uint64]*rpcSession
-	asyncHandlerMap map[uint64]RouterFunc
+	asyncHandlerMap map[uint64]HandlerFunc
 
 	chSend chan Message
 
@@ -159,7 +159,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 }
 
 // CallAsync make async rpc call
-func (c *Client) CallAsync(method string, req interface{}, handler RouterFunc, timeout time.Duration) error {
+func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, timeout time.Duration) error {
 	if !c.running {
 		return ErrClientStopped
 	}
@@ -274,7 +274,7 @@ func (c *Client) deleteSession(seq uint64) {
 	c.mux.Unlock()
 }
 
-func (c *Client) addAsyncHandler(seq uint64, h RouterFunc) {
+func (c *Client) addAsyncHandler(seq uint64, h HandlerFunc) {
 	c.mux.Lock()
 	c.asyncHandlerMap[seq] = h
 	c.mux.Unlock()
@@ -286,7 +286,7 @@ func (c *Client) deleteAsyncHandler(seq uint64) {
 	c.mux.Unlock()
 }
 
-func (c *Client) getAndDeleteAsyncHandler(seq uint64) (RouterFunc, bool) {
+func (c *Client) getAndDeleteAsyncHandler(seq uint64) (HandlerFunc, bool) {
 	c.mux.Lock()
 	handler, ok := c.asyncHandlerMap[seq]
 	if ok {
@@ -301,7 +301,7 @@ func (c *Client) getAndDeleteAsyncHandler(seq uint64) (RouterFunc, bool) {
 
 func (c *Client) clearAsyncHandler() {
 	c.mux.Lock()
-	c.asyncHandlerMap = make(map[uint64]RouterFunc)
+	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 	c.mux.Unlock()
 }
 
@@ -476,7 +476,7 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 	client.Codec = codec
 	client.Handler = handler
 	client.sessionMap = make(map[uint64]*rpcSession)
-	client.asyncHandlerMap = make(map[uint64]RouterFunc)
+	client.asyncHandlerMap = make(map[uint64]HandlerFunc)
 	client.onStop = onStop
 
 	return client
@@ -499,7 +499,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 	client.Handler = DefaultHandler
 	client.Dialer = dialer
 	client.sessionMap = make(map[uint64]*rpcSession)
-	client.asyncHandlerMap = make(map[uint64]RouterFunc)
+	client.asyncHandlerMap = make(map[uint64]HandlerFunc)
 
 	return client, nil
 }
