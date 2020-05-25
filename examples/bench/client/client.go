@@ -71,20 +71,18 @@ func main() {
 		}
 	}
 
-	begin := time.Now()
 	ticker := time.NewTicker(time.Second)
 	for i := 0; true; i++ {
 		if _, ok := <-ticker.C; !ok {
 			return
 		}
 		if i < 3 {
-
-			log.Printf("[qps: %v] preheating %v", atomic.SwapUint64(&qpsSec, 0), i+1)
+			log.Printf("[qps preheating %v: %v]", i+1, atomic.SwapUint64(&qpsSec, 0))
 			continue
 		}
 		qps := atomic.SwapUint64(&qpsSec, 0)
 		qpsTotal += qps
 		log.Printf("[qps: %v], [avg: %v / s], [total: %v, %v s]",
-			qps, int64(float64(qpsTotal)/time.Since(begin).Seconds()), qpsTotal, int64(time.Since(begin).Seconds()))
+			qps, int64(float64(qpsTotal)/float64(i-2)), qpsTotal, int64(float64(i-2)))
 	}
 }
