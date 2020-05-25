@@ -6,13 +6,11 @@ package arpc
 
 import (
 	"sync"
-
-	"github.com/lesismal/mmp"
 )
 
 var (
 	// Mem Pool
-	memPool = mmp.New(MaxBodyLen)
+	memPool = newMemPool(MaxBodyLen)
 
 	// Context Pool
 	ctxPool = sync.Pool{
