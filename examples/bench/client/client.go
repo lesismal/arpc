@@ -73,9 +73,14 @@ func main() {
 
 	begin := time.Now()
 	ticker := time.NewTicker(time.Second)
-	for {
+	for i := 0; true; i++ {
 		if _, ok := <-ticker.C; !ok {
 			return
+		}
+		if i < 3 {
+
+			log.Printf("[qps: %v] preheating %v", atomic.SwapUint64(&qpsSec, 0), i+1)
+			continue
 		}
 		qps := atomic.SwapUint64(&qpsSec, 0)
 		qpsTotal += qps
