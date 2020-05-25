@@ -24,6 +24,7 @@ func main() {
 		str := ""
 		ctx.Bind(&str)
 		ctx.Write(str)
+		log.Printf("/echo: \"%v\", error: %v", str, err)
 	})
 
 	svr.Serve(ln)
