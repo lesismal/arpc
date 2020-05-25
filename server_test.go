@@ -5,7 +5,6 @@
 package arpc
 
 import (
-	"net"
 	"testing"
 	"time"
 )
@@ -40,24 +39,10 @@ func TestServer_Load(t *testing.T) {
 }
 
 func TestServer_Service(t *testing.T) {
-	addr := ":8888"
-
 	s := NewServer()
-	go s.Run(addr)
+	go s.Run(":8888")
 	time.Sleep(time.Second)
 	err := s.Shutdown(time.Second)
-	if err != nil {
-		t.Fatalf("Shutdown failed: %v", err)
-	}
-
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatalf("Listen failed: %v", err)
-	}
-	s = NewServer()
-	go s.Serve(ln)
-	time.Sleep(time.Second)
-	err = s.Shutdown(time.Second)
 	if err != nil {
 		t.Fatalf("Shutdown failed: %v", err)
 	}
