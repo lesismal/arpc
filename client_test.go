@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	benchAddr = "localhost:8888"
+	benchAddr = "localhost:16789"
 
 	benchServer *Server
 	benchClient *Client
