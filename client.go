@@ -323,7 +323,7 @@ func (c *Client) recvLoop() {
 		for c.running {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
-				logInfo("%v Client\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
+				logInfo("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
 				c.Stop()
 				return
 			}
