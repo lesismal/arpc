@@ -48,7 +48,7 @@ func (s *Server) runLoop() error {
 		conn, err = s.Listener.Accept()
 		if err == nil {
 			load := s.addLoad()
-			if s.MaxLoad == 0 || load <= s.MaxLoad {
+			if s.MaxLoad <= 0 || load <= s.MaxLoad {
 				s.Accepted++
 				cli = newClientWithConn(conn, s.Codec, s.Handler, s.subLoad)
 				cli.Run()
@@ -66,10 +66,10 @@ func (s *Server) runLoop() error {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
-				DefaultLogger.Info("[ARPC SVR] Accept error: %v; retrying in %v", err, tempDelay)
+				logError("%v Accept error: %v; retrying in %v", s.Handler.LogTag(), err, tempDelay)
 				time.Sleep(tempDelay)
 			} else {
-				DefaultLogger.Error("[ARPC SVR] Accept error:", err)
+				logError("%v Accept error:", s.Handler.LogTag(), err)
 				break
 			}
 		}
@@ -82,8 +82,8 @@ func (s *Server) runLoop() error {
 func (s *Server) Serve(ln net.Listener) error {
 	s.Listener = ln
 	s.chStop = make(chan error)
-	DefaultLogger.Info("[ARPC SVR] Running On: \"%v\"", ln.Addr())
-	defer DefaultLogger.Info("[ARPC SVR] Stopped")
+	logInfo("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
+	defer logInfo("%v Stopped", s.Handler.LogTag())
 	return s.runLoop()
 }
 
@@ -91,18 +91,20 @@ func (s *Server) Serve(ln net.Listener) error {
 func (s *Server) Run(addr string) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
+		logInfo("%v Running failed: %v", s.Handler.LogTag(), err)
 		return err
 	}
 	s.Listener = ln
 	s.chStop = make(chan error)
-	DefaultLogger.Info("[ARPC SVR] Running On: \"%v\"", ln.Addr())
-	defer DefaultLogger.Info("[ARPC SVR] Stopped")
+	logInfo("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
+	defer logInfo("%v Stopped", s.Handler.LogTag())
 	return s.runLoop()
 }
 
 // Shutdown stop rpc service
 func (s *Server) Shutdown(timeout time.Duration) error {
-	DefaultLogger.Info("[ARPC SVR] %v Shutdown...", s.Listener.Addr())
+	logInfo("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
+	defer logInfo("%v %v Shutdown done", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -115,8 +117,10 @@ func (s *Server) Shutdown(timeout time.Duration) error {
 
 // NewServer factory
 func NewServer() *Server {
+	h := DefaultHandler.Clone()
+	h.SetLogTag("[ARPC SVR]")
 	return &Server{
 		Codec:   DefaultCodec,
-		Handler: DefaultHandler.Clone(),
+		Handler: h,
 	}
 }

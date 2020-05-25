@@ -28,7 +28,7 @@ func (ctx *Context) Body() []byte {
 func (ctx *Context) Bind(v interface{}) error {
 	msg := ctx.Message
 	if msg.IsRef() {
-		panic(ErrBindClonedContex)
+		return ErrBindClonedContex
 	}
 	if msg.IsError() {
 		return msg.Error()
@@ -82,7 +82,7 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}, isError byte) Message
 		data    []byte
 		msg     Message
 		bodyLen int
-		realMsg = ctx.Message.Payload()
+		realMsg = ctx.Message.Real()
 	)
 
 	if _, ok := v.(error); ok {
@@ -105,8 +105,8 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}, isError byte) Message
 }
 
 func (ctx *Context) write(v interface{}, isError byte, timeout time.Duration) error {
-	if ctx.Message.Payload().Cmd() != CmdRequest {
-		panic(ErrResponseToResponsedMessage)
+	if ctx.Message.Real().Cmd() != CmdRequest {
+		return ErrShouldOnlyResponseToRequestMessage
 	}
 	msg := ctx.newRspMessage(CmdResponse, v, isError)
 	return ctx.Client.PushMsg(msg, timeout)

@@ -87,8 +87,8 @@ func (m Message) IsRef() bool {
 	return m[refFlagIndex] == refFlagByte
 }
 
-// Payload returns real Message to send
-func (m Message) Payload() Message {
+// Real returns real Message to send
+func (m Message) Real() Message {
 	if !m.IsRef() {
 		return m
 	}
@@ -174,29 +174,6 @@ func (m Message) cloneHead() Message {
 	copy(msg[refHeadLen:], m[:HeadLen])
 	return msg
 }
-
-// parse head and body, return cmd && seq && isAsync && method && body && err
-// func (m Message) parse() (byte, uint64, bool, string, []byte, error) {
-// 	cmd := m.Cmd()
-// 	switch cmd {
-// 	case CmdRequest:
-// 		ml := m.MethodLen()
-// 		// have methond, return method and body
-// 		if ml > 0 {
-// 			if len(m) >= HeadLen+ml {
-// 				return cmd, m.Seq(), m.IsAsync(), string(m[HeadLen : HeadLen+ml]), m[HeadLen+ml:], nil
-// 			}
-// 		} else {
-// 			// no null method, return body
-// 			return cmd, m.Seq(), m.IsAsync(), "", m[HeadLen:], ErrInvalidMessageMethod
-// 		}
-// 	case CmdResponse:
-// 		return cmd, m.Seq(), m.IsAsync(), "", m[HeadLen:], m.Error()
-// 	default:
-// 	}
-
-// 	return CmdNone, m.Seq(), m.IsAsync(), "", nil, ErrInvalidMessage
-// }
 
 // NewRefMessage factory
 func NewRefMessage(cmd byte, codec Codec, method string, v interface{}) Message {

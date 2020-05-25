@@ -22,6 +22,11 @@ type Handler interface {
 	// Clone returns a copy
 	Clone() Handler
 
+	// LogTag returns log tag value
+	LogTag() string
+	// SetLogTag value
+	SetLogTag(tag string)
+
 	// BeforeRecv registers callback before Recv
 	BeforeRecv(bh func(net.Conn) error)
 
@@ -68,6 +73,7 @@ type Handler interface {
 }
 
 type handler struct {
+	logtag         string
 	batchRecv      bool
 	batchSend      bool
 	recvBufferSize int
@@ -84,6 +90,14 @@ type handler struct {
 func (h *handler) Clone() Handler {
 	var cp = *h
 	return &cp
+}
+
+func (h *handler) LogTag() string {
+	return h.logtag
+}
+
+func (h *handler) SetLogTag(tag string) {
+	h.logtag = tag
 }
 
 func (h *handler) BeforeRecv(bh func(net.Conn) error) {
@@ -199,7 +213,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 	switch msg.Cmd() {
 	case CmdRequest, CmdNotify:
 		if msg.MethodLen() == 0 {
-			DefaultLogger.Warn("OnMessage: invalid request message with 0 method length, dropped")
+			logWarn("%v OnMessage: invalid request message with 0 method length, dropped", h.LogTag())
 			return
 		}
 		method := msg.Method()
@@ -213,11 +227,11 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 			handler(ctx)
 		} else {
 			memPut(msg)
-			DefaultLogger.Warn("OnMessage: invalid method: [%v], no handler", method)
+			logWarn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
 	case CmdResponse:
 		if msg.MethodLen() > 0 {
-			DefaultLogger.Warn("OnMessage: invalid response message with method length %v, dropped", msg.MethodLen())
+			logWarn("%v OnMessage: invalid response message with method length %v, dropped", h.LogTag(), msg.MethodLen())
 			return
 		}
 		if !msg.IsAsync() {
@@ -227,7 +241,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				session.done <- msg
 			} else {
 				memPut(msg)
-				DefaultLogger.Warn("OnMessage: session not exist or expired")
+				logWarn("%v OnMessage: session not exist or expired", h.LogTag())
 			}
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
@@ -241,18 +255,19 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				handler(ctx)
 			} else {
 				memPut(msg)
-				DefaultLogger.Warn("OnMessage: async handler not exist or expired")
+				logWarn("%v OnMessage: async handler not exist or expired", h.LogTag())
 			}
 		}
 	default:
 		memPut(msg)
-		DefaultLogger.Info("OnMessage: invalid cmd [%v]", msg.Cmd())
+		logWarn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
 	}
 }
 
 // NewHandler factory
 func NewHandler() Handler {
 	h := &handler{
+		logtag:         "[ARPC CLI]",
 		batchRecv:      true,
 		batchSend:      true,
 		recvBufferSize: 4096,

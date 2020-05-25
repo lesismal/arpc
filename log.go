@@ -54,3 +54,27 @@ func (l *StdLogger) Error(format string, v ...interface{}) {
 		log.Printf(format, v...)
 	}
 }
+
+func logDebug(format string, v ...interface{}) {
+	if DefaultLogger != nil {
+		DefaultLogger.Debug(format, v...)
+	}
+}
+
+func logInfo(format string, v ...interface{}) {
+	if DefaultLogger != nil {
+		DefaultLogger.Info(format, v...)
+	}
+}
+
+func logWarn(format string, v ...interface{}) {
+	if DefaultLogger != nil {
+		DefaultLogger.Warn(format, v...)
+	}
+}
+
+func logError(format string, v ...interface{}) {
+	if DefaultLogger != nil {
+		DefaultLogger.Error(format, v...)
+	}
+}

@@ -35,8 +35,8 @@ var (
 	// ErrBindClonedContex
 	ErrBindClonedContex = errors.New("invalid operation: bind a cloned Context, should only bind before Context.Clone to avoid more memory cost")
 
-	// ErrResponseToResponsedMessage
-	ErrResponseToResponsedMessage = errors.New("invalid operation: reply to a responsed message, should only reply to a request message")
+	// ErrShouldOnlyResponseToRequestMessage
+	ErrShouldOnlyResponseToRequestMessage = errors.New("invalid operation: should only response to a request message")
 )
 
 // general errors
