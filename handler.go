@@ -37,9 +37,18 @@ type Handler interface {
 	// OnDisconnected would be called when Client disconnected
 	OnDisconnected(c *Client)
 
+	// HandleOverstock registers callback on Client chSend overstockll
+	HandleOverstock(onOverstock func(c *Client, m Message))
+	// OnOverstock would be called when Client chSend is full
+	OnOverstock(c *Client, m Message)
+
+	// HandleSessionMiss registers callback on async message seq not found
+	HandleSessionMiss(onSessionMiss func(c *Client, m Message))
+	// OnSessionMiss would be called when Client async message seq not found
+	OnSessionMiss(c *Client, m Message)
+
 	// BeforeRecv registers callback before Recv
 	BeforeRecv(bh func(net.Conn) error)
-
 	// BeforeSend registers callback before Send
 	BeforeSend(bh func(net.Conn) error)
 
@@ -59,7 +68,6 @@ type Handler interface {
 
 	// Recv reads and returns a message from a client
 	Recv(c *Client) (Message, error)
-
 	// Send writes a message to a connection
 	Send(c net.Conn, m Message) (int, error)
 	// SendN writes batch messages to a connection
@@ -91,6 +99,8 @@ type handler struct {
 
 	onConnected    func(*Client)
 	onDisConnected func(*Client)
+	onOverstock    func(c *Client, m Message)
+	onSessionMiss  func(c *Client, m Message)
 
 	beforeRecv func(net.Conn) error
 	beforeSend func(net.Conn) error
@@ -113,27 +123,43 @@ func (h *handler) SetLogTag(tag string) {
 	h.logtag = tag
 }
 
-// HandleConnected registers callback on connected
 func (h *handler) HandleConnected(onConnected func(*Client)) {
 	h.onConnected = onConnected
 }
 
-// HandleConnected would be called when Client connected
 func (h *handler) OnConnected(c *Client) {
 	if h.onConnected != nil {
 		h.onConnected(c)
 	}
 }
 
-// HandleDisconnected registers callback on disconnected
 func (h *handler) HandleDisconnected(onDisConnected func(*Client)) {
 	h.onDisConnected = onDisConnected
 }
 
-// OnDisconnected would be called when Client disconnected
 func (h *handler) OnDisconnected(c *Client) {
 	if h.onDisConnected != nil {
 		h.onDisConnected(c)
+	}
+}
+
+func (h *handler) HandleOverstock(onOverstock func(c *Client, m Message)) {
+	h.onOverstock = onOverstock
+}
+
+func (h *handler) OnOverstock(c *Client, m Message) {
+	if h.onOverstock != nil {
+		h.onOverstock(c, m)
+	}
+}
+
+func (h *handler) HandleSessionMiss(onSessionMiss func(c *Client, m Message)) {
+	h.onSessionMiss = onSessionMiss
+}
+
+func (h *handler) OnSessionMiss(c *Client, m Message) {
+	if h.onSessionMiss != nil {
+		h.onSessionMiss(c, m)
 	}
 }
 
