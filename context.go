@@ -19,7 +19,7 @@ type Context struct {
 // Body returns body
 func (ctx *Context) Body() []byte {
 	if !ctx.Message.IsRef() {
-		return ctx.Message.Body()
+		return ctx.Message.Data()
 	}
 	return nil
 }
@@ -34,7 +34,7 @@ func (ctx *Context) Bind(v interface{}) error {
 		return msg.Error()
 	}
 	if v != nil {
-		data := msg.Body()
+		data := msg.Data()
 		switch vt := v.(type) {
 		case *[]byte:
 			*vt = data

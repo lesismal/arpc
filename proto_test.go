@@ -18,7 +18,7 @@ func TestRefMessage(t *testing.T) {
 	if methodStr := msg.Real().Method(); methodStr != method {
 		t.Fatalf("NewRefMessage wrong method: %v != %v", methodStr, method)
 	}
-	if body := msg.Real().Body(); string(body) != payload {
+	if body := msg.Real().Data(); string(body) != payload {
 		t.Fatalf("NewRefMessage wrong body: %v != %v", string(body), payload)
 	}
 	for i := 0; i < refCount; i++ {

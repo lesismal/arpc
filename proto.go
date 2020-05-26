@@ -143,8 +143,8 @@ func (m Message) Seq() uint64 {
 	return binary.LittleEndian.Uint64(m[headerIndexSeqBegin:headerIndexSeqEnd])
 }
 
-// Body returns data after method
-func (m Message) Body() []byte {
+// Data returns data after method
+func (m Message) Data() []byte {
 	length := HeadLen + m.MethodLen()
 	return m[length:]
 }
