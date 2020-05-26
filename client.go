@@ -137,15 +137,17 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		if msg.IsError() {
 			return msg.Error()
 		}
-		switch vt := rsp.(type) {
-		case *string:
-			*vt = string(msg[HeadLen:])
-		case *[]byte:
-			*vt = msg[HeadLen:]
-		// case *error:
-		// 	*vt = msg.Error()
-		default:
-			return c.Codec.Unmarshal(msg[HeadLen:], rsp)
+		if rsp != nil {
+			switch vt := rsp.(type) {
+			case *string:
+				*vt = string(msg[HeadLen:])
+			case *[]byte:
+				*vt = msg[HeadLen:]
+			// case *error:
+			// 	*vt = msg.Error()
+			default:
+				return c.Codec.Unmarshal(msg[HeadLen:], rsp)
+			}
 		}
 	default:
 		return ErrInvalidRspMessage
