@@ -27,6 +27,16 @@ type Handler interface {
 	// SetLogTag value
 	SetLogTag(tag string)
 
+	// HandleConnected registers callback on connected
+	HandleConnected(onConnected func(*Client))
+	// OnConnected would be called when Client connected
+	OnConnected(c *Client)
+
+	// HandleDisconnected registers callback on disconnected
+	HandleDisconnected(onDisConnected func(*Client))
+	// OnDisconnected would be called when Client disconnected
+	OnDisconnected(c *Client)
+
 	// BeforeRecv registers callback before Recv
 	BeforeRecv(bh func(net.Conn) error)
 
@@ -79,6 +89,9 @@ type handler struct {
 	recvBufferSize int
 	sendQueueSize  int
 
+	onConnected    func(*Client)
+	onDisConnected func(*Client)
+
 	beforeRecv func(net.Conn) error
 	beforeSend func(net.Conn) error
 
@@ -98,6 +111,30 @@ func (h *handler) LogTag() string {
 
 func (h *handler) SetLogTag(tag string) {
 	h.logtag = tag
+}
+
+// HandleConnected registers callback on connected
+func (h *handler) HandleConnected(onConnected func(*Client)) {
+	h.onConnected = onConnected
+}
+
+// HandleConnected would be called when Client connected
+func (h *handler) OnConnected(c *Client) {
+	if h.onConnected != nil {
+		h.onConnected(c)
+	}
+}
+
+// HandleDisconnected registers callback on disconnected
+func (h *handler) HandleDisconnected(onDisConnected func(*Client)) {
+	h.onDisConnected = onDisConnected
+}
+
+// OnDisconnected would be called when Client disconnected
+func (h *handler) OnDisconnected(c *Client) {
+	if h.onDisConnected != nil {
+		h.onDisConnected(c)
+	}
 }
 
 func (h *handler) BeforeRecv(bh func(net.Conn) error) {
@@ -277,4 +314,9 @@ func NewHandler() Handler {
 		return bufio.NewReaderSize(conn, h.recvBufferSize)
 	}
 	return h
+}
+
+// SetHandler sets default handler
+func SetHandler(h Handler) {
+	DefaultHandler = h
 }

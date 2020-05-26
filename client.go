@@ -33,13 +33,14 @@ type rpcSession struct {
 
 // Client defines rpc client struct
 type Client struct {
-	Conn    net.Conn
-	Reader  io.Reader
-	head    [HeadLen]byte
-	Head    Header
-	Codec   Codec
-	Handler Handler
-	Dialer  func() (net.Conn, error)
+	Conn     net.Conn
+	Reader   io.Reader
+	head     [HeadLen]byte
+	Head     Header
+	Codec    Codec
+	Handler  Handler
+	Dialer   func() (net.Conn, error)
+	UserData interface{}
 
 	running      bool
 	reconnecting bool
@@ -51,19 +52,7 @@ type Client struct {
 
 	chSend chan Message
 
-	onStop         func() int64
-	onConnected    func(*Client)
-	onDisConnected func(*Client)
-}
-
-// OnConnected registers callback on connected
-func (c *Client) OnConnected(onConnected func(*Client)) {
-	c.onConnected = onConnected
-}
-
-// OnDisconnected registers callback on disconnected
-func (c *Client) OnDisconnected(onDisConnected func(*Client)) {
-	c.onDisConnected = onDisConnected
+	onStop func() int64
 }
 
 // Run client
@@ -73,6 +62,11 @@ func (c *Client) Run() {
 	if !c.running {
 		c.running = true
 		c.chSend = make(chan Message, c.Handler.SendQueueSize())
+		if c.Handler.BatchRecv() {
+			c.Reader = c.Handler.WrapReader(c.Conn)
+		} else {
+			c.Reader = c.Conn
+		}
 		go c.sendLoop()
 		go c.recvLoop()
 	}
@@ -86,13 +80,13 @@ func (c *Client) Stop() {
 	if c.running {
 		c.running = false
 		c.Conn.Close()
-		close(c.chSend)
+		if c.chSend != nil {
+			close(c.chSend)
+		}
 		if c.onStop != nil {
 			c.onStop()
 		}
-		if c.onDisConnected != nil {
-			c.onDisConnected(c)
-		}
+		c.Handler.OnDisconnected(c)
 	}
 }
 
@@ -362,11 +356,7 @@ func (c *Client) recvLoop() {
 
 					c.reconnecting = false
 
-					if c.onConnected != nil {
-						go safe(func() {
-							c.onConnected(c)
-						})
-					}
+					c.Handler.OnConnected(c)
 
 					break
 				}
@@ -466,11 +456,6 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 
 	c := &Client{}
 	c.Conn = conn
-	if handler.BatchRecv() {
-		c.Reader = handler.WrapReader(conn)
-	} else {
-		c.Reader = conn
-	}
 	c.Head = Header(c.head[:])
 	c.Codec = codec
 	c.Handler = handler
@@ -490,7 +475,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 
 	c := &Client{}
 	c.Conn = conn
-	c.Reader = DefaultHandler.WrapReader(conn)
+
 	c.Head = Header(c.head[:])
 	c.Codec = DefaultCodec
 	c.Handler = DefaultHandler
@@ -501,4 +486,68 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 	logInfo("%v\t%v\tConnected", c.Handler.LogTag(), conn.RemoteAddr())
 
 	return c, nil
+}
+
+// ClientPool definition
+type ClientPool struct {
+	size    uint64
+	round   uint64
+	clients []*Client
+}
+
+// Size returns a client number
+func (pool *ClientPool) Size() int {
+	return len(pool.clients)
+}
+
+// Get returns a Client instance
+func (pool *ClientPool) Get(i int) *Client {
+	return pool.clients[uint64(i)%pool.size]
+}
+
+// Next returns a Client by round robin
+func (pool *ClientPool) Next() *Client {
+	i := atomic.AddUint64(&pool.round, 1)
+	return pool.clients[i%pool.size]
+}
+
+// Handler returns Handler
+func (pool *ClientPool) Handler() Handler {
+	return pool.Next().Handler
+}
+
+// Run all clients
+func (pool *ClientPool) Run() {
+	for _, c := range pool.clients {
+		c.Run()
+	}
+}
+
+// Stop all clients
+func (pool *ClientPool) Stop() {
+	for _, c := range pool.clients {
+		c.Stop()
+	}
+}
+
+// NewClientPool factory
+func NewClientPool(dialer func() (net.Conn, error), size int) (*ClientPool, error) {
+	pool := &ClientPool{
+		size:    uint64(size),
+		round:   0xFFFFFFFFFFFFFFFF,
+		clients: make([]*Client, size),
+	}
+
+	for i := 0; i < size; i++ {
+		c, err := NewClient(dialer)
+		if err != nil {
+			for j := 0; j < i; j++ {
+				pool.clients[j].Stop()
+			}
+			return nil, err
+		}
+		pool.clients[i] = c
+	}
+
+	return pool, nil
 }
