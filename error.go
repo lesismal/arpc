@@ -10,8 +10,8 @@ import "errors"
 var (
 	// ErrClientTimeout
 	ErrClientTimeout = errors.New("timeout")
-	// ErrClientQueueIsFull
-	ErrClientQueueIsFull = errors.New("timeout: rpc client's send queue is full")
+	// ErrClientOverstock
+	ErrClientOverstock = errors.New("timeout: rpc client's send queue is full")
 	// ErrClientReconnecting
 	ErrClientReconnecting = errors.New("client reconnecting")
 	// ErrClientStopped

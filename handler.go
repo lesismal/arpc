@@ -303,6 +303,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 			if ok {
 				session.done <- msg
 			} else {
+				h.OnSessionMiss(c, msg)
 				memPut(msg)
 				logWarn("%v OnMessage: session not exist or expired", h.LogTag())
 			}
@@ -317,6 +318,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				defer handlePanic()
 				handler(ctx)
 			} else {
+				h.OnSessionMiss(c, msg)
 				memPut(msg)
 				logWarn("%v OnMessage: async handler not exist or expired", h.LogTag())
 			}

@@ -120,6 +120,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	select {
 	case c.chSend <- msg:
 	case <-timer.C:
+		c.Handler.OnOverstock(c, msg)
 		return ErrClientTimeout
 	}
 
@@ -181,7 +182,8 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 		case c.chSend <- msg:
 			msg.Retain()
 		default:
-			return ErrClientQueueIsFull
+			c.Handler.OnOverstock(c, msg)
+			return ErrClientOverstock
 		}
 	default:
 		timer := time.NewTimer(timeout)
@@ -190,6 +192,7 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 		case c.chSend <- msg:
 			msg.Retain()
 		case <-timer.C:
+			c.Handler.OnOverstock(c, msg)
 			return ErrClientTimeout
 		}
 	}
@@ -223,11 +226,12 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 		case c.chSend <- msg:
 			msg.Retain()
 		default:
+			c.Handler.OnOverstock(c, msg)
 			msg.Release()
 			if handler != nil {
 				c.deleteAsyncHandler(seq)
 			}
-			return ErrClientQueueIsFull
+			return ErrClientOverstock
 		}
 	default:
 		timer := time.NewTimer(timeout)
@@ -236,6 +240,7 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 		case c.chSend <- msg:
 			msg.Retain()
 		case <-timer.C:
+			c.Handler.OnOverstock(c, msg)
 			msg.Release()
 			if handler != nil {
 				c.deleteAsyncHandler(seq)
