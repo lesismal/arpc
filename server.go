@@ -51,6 +51,7 @@ func (s *Server) runLoop() error {
 			if s.MaxLoad <= 0 || load <= s.MaxLoad {
 				s.Accepted++
 				cli = newClientWithConn(conn, s.Codec, s.Handler, s.subLoad)
+				s.Handler.OnConnected(cli)
 				cli.Run()
 			} else {
 				conn.Close()
