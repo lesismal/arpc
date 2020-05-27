@@ -399,7 +399,9 @@ func (c *Client) sendLoop() {
 			conn = c.Conn
 			if !c.reconnecting {
 				if len(buffers) == 1 {
-					c.Handler.Send(conn, buffers[0])
+					if _, err := c.Handler.Send(conn, buffers[0]); err != nil {
+						conn.Close()
+					}
 				} else {
 					if _, err := c.Handler.SendN(conn, buffers); err != nil {
 						conn.Close()
