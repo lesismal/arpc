@@ -61,11 +61,7 @@ func (c *Client) Run() {
 	if !c.running {
 		c.running = true
 		c.chSend = make(chan Message, c.Handler.SendQueueSize())
-		if c.Handler.BatchRecv() {
-			c.Reader = c.Handler.WrapReader(c.Conn)
-		} else {
-			c.Reader = c.Conn
-		}
+		c.initReader()
 		go c.sendLoop()
 		go c.recvLoop()
 	}
@@ -295,18 +291,20 @@ func (c *Client) clearAsyncHandler() {
 	c.mux.Unlock()
 }
 
+func (c *Client) initReader() {
+	if c.Handler.BatchRecv() {
+		c.Reader = c.Handler.WrapReader(c.Conn)
+	} else {
+		c.Reader = c.Conn
+	}
+}
+
 func (c *Client) recvLoop() {
 	var (
 		err  error
 		msg  Message
 		addr = c.Conn.RemoteAddr()
 	)
-
-	if c.Handler.BatchRecv() {
-		c.Reader = c.Handler.WrapReader(c.Conn)
-	} else {
-		c.Reader = c.Conn
-	}
 
 	if c.Dialer == nil {
 		// logInfo("%v Client\t%v\trecvLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
@@ -346,11 +344,8 @@ func (c *Client) recvLoop() {
 				c.Conn, err = c.Dialer()
 				if err == nil {
 					logInfo("%v\t%v\tReconnected", c.Handler.LogTag(), addr)
-					if c.Handler.BatchRecv() {
-						c.Reader = c.Handler.WrapReader(c.Conn)
-					} else {
-						c.Reader = c.Conn
-					}
+
+					c.initReader()
 
 					c.clearAsyncHandler()
 
