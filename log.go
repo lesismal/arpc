@@ -4,13 +4,32 @@
 
 package arpc
 
-import "log"
+import (
+	"fmt"
+	"log"
+)
 
 // DefaultLogger instance
-var DefaultLogger Logger = &StdLogger{Enable: true}
+var DefaultLogger Logger = &logger{level: LogLevelInfo}
+
+const (
+	// LogLevelAll .
+	LogLevelAll = iota
+	// LogLevelDebug .
+	LogLevelDebug
+	// LogLevelInfo .
+	LogLevelInfo
+	// LogLevelWarn .
+	LogLevelWarn
+	// LogLevelError .
+	LogLevelError
+	// LogLevelNone .
+	LogLevelNone
+)
 
 // Logger defines log interface
 type Logger interface {
+	SetLogLevel(lvl int)
 	Debug(format string, v ...interface{})
 	Info(format string, v ...interface{})
 	Warn(format string, v ...interface{})
@@ -22,36 +41,58 @@ func SetLogger(l Logger) {
 	DefaultLogger = l
 }
 
-// StdLogger defines default logger
-type StdLogger struct {
-	Enable bool
+// SetLogLevel .
+func SetLogLevel(lvl int) {
+	switch lvl {
+	case LogLevelAll, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelNone:
+		DefaultLogger.SetLogLevel(lvl)
+		break
+	default:
+		panic(fmt.Errorf("invalid log level: %v", lvl))
+	}
+}
+
+// logger defines default logger
+type logger struct {
+	level int
+}
+
+// SetLogLevel .
+func (l *logger) SetLogLevel(lvl int) {
+	switch lvl {
+	case LogLevelAll, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelNone:
+		l.level = lvl
+		break
+	default:
+		panic(fmt.Errorf("invalid log level: %v", lvl))
+	}
 }
 
 // Debug simply printf
-func (l *StdLogger) Debug(format string, v ...interface{}) {
-	if l.Enable {
-		log.Printf(format, v...)
+func (l *logger) Debug(format string, v ...interface{}) {
+	if LogLevelDebug >= l.level {
+		log.Printf("[DBG] "+format, v...)
 	}
 }
 
 // Info simply printf
-func (l *StdLogger) Info(format string, v ...interface{}) {
-	if l.Enable {
-		log.Printf(format, v...)
+func (l *logger) Info(format string, v ...interface{}) {
+	if LogLevelInfo >= l.level {
+		log.Printf("[INF] "+format, v...)
 	}
 }
 
 // Warn simply printf
-func (l *StdLogger) Warn(format string, v ...interface{}) {
-	if l.Enable {
-		log.Printf(format, v...)
+func (l *logger) Warn(format string, v ...interface{}) {
+	if LogLevelWarn >= l.level {
+		log.Printf("[WRN] "+format, v...)
 	}
 }
 
 // Error simply printf
-func (l *StdLogger) Error(format string, v ...interface{}) {
-	if l.Enable {
-		log.Printf(format, v...)
+func (l *logger) Error(format string, v ...interface{}) {
+	if LogLevelError >= l.level {
+		log.Printf("[Err] "+format, v...)
 	}
 }
 

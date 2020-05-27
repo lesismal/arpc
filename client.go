@@ -306,10 +306,10 @@ func (c *Client) recvLoop() {
 		addr = c.Conn.RemoteAddr()
 	)
 
-	if c.Dialer == nil {
-		// logInfo("%v Client\t%v\trecvLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
-		// defer logInfo("%v Client\t%v\trecvLoop stop", c.Handler.LogTag(), c.Conn.RemoteAddr())
+	logDebug("%v\t%v\trecvLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
+	defer logDebug("%v\t%v\trecvLoop stop", c.Handler.LogTag(), c.Conn.RemoteAddr())
 
+	if c.Dialer == nil {
 		for c.running {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
@@ -320,9 +320,6 @@ func (c *Client) recvLoop() {
 			c.Handler.OnMessage(c, msg)
 		}
 	} else {
-		// logInfo("%v\t%v\trecvLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
-		// defer logInfo("%v\t%v\trecvLoop stop", c.Handler.LogTag(), c.Conn.RemoteAddr())
-
 		go c.Handler.OnConnected(c)
 
 		for c.running {
@@ -364,13 +361,8 @@ func (c *Client) recvLoop() {
 }
 
 func (c *Client) sendLoop() {
-	// if c.Dialer == nil {
-	// 	logInfo("%v Client\t%v\tsendLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
-	// 	defer logInfo("%v Client\t%v\tsendLoop stop", c.Conn.RemoteAddr())
-	// } else {
-	// 	logInfo("%v\t%v\tsendLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
-	// 	defer logInfo("%v\t%v\tsendLoop stop", c.Handler.LogTag(), c.Conn.RemoteAddr())
-	// }
+	logDebug("%v\t%v\tsendLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
+	defer logDebug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), c.Conn.RemoteAddr())
 
 	if !c.Handler.BatchSend() {
 		var conn net.Conn
