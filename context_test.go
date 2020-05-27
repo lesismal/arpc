@@ -27,17 +27,6 @@ func TestContext_Body(t *testing.T) {
 			},
 			want: []byte{1, 2, 3, 4, 5, 6, 7, 8},
 		},
-		struct {
-			name string
-			ctx  *Context
-			want []byte
-		}{
-			name: "ref message, null body",
-			ctx: &Context{
-				Client:  &Client{Codec: DefaultCodec},
-				Message: Message([]byte{0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}).cloneHead(),
-			},
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -58,20 +47,6 @@ func TestContext_Bind(t *testing.T) {
 		args    args
 		wantErr bool
 	}{
-		struct {
-			name    string
-			ctx     *Context
-			args    args
-			wantErr bool
-		}{
-			name: "bind cloned message",
-			ctx: &Context{
-				Client:  &Client{Codec: DefaultCodec},
-				Message: Message([]byte{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}).cloneHead(),
-			},
-			args:    args{},
-			wantErr: true,
-		},
 		struct {
 			name    string
 			ctx     *Context
@@ -125,37 +100,6 @@ func TestContext_Write(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := tt.ctx.Write(tt.args.v); (err == ErrShouldOnlyResponseToRequestMessage) != tt.wantErr {
 				t.Errorf("Context.Write() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestContext_Clone(t *testing.T) {
-	tests := []struct {
-		name string
-		ctx  *Context
-		want *Context
-	}{
-		struct {
-			name string
-			ctx  *Context
-			want *Context
-		}{
-			name: "clone Context",
-			ctx: &Context{
-				Client:  &Client{Codec: DefaultCodec},
-				Message: Message([]byte{2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-			},
-			want: &Context{
-				Client:  &Client{Codec: DefaultCodec},
-				Message: Message([]byte{refFlagByte, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.ctx.Clone(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Context.Clone() = %v, want %v", got, tt.want)
 			}
 		})
 	}

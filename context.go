@@ -18,18 +18,12 @@ type Context struct {
 
 // Body returns body
 func (ctx *Context) Body() []byte {
-	if !ctx.Message.IsRef() {
-		return ctx.Message.Data()
-	}
-	return nil
+	return ctx.Message.Data()
 }
 
 // Bind body data to struct
 func (ctx *Context) Bind(v interface{}) error {
 	msg := ctx.Message
-	if msg.IsRef() {
-		return ErrBindClonedContex
-	}
 	if msg.IsError() {
 		return msg.Error()
 	}
@@ -64,26 +58,16 @@ func (ctx *Context) Error(err error) error {
 	return ctx.write(err, 1, TimeForever)
 }
 
-// Clone a new Contex, new Context's lifecycle depends on user, should call Contex.Release after Contex.write
-func (ctx *Context) Clone() *Context {
-	return ctxGet(ctx.Client, ctx.Message.cloneHead())
-}
-
-// Release payback Contex to pool
-func (ctx *Context) Release() {
-	if ctx.Message.IsRef() {
-		memPut(ctx.Message)
-	}
-	ctxPut(ctx)
-}
-
 func (ctx *Context) newRspMessage(cmd byte, v interface{}, isError byte) Message {
 	var (
 		data    []byte
 		msg     Message
 		bodyLen int
-		realMsg = ctx.Message.Real()
 	)
+
+	if ctx.Message.Cmd() != CmdRequest {
+		return nil
+	}
 
 	if _, ok := v.(error); ok {
 		isError = 1
@@ -94,9 +78,9 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}, isError byte) Message
 	bodyLen = len(data)
 	msg = Message(memGet(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
-	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], realMsg.Seq())
+	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
 	msg[headerIndexCmd] = cmd
-	msg[headerIndexAsync] = realMsg.Async()
+	msg[headerIndexAsync] = ctx.Message.Async()
 	msg[headerIndexError] = isError
 	msg[headerIndexMethodLen] = 0
 	copy(msg[HeadLen:], data)
@@ -105,9 +89,13 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}, isError byte) Message
 }
 
 func (ctx *Context) write(v interface{}, isError byte, timeout time.Duration) error {
-	if ctx.Message.Real().Cmd() != CmdRequest {
+	if ctx.Message.Cmd() != CmdRequest {
 		return ErrShouldOnlyResponseToRequestMessage
 	}
 	msg := ctx.newRspMessage(CmdResponse, v, isError)
 	return ctx.Client.PushMsg(msg, timeout)
+}
+
+func newContext(c *Client, msg Message) *Context {
+	return &Context{Client: c, Message: msg}
 }

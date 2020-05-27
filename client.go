@@ -26,10 +26,9 @@ type rpcSession struct {
 	done chan Message
 }
 
-// type asyncHandler struct {
-// 	h HandlerFunc
-// 	t *time.Timer
-// }
+func newSession(seq uint64) *rpcSession {
+	return &rpcSession{seq: seq, done: make(chan Message, 1)}
+}
 
 // Client defines rpc client struct
 type Client struct {
@@ -107,13 +106,12 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	msg := c.newReqMessage(CmdRequest, method, req, 0)
 
 	seq := msg.Seq()
-	sess := sessionGet(seq)
+	sess := newSession(seq)
 	c.addSession(seq, sess)
 	defer func() {
 		timer.Stop()
 		c.mux.Lock()
 		delete(c.sessionMap, seq)
-		sessionPut(sess)
 		c.mux.Unlock()
 	}()
 
@@ -127,7 +125,6 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	select {
 	// response msg
 	case msg = <-sess.done:
-		defer memPut(msg)
 	case <-timer.C:
 		return ErrClientTimeout
 	}
@@ -182,7 +179,6 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 	case TimeZero:
 		select {
 		case c.chSend <- msg:
-			msg.Retain()
 		default:
 			c.Handler.OnOverstock(c, msg)
 			return ErrClientOverstock
@@ -192,7 +188,6 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 		defer timer.Stop()
 		select {
 		case c.chSend <- msg:
-			msg.Retain()
 		case <-timer.C:
 			c.Handler.OnOverstock(c, msg)
 			return ErrClientTimeout
@@ -226,10 +221,8 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 	case TimeZero:
 		select {
 		case c.chSend <- msg:
-			msg.Retain()
 		default:
 			c.Handler.OnOverstock(c, msg)
-			msg.Release()
 			if handler != nil {
 				c.deleteAsyncHandler(seq)
 			}
@@ -240,10 +233,8 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 		defer timer.Stop()
 		select {
 		case c.chSend <- msg:
-			msg.Retain()
 		case <-timer.C:
 			c.Handler.OnOverstock(c, msg)
-			msg.Release()
 			if handler != nil {
 				c.deleteAsyncHandler(seq)
 			}
@@ -389,24 +380,20 @@ func (c *Client) sendLoop() {
 		for msg := range c.chSend {
 			conn = c.Conn
 			if !c.reconnecting {
-				c.Handler.Send(conn, msg)
-				msg.Release()
-			} else {
-				msg.Release()
+				if _, err := c.Handler.Send(conn, msg); err != nil {
+					conn.Close()
+				}
 			}
 		}
 	} else {
 		var conn net.Conn
 		var buffers net.Buffers = make([][]byte, 10)[0:0]
-		var messages = make([]Message, 10)[0:0]
 		for msg := range c.chSend {
-			buffers = append(buffers, msg.Real())
-			messages = append(messages, msg)
+			buffers = append(buffers, msg)
 			for i := 1; i < 10; i++ {
 				select {
 				case msg = <-c.chSend:
-					buffers = append(buffers, msg.Real())
-					messages = append(messages, msg)
+					buffers = append(buffers, msg)
 				default:
 					goto SEND
 				}
@@ -416,18 +403,13 @@ func (c *Client) sendLoop() {
 			if !c.reconnecting {
 				if len(buffers) == 1 {
 					c.Handler.Send(conn, buffers[0])
-					msg.Release()
 				} else {
-					c.Handler.SendN(conn, buffers)
-					for _, v := range messages {
-						v.Release()
+					if _, err := c.Handler.SendN(conn, buffers); err != nil {
+						conn.Close()
 					}
 				}
-				buffers = buffers[0:0]
-				messages = messages[0:0]
-			} else {
-				msg.Release()
 			}
+			buffers = buffers[0:0]
 		}
 	}
 }

@@ -23,18 +23,17 @@ func main() {
 			clientMap[ctx.Client] = struct{}{}
 			mux.Unlock()
 
-			// release client
-			ctx.Client.OnDisconnected(func(c *arpc.Client) {
-				mux.Lock()
-				delete(clientMap, c)
-				mux.Unlock()
-			})
-
 			log.Printf("enter success")
 		} else {
 			log.Printf("enter failed invalid passwd: %v", passwd)
 			ctx.Client.Stop()
 		}
+	})
+	// release client
+	server.Handler.HandleDisconnected(func(c *arpc.Client) {
+		mux.Lock()
+		delete(clientMap, c)
+		mux.Unlock()
 	})
 
 	go func() {
@@ -49,9 +48,7 @@ func main() {
 }
 
 func broadcast(i int) {
-	msg := arpc.NewRefMessage(arpc.CmdNotify, arpc.DefaultCodec, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
-	defer msg.Release()
-
+	msg := arpc.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i), arpc.DefaultCodec)
 	mux.RLock()
 	for client := range clientMap {
 		client.PushMsg(msg, arpc.TimeZero)

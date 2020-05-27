@@ -272,7 +272,6 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 }
 
 func (h *handler) OnMessage(c *Client, msg Message) {
-	// cmd, seq, isAsync, method, body, err := msg.parse()
 	switch msg.Cmd() {
 	case CmdRequest, CmdNotify:
 		if msg.MethodLen() == 0 {
@@ -281,17 +280,11 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		}
 		method := msg.Method()
 		if handler, ok := h.routes[method]; ok {
-			ctx := ctxGet(c, msg)
-			defer func() {
-				ctxPut(ctx)
-				memPut(msg)
-			}()
-			defer handlePanic()
-			handler(ctx)
+			handler(newContext(c, msg))
 		} else {
-			memPut(msg)
 			logWarn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
+		break
 	case CmdResponse:
 		if msg.MethodLen() > 0 {
 			logWarn("%v OnMessage: invalid response message with method length %v, dropped", h.LogTag(), msg.MethodLen())
@@ -304,28 +297,21 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				session.done <- msg
 			} else {
 				h.OnSessionMiss(c, msg)
-				memPut(msg)
 				logWarn("%v OnMessage: session not exist or expired", h.LogTag())
 			}
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
 			if ok {
-				ctx := ctxGet(c, msg)
-				defer func() {
-					ctxPut(ctx)
-					memPut(msg)
-				}()
-				defer handlePanic()
-				handler(ctx)
+				handler(newContext(c, msg))
 			} else {
 				h.OnSessionMiss(c, msg)
-				memPut(msg)
 				logWarn("%v OnMessage: async handler not exist or expired", h.LogTag())
 			}
 		}
+		break
 	default:
-		memPut(msg)
 		logWarn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
+		break
 	}
 }
 

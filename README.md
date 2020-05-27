@@ -27,7 +27,7 @@
 		- [Async Response](#async-response)
 		- [Client Call, CallAsync, Notify](#client-call-callasync-notify)
 		- [Server Call, CallAsync, Notify](#server-call-callasync-notify)
-		- [Broadcast && Ref Count Message](#broadcast--ref-count-message)
+		- [Broadcast - Notify](#broadcast---notify)
 		- [Custom Net Protocol](#custom-net-protocol)
 		- [Custom Codec](#custom-codec)
 		- [Custom Logger](#custom-logger)
@@ -44,10 +44,8 @@
 - [x] Server call Client Sync
 - [x] Server call Client Async
 - [x] Server notify Client
-- [x] Mem Pools for Buffers and Objects
-- [x] Broadcast Ref Count Message
 - [x] Batch Write | Writev | net.Buffers 
-
+- [x] Broadcast
 
 ## Header Layout
 
@@ -98,7 +96,7 @@ func main() {
 }
 ```
 
-- start a [client](https://github.com/lesismal/arpc/blob/master/examples/rpc_sync/client/client.go)
+- start a [client](https://github.com/lesismal/arpc/blob/master/examples/rpc/client/client.go)
 
 ```go
 package main
@@ -167,7 +165,6 @@ handler = server.Handler
 handler = client.Handler
 
 func asyncResponse(ctx *arpc.Context, data interface{}) {
-	defer ctx.Release()
 	ctx.Write(data)
 }
 
@@ -175,8 +172,7 @@ handler.Handle("/echo", func(ctx *arpc.Context) {
 	req := ...
 	err := ctx.Bind(req)
 	if err == nil {
-		clone := ctx.Clone()
-		go asyncResponse(clone, req)
+		go asyncResponse(ctx, req)
 	}
 })
 ```
@@ -241,7 +237,7 @@ go func() {
 
 - [See Previous](#client-call-callasync-notify)
 
-### Broadcast && Ref Count Message
+### Broadcast - Notify
 
 - for more details:	[**server**](https://github.com/lesismal/arpc/blob/master/examples/broadcast/server/server.go) [**client**](https://github.com/lesismal/arpc/blob/master/examples/broadcast/client/client.go)
 
@@ -250,9 +246,7 @@ var mux = sync.RWMutex{}
 var clientMap = make(map[*arpc.Client]struct{})
 
 func broadcast() {
-	msg := arpc.NewRefMessage(arpc.CmdNotify, arpc.DefaultCodec, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
-	defer msg.Release()
-
+	msg := arpc.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i), nil)
 	mux.RLock()
 	for client := range clientMap {
 		client.PushMsg(msg, arpc.TimeZero)
