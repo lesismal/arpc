@@ -24,10 +24,13 @@
 	- [Quick start](#quick-start)
 	- [API Examples](#api-examples)
 		- [Register Routers](#register-routers)
-		- [Async Response](#async-response)
 		- [Client Call, CallAsync, Notify](#client-call-callasync-notify)
 		- [Server Call, CallAsync, Notify](#server-call-callasync-notify)
 		- [Broadcast - Notify](#broadcast---notify)
+		- [Async Response](#async-response)
+		- [Handle New Connection](#handle-new-connection)
+		- [Handle Disconnected](#handle-disconnected)
+		- [Handle Client's send queue overstock](#handle-clients-send-queue-overstock)
 		- [Custom Net Protocol](#custom-net-protocol)
 		- [Custom Codec](#custom-codec)
 		- [Custom Logger](#custom-logger)
@@ -152,30 +155,7 @@ handler.Handle("/route2", func(ctx *arpc.Context) { ... })
 handler.Handle("method", func(ctx *arpc.Context) { ... })
 ```
 
-### Async Response
 
-```golang
-var handler arpc.Handler
-
-// package
-handler = arpc.DefaultHandler
-// server
-handler = server.Handler
-// client
-handler = client.Handler
-
-func asyncResponse(ctx *arpc.Context, data interface{}) {
-	ctx.Write(data)
-}
-
-handler.Handle("/echo", func(ctx *arpc.Context) {
-	req := ...
-	err := ctx.Bind(req)
-	if err == nil {
-		go asyncResponse(ctx, req)
-	}
-})
-```
 
 ### Client Call, CallAsync, Notify
 
@@ -255,6 +235,95 @@ func broadcast() {
 }
 ```
 
+### Async Response
+
+```golang
+var handler arpc.Handler
+
+// package
+handler = arpc.DefaultHandler
+// server
+handler = server.Handler
+// client
+handler = client.Handler
+
+func asyncResponse(ctx *arpc.Context, data interface{}) {
+	ctx.Write(data)
+}
+
+handler.Handle("/echo", func(ctx *arpc.Context) {
+	req := ...
+	err := ctx.Bind(req)
+	if err == nil {
+		go asyncResponse(ctx, req)
+	}
+})
+```
+
+
+### Handle New Connection
+
+```golang
+// package
+arpc.DefaultHandler.HandleConnected(func(c *arpc.Client) {
+	...
+})
+
+// server
+svr := arpc.NewServer()
+svr.Handler.HandleConnected(func(c *arpc.Client) {
+	...
+})
+
+// client
+client, err := arpc.NewClient(...)
+client.Handler.HandleConnected(func(c *arpc.Client) {
+	...
+})
+```
+
+### Handle Disconnected
+
+```golang
+// package
+arpc.DefaultHandler.HandleDisconnected(func(c *arpc.Client) {
+	...
+})
+
+// server
+svr := arpc.NewServer()
+svr.Handler.HandleDisconnected(func(c *arpc.Client) {
+	...
+})
+
+// client
+client, err := arpc.NewClient(...)
+client.Handler.HandleDisconnected(func(c *arpc.Client) {
+	...
+})
+```
+
+### Handle Client's send queue overstock
+
+```golang
+// package
+arpc.DefaultHandler.HandleOverstock(func(c *arpc.Client) {
+	...
+})
+
+// server
+svr := arpc.NewServer()
+svr.Handler.HandleOverstock(func(c *arpc.Client) {
+	...
+})
+
+// client
+client, err := arpc.NewClient(...)
+client.Handler.HandleOverstock(func(c *arpc.Client) {
+	...
+})
+```
+
 ### Custom Net Protocol
 
 ```golang
@@ -273,7 +342,6 @@ client, err := arpc.NewClient(dialer)
 ### Custom Codec
 
 ```golang
-// server
 var codec arpc.Codec = ...
 
 // package

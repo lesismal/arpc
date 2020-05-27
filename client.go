@@ -325,6 +325,8 @@ func (c *Client) recvLoop() {
 		// logInfo("%v\t%v\trecvLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
 		// defer logInfo("%v\t%v\trecvLoop stop", c.Handler.LogTag(), c.Conn.RemoteAddr())
 
+		go c.Handler.OnConnected(c)
+
 		for c.running {
 			for {
 				msg, err = c.Handler.Recv(c)
@@ -354,7 +356,7 @@ func (c *Client) recvLoop() {
 
 					c.reconnecting = false
 
-					c.Handler.OnConnected(c)
+					go c.Handler.OnConnected(c)
 
 					break
 				}
