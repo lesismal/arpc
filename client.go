@@ -333,19 +333,20 @@ func (c *Client) recvLoop() {
 
 			c.reconnecting = true
 			c.Conn.Close()
-			c.Conn = nil
 
 			for c.running {
 				logInfo("%v\t%v\tReconnecting ...", c.Handler.LogTag(), addr)
-				c.Conn, err = c.Dialer()
+				conn, err := c.Dialer()
 				if err == nil {
-					logInfo("%v\t%v\tReconnected", c.Handler.LogTag(), addr)
+					c.Conn = conn
 
 					c.initReader()
 
 					c.clearAsyncHandler()
 
 					c.reconnecting = false
+
+					logInfo("%v\t%v\tReconnected", c.Handler.LogTag(), addr)
 
 					go c.Handler.OnConnected(c)
 
