@@ -60,7 +60,6 @@ func (c *Client) Run() {
 	defer c.mux.Unlock()
 	if !c.running {
 		c.running = true
-		c.chSend = make(chan Message, c.Handler.SendQueueSize())
 		c.initReader()
 		go c.sendLoop()
 		go c.recvLoop()
@@ -439,6 +438,7 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 	c.Head = Header(c.head[:])
 	c.Codec = codec
 	c.Handler = handler
+	c.chSend = make(chan Message, c.Handler.SendQueueSize())
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 	c.onStop = onStop
@@ -460,6 +460,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 	c.Codec = DefaultCodec
 	c.Handler = DefaultHandler
 	c.Dialer = dialer
+	c.chSend = make(chan Message, c.Handler.SendQueueSize())
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 
