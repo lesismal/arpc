@@ -302,11 +302,11 @@ func (c *Client) recvLoop() {
 	var (
 		err  error
 		msg  Message
-		addr = c.Conn.RemoteAddr()
+		addr = c.Conn.RemoteAddr().String()
 	)
 
-	logDebug("%v\t%v\trecvLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
-	defer logDebug("%v\t%v\trecvLoop stop", c.Handler.LogTag(), c.Conn.RemoteAddr())
+	logDebug("%v\t%v\trecvLoop start", c.Handler.LogTag(), addr)
+	defer logDebug("%v\t%v\trecvLoop stop", c.Handler.LogTag(), addr)
 
 	if c.Dialer == nil {
 		for c.running {
@@ -360,8 +360,9 @@ func (c *Client) recvLoop() {
 }
 
 func (c *Client) sendLoop() {
-	logDebug("%v\t%v\tsendLoop start", c.Handler.LogTag(), c.Conn.RemoteAddr())
-	defer logDebug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), c.Conn.RemoteAddr())
+	addr := c.Conn.RemoteAddr().String()
+	logDebug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
+	defer logDebug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), addr)
 
 	if !c.Handler.BatchSend() {
 		var conn net.Conn
