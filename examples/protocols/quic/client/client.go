@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpcext"
+	"github.com/lesismal/arpcext/quic"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 			InsecureSkipVerify: true,
 			NextProtos:         []string{"quic-echo-example"},
 		}
-		return arpcext.DialQuic("localhost:8888", tlsConf, nil, 0)
+		return quic.Dial("localhost:8888", tlsConf, nil, 0)
 	})
 	if err != nil {
 		panic(err)

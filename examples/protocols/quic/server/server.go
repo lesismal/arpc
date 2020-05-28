@@ -10,11 +10,11 @@ import (
 	"math/big"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpcext"
+	"github.com/lesismal/arpcext/quic"
 )
 
 func main() {
-	ln, err := arpcext.ListenQuic(":8888", generateTLSConfig())
+	ln, err := quic.Listen(":8888", generateTLSConfig())
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
