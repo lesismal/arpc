@@ -70,7 +70,7 @@ func (s *Server) runLoop() error {
 				logError("%v Accept error: %v; retrying in %v", s.Handler.LogTag(), err, tempDelay)
 				time.Sleep(tempDelay)
 			} else {
-				logError("%v Accept error:", s.Handler.LogTag(), err)
+				logError("%v Accept error: %v", s.Handler.LogTag(), err)
 				break
 			}
 		}
