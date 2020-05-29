@@ -61,8 +61,8 @@ func (c *Client) Run() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		go c.sendLoop()
-		go c.recvLoop()
+		go safe(c.sendLoop)
+		go safe(c.recvLoop)
 	}
 }
 
