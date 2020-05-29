@@ -102,10 +102,25 @@ func (s *Server) Run(addr string) error {
 	return s.runLoop()
 }
 
+// Stop rpc service
+func (s *Server) Stop() error {
+	logInfo("%v %v Stop...", s.Handler.LogTag(), s.Listener.Addr())
+	defer logInfo("%v %v Stop Done.", s.Handler.LogTag(), s.Listener.Addr())
+	s.running = false
+	s.Listener.Close()
+	select {
+	case <-s.chStop:
+	default:
+	case <-time.After(time.Second):
+		return ErrTimeout
+	}
+	return nil
+}
+
 // Shutdown stop rpc service
 func (s *Server) Shutdown(timeout time.Duration) error {
 	logInfo("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
-	defer logInfo("%v %v Shutdown done", s.Handler.LogTag(), s.Listener.Addr())
+	defer logInfo("%v %v Shutdown Done.", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
