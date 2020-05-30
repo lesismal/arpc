@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"context"
 	"net"
 	"sync/atomic"
 	"time"
@@ -118,14 +119,14 @@ func (s *Server) Stop() error {
 }
 
 // Shutdown stop rpc service
-func (s *Server) Shutdown(timeout time.Duration) error {
+func (s *Server) Shutdown(ctx context.Context) error {
 	logInfo("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
 	defer logInfo("%v %v Shutdown Done.", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
 	case <-s.chStop:
-	case <-time.After(timeout):
+	case <-ctx.Done():
 		return ErrTimeout
 	}
 	return nil
