@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -44,8 +45,12 @@ func TestServer_Service(t *testing.T) {
 
 	s := NewServer()
 	go s.Run(addr)
+
 	time.Sleep(time.Second)
-	err := s.Shutdown(time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := s.Shutdown(ctx)
 	if err != nil {
 		t.Fatalf("Shutdown failed: %v", err)
 	}
@@ -57,7 +62,10 @@ func TestServer_Service(t *testing.T) {
 	s = NewServer()
 	go s.Serve(ln)
 	time.Sleep(time.Second)
-	err = s.Shutdown(time.Second)
+
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err = s.Shutdown(ctx)
 	if err != nil {
 		t.Fatalf("Shutdown failed: %v", err)
 	}
