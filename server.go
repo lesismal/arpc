@@ -105,8 +105,8 @@ func (s *Server) Run(addr string) error {
 
 // Stop rpc service
 func (s *Server) Stop() error {
-	logInfo("%v %v Stop...", s.Handler.LogTag(), s.Listener.Addr())
-	defer logInfo("%v %v Stop Done.", s.Handler.LogTag(), s.Listener.Addr())
+	// logInfo("%v %v Stop...", s.Handler.LogTag(), s.Listener.Addr())
+	defer logInfo("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -120,8 +120,8 @@ func (s *Server) Stop() error {
 
 // Shutdown stop rpc service
 func (s *Server) Shutdown(ctx context.Context) error {
-	logInfo("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
-	defer logInfo("%v %v Shutdown Done.", s.Handler.LogTag(), s.Listener.Addr())
+	// logInfo("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
+	defer logInfo("%v %v Shutdown", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
