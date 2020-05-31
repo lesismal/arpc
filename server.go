@@ -99,7 +99,7 @@ func (s *Server) Run(addr string) error {
 	s.Listener = ln
 	s.chStop = make(chan error)
 	logInfo("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
-	defer logInfo("%v Stopped", s.Handler.LogTag())
+	// defer logInfo("%v Stopped", s.Handler.LogTag())
 	return s.runLoop()
 }
 
