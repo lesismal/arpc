@@ -58,16 +58,16 @@ func (ctx *Context) Error(err error) error {
 	return ctx.write(err, 1, TimeForever)
 }
 
-func (ctx *Context) newRspMessage(cmd byte, v interface{}, isError byte) Message {
+func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
 	var (
 		data    []byte
 		msg     Message
 		bodyLen int
 	)
 
-	if ctx.Message.Cmd() != CmdRequest {
-		return nil
-	}
+	// if ctx.Message.Cmd() != CmdRequest {
+	// 	return nil
+	// }
 
 	if _, ok := v.(error); ok {
 		isError = 1
@@ -79,7 +79,7 @@ func (ctx *Context) newRspMessage(cmd byte, v interface{}, isError byte) Message
 	msg = Message(memGet(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
-	msg[headerIndexCmd] = cmd
+	msg[headerIndexCmd] = CmdResponse
 	msg[headerIndexAsync] = ctx.Message.Async()
 	msg[headerIndexError] = isError
 	msg[headerIndexMethodLen] = 0
@@ -92,7 +92,7 @@ func (ctx *Context) write(v interface{}, isError byte, timeout time.Duration) er
 	if ctx.Message.Cmd() != CmdRequest {
 		return ErrShouldOnlyResponseToRequestMessage
 	}
-	msg := ctx.newRspMessage(CmdResponse, v, isError)
+	msg := ctx.newRspMessage(v, isError)
 	return ctx.Client.PushMsg(msg, timeout)
 }
 
