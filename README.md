@@ -159,32 +159,47 @@ handler.Handle("method", func(ctx *arpc.Context) { ... })
 
 ### Client Call, CallAsync, Notify
 
-1. Call (Block, with timeout)
+1. Call (Block, with timeout/context)
 
 ```golang
 request := &Echo{...}
 response := &Echo{}
 timeout := time.Second*5
 err := client.Call("/call/echo", request, response, timeout)
+// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+// defer cancel()
+// err := client.CallWith(ctx, "/call/echo", request, response)
 ```
 
-2. CallAsync (Nonblock, with callback and timeout)
+2. CallAsync (Nonblock, with callback and timeout/context)
 
 ```golang
 request := &Echo{...}
+
 timeout := time.Second*5
 err := client.CallAsync("/call/echo", request, func(ctx *arpc.Context) {
 	response := &Echo{}
 	ctx.Bind(response)
 	...	
 }, timeout)
+
+// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+// defer cancel()
+// err := client.CallAsyncWith(ctx, "/call/echo", request, func(ctx *arpc.Context) {
+// 	response := &Echo{}
+// 	ctx.Bind(response)
+// 	...	
+// })
 ```
 
-3. Notify (same as CallAsync without callback)
+3. Notify (same as CallAsync with timeout/context, without callback)
 
 ```golang
 data := &Notify{...}
 client.Notify("/notify", data, time.Second)
+// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+// defer cancel()
+// client.NotifyWith(ctx, "/notify", data)
 ```
 
 ### Server Call, CallAsync, Notify

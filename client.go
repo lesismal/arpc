@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -84,7 +85,7 @@ func (c *Client) Stop() {
 	}
 }
 
-// Call make rpc call
+// Call make rpc call with timeout
 func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout time.Duration) error {
 	if !c.running {
 		return ErrClientStopped
@@ -148,14 +149,82 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	return nil
 }
 
-// CallAsync make async rpc call
+// Call make rpc call with context
+func (c *Client) CallWith(ctx context.Context, method string, req interface{}, rsp interface{}) error {
+	if !c.running {
+		return ErrClientStopped
+	}
+	if c.reconnecting {
+		return ErrClientReconnecting
+	}
+
+	msg := c.newReqMessage(CmdRequest, method, req, 0)
+
+	seq := msg.Seq()
+	sess := newSession(seq)
+	c.addSession(seq, sess)
+	defer func() {
+		c.mux.Lock()
+		delete(c.sessionMap, seq)
+		c.mux.Unlock()
+	}()
+
+	select {
+	case c.chSend <- msg:
+	case <-ctx.Done():
+		c.Handler.OnOverstock(c, msg)
+		return ErrClientTimeout
+	}
+
+	select {
+	// response msg
+	case msg = <-sess.done:
+	case <-ctx.Done():
+		return ErrClientTimeout
+	}
+
+	switch msg.Cmd() {
+	case CmdResponse:
+		if msg.IsError() {
+			return msg.Error()
+		}
+		if rsp != nil {
+			switch vt := rsp.(type) {
+			case *string:
+				*vt = string(msg[HeadLen:])
+			case *[]byte:
+				*vt = msg[HeadLen:]
+			// case *error:
+			// 	*vt = msg.Error()
+			default:
+				return c.Codec.Unmarshal(msg[HeadLen:], rsp)
+			}
+		}
+	default:
+		return ErrInvalidRspMessage
+	}
+
+	return nil
+}
+
+// CallAsync make async rpc call with timeout
 func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, timeout time.Duration) error {
 	return c.callAsync(CmdRequest, method, req, handler, timeout)
 }
 
-// Notify make rpc notify
+// CallAsyncWith make async rpc call with context
+func (c *Client) CallAsyncWith(ctx context.Context, method string, req interface{}, handler HandlerFunc) error {
+	return c.callAsyncWith(ctx, CmdRequest, method, req, handler)
+}
+
+// Notify make rpc notify with timeout
 func (c *Client) Notify(method string, data interface{}, timeout time.Duration) error {
 	return c.callAsync(CmdNotify, method, data, nil, timeout)
+}
+
+// Notify make rpc notify with context
+func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}) error {
+	return c.callAsyncWith(ctx, CmdNotify, method, data, nil)
 }
 
 // PushMsg push msg to client's send queue
@@ -235,6 +304,36 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 			}
 			return ErrClientTimeout
 		}
+	}
+
+	return nil
+}
+
+func (c *Client) callAsyncWith(ctx context.Context, cmd byte, method string, req interface{}, handler HandlerFunc) error {
+	if !c.running {
+		return ErrClientStopped
+	}
+	if c.reconnecting {
+		return ErrClientReconnecting
+	}
+
+	var (
+		msg = c.newReqMessage(cmd, method, req, 1)
+		seq = msg.Seq()
+	)
+
+	if handler != nil {
+		c.addAsyncHandler(seq, handler)
+	}
+
+	select {
+	case c.chSend <- msg:
+	case <-ctx.Done():
+		c.Handler.OnOverstock(c, msg)
+		if handler != nil {
+			c.deleteAsyncHandler(seq)
+		}
+		return ErrClientTimeout
 	}
 
 	return nil
