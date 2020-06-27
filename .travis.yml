@@ -8,7 +8,7 @@ before_script:
     - ulimit -n 30000
 
 before_install:
-    - go get -u -t -v ./...
+    - go get -u -t -v .
 
 install:
     - go get -u github.com/lesismal/arpc
