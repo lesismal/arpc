@@ -149,7 +149,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	return nil
 }
 
-// Call make rpc call with context
+// CallWith make rpc call with context
 func (c *Client) CallWith(ctx context.Context, method string, req interface{}, rsp interface{}) error {
 	if !c.running {
 		return ErrClientStopped
@@ -222,7 +222,7 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration) 
 	return c.callAsync(CmdNotify, method, data, nil, timeout)
 }
 
-// Notify make rpc notify with context
+// NotifyWith make rpc notify with context
 func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}) error {
 	return c.callAsyncWith(ctx, CmdNotify, method, data, nil)
 }
