@@ -1,4 +1,4 @@
-# ARPC - Sync && Async Call supported
+# ARPC - More Effective Network Communication 
 
 [![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][9]][10]
 
@@ -14,9 +14,15 @@
 [10]: https://codecov.io/gh/lesismal/arpc
 
 
+| pattern | directions | description |
+| ------ | ----- | ---- |
+|  call  | c -> s<br>s -> c | request and response |
+| notify | c -> s<br>s -> c | request without response |
+
+
 ## Contents
 
-- [ARPC - Sync && Async Call supported](#arpc---sync--async-call-supported)
+- [ARPC - More Effective Network Communication](#arpc---more--effective-network-communication)
 	- [Contents](#contents)
 	- [Features](#features)
 	- [Header Layout](#header-layout)
