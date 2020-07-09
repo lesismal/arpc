@@ -352,11 +352,11 @@ func (c *Client) getSession(seq uint64) (*rpcSession, bool) {
 	return session, ok
 }
 
-func (c *Client) deleteSession(seq uint64) {
-	c.mux.Lock()
-	delete(c.sessionMap, seq)
-	c.mux.Unlock()
-}
+// func (c *Client) deleteSession(seq uint64) {
+// 	c.mux.Lock()
+// 	delete(c.sessionMap, seq)
+// 	c.mux.Unlock()
+// }
 
 func (c *Client) addAsyncHandler(seq uint64, h HandlerFunc) {
 	c.mux.Lock()

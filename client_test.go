@@ -271,35 +271,60 @@ func TestClientPool(t *testing.T) {
 }
 
 func TestClientAll(t *testing.T) {
-	s := NewServer()
-	s.Handler.Handle("/call", func(ctx *Context) {
-		src := ""
-		err := ctx.Bind(&src)
-		if err != nil {
-			log.Fatalf("Bind failed: %v", err)
-		}
-		ctx.Write(src)
-	})
-	s.Handler.Handle("/callasync", func(ctx *Context) {
-		src := ""
-		err := ctx.Bind(&src)
-		if err != nil {
-			log.Fatalf("Bind failed: %v", err)
-		}
-		ctx.Write(src)
-	})
-	s.Handler.Handle("/notify", func(ctx *Context) {
-		src := ""
-		err := ctx.Bind(&src)
-		if err != nil {
-			log.Fatalf("Bind failed: %v", err)
-		}
-		ctx.Write(src)
-	})
-	go s.Run(allAddr)
-	defer s.Stop()
+	var src = "test"
+	var dst = ""
+	var dstB []byte
 
-	time.Sleep(time.Second / 10)
+	newSvr := func() *Server {
+		s := NewServer()
+		s.Handler.Handle("/call", func(ctx *Context) {
+			src := ""
+			err := ctx.Bind(&src)
+			if err != nil {
+				log.Fatalf("Bind failed: %v", err)
+			}
+			ctx.Write(src)
+		})
+		s.Handler.Handle("/callasync", func(ctx *Context) {
+			src := ""
+			err := ctx.Bind(&src)
+			if err != nil {
+				log.Fatalf("Bind failed: %v", err)
+			}
+			ctx.Write(src)
+		})
+		s.Handler.Handle("/notify", func(ctx *Context) {
+			src := ""
+			err := ctx.Bind(&src)
+			if err != nil {
+				log.Fatalf("Bind failed: %v", err)
+			}
+			ctx.Write(src)
+		})
+		s.Handler.Handle("/timeout", func(ctx *Context) {
+			src := ""
+			err := ctx.Bind(&src)
+			if err != nil {
+				log.Fatalf("Bind failed: %v", err)
+			}
+			time.Sleep(time.Second / 100)
+			ctx.Write(src)
+		})
+		s.Handler.Handle("/overstock", func(ctx *Context) {
+			src := ""
+			err := ctx.Bind(&src)
+			if err != nil {
+				log.Fatalf("Bind failed: %v", err)
+			}
+			ctx.Write(src)
+		})
+		go s.Run(allAddr)
+		return s
+	}
+
+	s := newSvr()
+	defer s.Stop()
+	time.Sleep(time.Second / 100)
 
 	c, err := NewClient(func() (net.Conn, error) {
 		return net.DialTimeout("tcp", allAddr, time.Second)
@@ -307,27 +332,63 @@ func TestClientAll(t *testing.T) {
 	if err != nil {
 		log.Fatalf("NewClient() failed: %v", err)
 	}
+
+	if err = c.Call("/call", src, &dst, time.Second); err != ErrClientStopped {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.Call("/call", src, &dstB, time.Second); err != ErrClientStopped {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dstB)
+	}
+
+	c.Handler.SetSendQueueSize(10)
+
 	c.Run()
 	defer c.Stop()
 
-	var src = "test"
-	var dst = ""
+	c.Conn.Close()
+	time.Sleep(time.Second / 1000)
+
+	if err = c.Call("/call", src, &dst, time.Second); err != ErrClientReconnecting {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.Call("/call", src, &dstB, time.Second); err != ErrClientReconnecting {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dstB)
+	}
+
+	time.Sleep(time.Second)
+
 	if err = c.Call("/call", src, &dst, time.Second); err != nil {
 		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
+	if err = c.Call("/call", src, &dstB, time.Second); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dstB)
+	}
 	if err = c.CallWith(context.Background(), "/call", src, &dst); err != nil {
-		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+		t.Fatalf("benchClient.CallWith() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.CallWith(context.Background(), "/call", src, &dstB); err != nil {
+		t.Fatalf("benchClient.CallWith() bytes error: %v\nsrc: %v\ndst: %v", err, src, dstB)
 	}
 	if err = c.CallAsync("/callasync", src, func(*Context) {}, time.Second); err != nil {
-		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+		t.Fatalf("benchClient.CallAsync() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
 	if err = c.CallAsyncWith(context.Background(), "/callasync", src, func(*Context) {}); err != nil {
 		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
 	if err = c.Notify("/notify", src, time.Second); err != nil {
-		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+		t.Fatalf("benchClient.Notify() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
 	if err = c.NotifyWith(context.Background(), "/notify", src); err != nil {
+		t.Fatalf("benchClient.NotifyWith() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.Call("/timeout", src, &dst, time.Second/100); err != ErrClientTimeout {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	msg := NewMessage(CmdRequest, "/overstock", src, DefaultCodec)
+	for i := 0; i < 10000; i++ {
+		c.PushMsg(msg, 0)
+	}
+	if err = c.Call("/overstock", src, &dst, 1); err != ErrClientTimeout {
 		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
 }
