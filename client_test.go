@@ -347,7 +347,7 @@ func TestClientError(t *testing.T) {
 	defer c.Stop()
 
 	c.Conn.Close()
-	time.Sleep(time.Second / 1000)
+	time.Sleep(time.Second / 100)
 
 	if err = c.Call("/call", src, &dst, time.Second); err != ErrClientReconnecting {
 		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)

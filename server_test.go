@@ -123,10 +123,6 @@ func TestServer_Run(t *testing.T) {
 	tm.Stop()
 }
 
-func TestServer_Stop(t *testing.T) {
-	TestServer_Run(t)
-}
-
 func TestServer_Shutdown(t *testing.T) {
 	svr := NewServer()
 	tm := time.AfterFunc(time.Second, func() {
@@ -137,11 +133,4 @@ func TestServer_Shutdown(t *testing.T) {
 	})
 	svr.Run(":8888")
 	tm.Stop()
-}
-
-func TestNewServer(t *testing.T) {
-	svr := NewServer()
-	if svr == nil {
-		t.Errorf("NewServer() = nil")
-	}
 }
