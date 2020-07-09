@@ -44,7 +44,7 @@ func Test_valueToBytes(t *testing.T) {
 		t.Errorf("valueToBytes() = %v, want %v", got, []byte("test"))
 	}
 	err := errors.New("test")
-	if got := valueToBytes(DefaultCodec, &err); !reflect.DeepEqual(got, []byte("test")) {
+	if got := valueToBytes(nil, &err); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("valueToBytes() = %v, want %v", got, []byte("test"))
 	}
 	if got := valueToBytes(&JSONCodec{}, &struct{ I int }{I: 3}); !reflect.DeepEqual(got, []byte(`{"I":3}`)) {
@@ -56,10 +56,6 @@ func Test_memGet(t *testing.T) {
 	if got := memGet(100); len(got) != 100 {
 		t.Errorf("len(memGet(100)) = %v, want %v", len(got), 100)
 	}
-}
-
-func Test_handlePanic(t *testing.T) {
-	handlePanic()
 }
 
 func Test_safe(t *testing.T) {

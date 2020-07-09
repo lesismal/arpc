@@ -111,9 +111,9 @@ func (s *Server) Stop() error {
 	s.Listener.Close()
 	select {
 	case <-s.chStop:
-	default:
 	case <-time.After(time.Second):
 		return ErrTimeout
+	default:
 	}
 	return nil
 }

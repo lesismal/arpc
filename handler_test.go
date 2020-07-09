@@ -156,6 +156,7 @@ func Test_handler_SendN(t *testing.T) {
 }
 
 func Test_handler_OnMessage(t *testing.T) {
+
 	done := make(chan int, 1)
 	DefaultHandler.Handle("/onmessage", func(*Context) {
 		done <- 1
@@ -166,6 +167,19 @@ func Test_handler_OnMessage(t *testing.T) {
 	default:
 		t.Errorf("OnMessage not handled")
 	}
+
+	c := newClientWithConn(&net.TCPConn{}, DefaultCodec, DefaultHandler, nil)
+	msg := NewMessage(CmdRequest, "/nohandler", "hello", DefaultCodec)
+	msg[headerIndexMethodLen] = 0
+	DefaultHandler.OnMessage(c, msg)
+
+	msg = NewMessage(CmdRequest, "/onmessage", "hello", DefaultCodec)
+	msg[headerIndexMethodLen] = 0
+	DefaultHandler.OnMessage(c, msg)
+
+	msg = NewMessage(CmdResponse, "/onmessage", "hello", DefaultCodec)
+	msg[headerIndexMethodLen] = 0
+	DefaultHandler.OnMessage(c, msg)
 }
 
 func TestNewHandler(t *testing.T) {

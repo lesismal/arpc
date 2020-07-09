@@ -87,10 +87,6 @@ func TestServer_subLoad(t *testing.T) {
 	}
 }
 
-func TestServer_runLoop(t *testing.T) {
-
-}
-
 func TestServer_Serve(t *testing.T) {
 	ln, err := net.Listen("tcp", ":8888")
 	if err != nil {
@@ -101,9 +97,15 @@ func TestServer_Serve(t *testing.T) {
 	tm := time.AfterFunc(time.Second, func() {
 		t.Errorf("listener.Close timeout")
 	})
-	time.AfterFunc(time.Second/10, func() {
+	time.AfterFunc(time.Second/5, func() {
 		ln.Close()
 	})
+	svr.MaxLoad = 3
+	go func() {
+		for i := 0; i < 5; i++ {
+			net.Dial("tcp", "localhost:8888")
+		}
+	}()
 	svr.Serve(ln)
 	tm.Stop()
 }
@@ -116,6 +118,7 @@ func TestServer_Run(t *testing.T) {
 	time.AfterFunc(time.Second/10, func() {
 		svr.Stop()
 	})
+	go svr.Run(":8888")
 	svr.Run(":8888")
 	tm.Stop()
 }
