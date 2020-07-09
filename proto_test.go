@@ -31,7 +31,7 @@ func TestHeader_message(t *testing.T) {
 	}
 
 	head[4], head[5], head[6], head[7] = 0xFF, 0xFF, 0xFF, 0xFF
-	msg2, err = head.message()
+	_, err = head.message()
 	if err == nil {
 		t.Errorf("Header.message() error = nil")
 	}

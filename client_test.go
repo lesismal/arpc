@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"context"
 	"log"
 	"math/rand"
 	"net"
@@ -13,6 +14,7 @@ import (
 )
 
 var (
+	allAddr   = "localhost:16788"
 	benchAddr = "localhost:16789"
 
 	benchServer *Server
@@ -205,98 +207,127 @@ func benchmarkCallStructPayload(b *testing.B, src *message) {
 	}
 }
 
-func Test_newSession(t *testing.T) {
-}
-
-func TestClient_Run(t *testing.T) {
-}
-
-func TestClient_Stop(t *testing.T) {
-}
-
-func TestClient_Call(t *testing.T) {
-}
-
-func TestClient_CallWith(t *testing.T) {
-}
-
-func TestClient_CallAsync(t *testing.T) {
-}
-
-func TestClient_CallAsyncWith(t *testing.T) {
-}
-
-func TestClient_Notify(t *testing.T) {
-}
-
-func TestClient_NotifyWith(t *testing.T) {
-}
-
 func TestClient_PushMsg(t *testing.T) {
 }
 
-func TestClient_callAsync(t *testing.T) {
+// func TestClientPool_Size(t *testing.T) {
+// 	pool, err := NewClientPool(dialer, 2)
+// 	if err != nil {
+// 		log.Fatalf("NewClient() failed: %v", err)
+// 	}
+// 	if pool.Size() != 2 {
+// 		t.Fatalf("invalid pool size: %v", pool.Size())
+// 	}
+// }
+
+// func TestClientPool_Get(t *testing.T) {
+// 	pool, err := NewClientPool(dialer, 2)
+// 	if err != nil {
+// 		log.Fatalf("NewClient() failed: %v", err)
+// 	}
+// 	for i := 0; i < 100; i++ {
+// 		pool.Get(i)
+// 	}
+// }
+
+// func TestClientPool_Next(t *testing.T) {
+// 	pool, err := NewClientPool(dialer, 2)
+// 	if err != nil {
+// 		log.Fatalf("NewClient() failed: %v", err)
+// 	}
+// 	for i := 0; i < 100; i++ {
+// 		pool.Next()
+// 	}
+// }
+
+// func TestClientPool_Handler(t *testing.T) {
+// 	pool, err := NewClientPool(dialer, 2)
+// 	if err != nil {
+// 		log.Fatalf("NewClient() failed: %v", err)
+// 	}
+// 	pool.Handler().Handle("/poolmethod", func(*Context) {})
+// }
+
+func TestClientPool(t *testing.T) {
+	pool, err := NewClientPool(dialer, 2)
+	if err != nil {
+		log.Fatalf("NewClient() failed: %v", err)
+	}
+	if pool.Size() != 2 {
+		t.Fatalf("invalid pool size: %v", pool.Size())
+	}
+	pool.Handler().Handle("/poolmethod", func(*Context) {})
+	pool.Run()
+	defer pool.Stop()
+
+	var src = "test"
+	var dst []byte
+	if err = pool.Get(1).Call("/echo/bytes", src, &dst, time.Second); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = pool.Next().Call("/echo/bytes", src, &dst, time.Second); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
 }
 
-func TestClient_callAsyncWith(t *testing.T) {
-}
+func TestClientAll(t *testing.T) {
+	s := NewServer()
+	s.Handler.Handle("/call", func(ctx *Context) {
+		src := ""
+		err := ctx.Bind(&src)
+		if err != nil {
+			log.Fatalf("Bind failed: %v", err)
+		}
+		ctx.Write(src)
+	})
+	s.Handler.Handle("/callasync", func(ctx *Context) {
+		src := ""
+		err := ctx.Bind(&src)
+		if err != nil {
+			log.Fatalf("Bind failed: %v", err)
+		}
+		ctx.Write(src)
+	})
+	s.Handler.Handle("/notify", func(ctx *Context) {
+		src := ""
+		err := ctx.Bind(&src)
+		if err != nil {
+			log.Fatalf("Bind failed: %v", err)
+		}
+		ctx.Write(src)
+	})
+	go s.Run(allAddr)
+	defer s.Stop()
 
-func TestClient_addSession(t *testing.T) {
-}
+	time.Sleep(time.Second / 10)
 
-func TestClient_getSession(t *testing.T) {
-}
+	c, err := NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", allAddr, time.Second)
+	})
+	if err != nil {
+		log.Fatalf("NewClient() failed: %v", err)
+	}
+	c.Run()
+	defer c.Stop()
 
-func TestClient_deleteSession(t *testing.T) {
-}
-
-func TestClient_addAsyncHandler(t *testing.T) {
-}
-
-func TestClient_deleteAsyncHandler(t *testing.T) {
-}
-
-func TestClient_getAndDeleteAsyncHandler(t *testing.T) {
-}
-
-func TestClient_clearAsyncHandler(t *testing.T) {
-}
-
-func TestClient_initReader(t *testing.T) {
-}
-
-func TestClient_recvLoop(t *testing.T) {
-}
-
-func TestClient_sendLoop(t *testing.T) {
-}
-
-func TestClient_newReqMessage(t *testing.T) {
-}
-
-func Test_newClientWithConn(t *testing.T) {
-}
-
-func TestNewClient(t *testing.T) {
-}
-
-func TestClientPool_Size(t *testing.T) {
-}
-
-func TestClientPool_Get(t *testing.T) {
-}
-
-func TestClientPool_Next(t *testing.T) {
-}
-
-func TestClientPool_Handler(t *testing.T) {
-}
-
-func TestClientPool_Run(t *testing.T) {
-}
-
-func TestClientPool_Stop(t *testing.T) {
-}
-
-func TestNewClientPool(t *testing.T) {
+	var src = "test"
+	var dst = ""
+	if err = c.Call("/call", src, &dst, time.Second); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.CallWith(context.Background(), "/call", src, &dst); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.CallAsync("/callasync", src, func(*Context) {}, time.Second); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.CallAsyncWith(context.Background(), "/callasync", src, func(*Context) {}); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.Notify("/notify", src, time.Second); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.NotifyWith(context.Background(), "/notify", src); err != nil {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
 }
