@@ -6,39 +6,11 @@ package arpc
 
 import (
 	"context"
+	"log"
 	"net"
 	"testing"
 	"time"
 )
-
-func TestServer_Load(t *testing.T) {
-	var (
-		half  int64 = 10000
-		total int64 = half * 2
-	)
-
-	s := NewServer()
-	for i := int64(0); i < total; i++ {
-		s.addLoad()
-	}
-	if s.CurrLoad != total {
-		t.Fatalf("addLoad failed: %v != %v", s.CurrLoad, total)
-	}
-
-	for i := int64(0); i < half; i++ {
-		s.subLoad()
-	}
-	if s.CurrLoad != half {
-		t.Fatalf("subLoad failed: %v != %v", s.CurrLoad, half)
-	}
-
-	for i := int64(0); i < half; i++ {
-		s.subLoad()
-	}
-	if s.CurrLoad != 0 {
-		t.Fatalf("subLoad failed: %v != %v", s.CurrLoad, half)
-	}
-}
 
 func TestServer_Service(t *testing.T) {
 	addr := ":15678"
@@ -68,5 +40,105 @@ func TestServer_Service(t *testing.T) {
 	err = s.Shutdown(ctx)
 	if err != nil {
 		t.Fatalf("Shutdown failed: %v", err)
+	}
+}
+
+func TestServer_addLoad(t *testing.T) {
+	var (
+		half  int64 = 10000
+		total int64 = half * 2
+	)
+
+	s := NewServer()
+	for i := int64(0); i < total; i++ {
+		s.addLoad()
+	}
+	if s.CurrLoad != total {
+		t.Fatalf("addLoad failed: %v != %v", s.CurrLoad, total)
+	}
+}
+
+func TestServer_subLoad(t *testing.T) {
+	var (
+		half  int64 = 10000
+		total int64 = half * 2
+	)
+
+	s := NewServer()
+	for i := int64(0); i < total; i++ {
+		s.addLoad()
+	}
+	if s.CurrLoad != total {
+		t.Fatalf("addLoad failed: %v != %v", s.CurrLoad, total)
+	}
+
+	for i := int64(0); i < half; i++ {
+		s.subLoad()
+	}
+	if s.CurrLoad != half {
+		t.Fatalf("subLoad failed: %v != %v", s.CurrLoad, half)
+	}
+
+	for i := int64(0); i < half; i++ {
+		s.subLoad()
+	}
+	if s.CurrLoad != 0 {
+		t.Fatalf("subLoad failed: %v != %v", s.CurrLoad, half)
+	}
+}
+
+func TestServer_runLoop(t *testing.T) {
+
+}
+
+func TestServer_Serve(t *testing.T) {
+	ln, err := net.Listen("tcp", ":8888")
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	svr := NewServer()
+	tm := time.AfterFunc(time.Second, func() {
+		t.Errorf("listener.Close timeout")
+	})
+	time.AfterFunc(time.Second/10, func() {
+		ln.Close()
+	})
+	svr.Serve(ln)
+	tm.Stop()
+}
+
+func TestServer_Run(t *testing.T) {
+	svr := NewServer()
+	tm := time.AfterFunc(time.Second, func() {
+		t.Errorf("Server.Stop timeout")
+	})
+	time.AfterFunc(time.Second/10, func() {
+		svr.Stop()
+	})
+	svr.Run(":8888")
+	tm.Stop()
+}
+
+func TestServer_Stop(t *testing.T) {
+	TestServer_Run(t)
+}
+
+func TestServer_Shutdown(t *testing.T) {
+	svr := NewServer()
+	tm := time.AfterFunc(time.Second, func() {
+		t.Errorf("Server.Stop timeout")
+	})
+	time.AfterFunc(time.Second/10, func() {
+		svr.Shutdown(context.Background())
+	})
+	svr.Run(":8888")
+	tm.Stop()
+}
+
+func TestNewServer(t *testing.T) {
+	svr := NewServer()
+	if svr == nil {
+		t.Errorf("NewServer() = nil")
 	}
 }

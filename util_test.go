@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -18,7 +19,17 @@ func Test_strToBytes(t *testing.T) {
 		args args
 		want []byte
 	}{
-		// TODO: Add test cases.
+		struct {
+			name string
+			args args
+			want []byte
+		}{
+			name: "strToBytes",
+			args: args{
+				s: "hello world",
+			},
+			want: []byte("hello world"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,7 +49,17 @@ func Test_bytesToStr(t *testing.T) {
 		args args
 		want string
 	}{
-		// TODO: Add test cases.
+		struct {
+			name string
+			args args
+			want string
+		}{
+			name: "bytesToStr",
+			args: args{
+				b: []byte("hello world"),
+			},
+			want: "hello world",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,22 +71,13 @@ func Test_bytesToStr(t *testing.T) {
 }
 
 func Test_valueToBytes(t *testing.T) {
-	type args struct {
-		codec Codec
-		v     interface{}
+	if got := valueToBytes(DefaultCodec, fmt.Errorf("test")); !reflect.DeepEqual(got, []byte("test")) {
+		t.Errorf("valueToBytes() = %v, want %v", got, []byte("test"))
 	}
-	tests := []struct {
-		name string
-		args args
-		want []byte
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := valueToBytes(tt.args.codec, tt.args.v); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("valueToBytes() = %v, want %v", got, tt.want)
-			}
-		})
+}
+
+func Test_memGet(t *testing.T) {
+	if got := memGet(100); len(got) != 100 {
+		t.Errorf("len(memGet(100)) = %v, want %v", len(got), 100)
 	}
 }
