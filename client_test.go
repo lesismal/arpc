@@ -1,3 +1,7 @@
+// Copyright 2020 lesismal. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 package arpc
 
 import (
@@ -199,4 +203,100 @@ func benchmarkCallStructPayload(b *testing.B, src *message) {
 			b.Fatalf("benchClient.Call() struct error: %v\nsrc: %v\ndst: %v", err, src, dst)
 		}
 	}
+}
+
+func Test_newSession(t *testing.T) {
+}
+
+func TestClient_Run(t *testing.T) {
+}
+
+func TestClient_Stop(t *testing.T) {
+}
+
+func TestClient_Call(t *testing.T) {
+}
+
+func TestClient_CallWith(t *testing.T) {
+}
+
+func TestClient_CallAsync(t *testing.T) {
+}
+
+func TestClient_CallAsyncWith(t *testing.T) {
+}
+
+func TestClient_Notify(t *testing.T) {
+}
+
+func TestClient_NotifyWith(t *testing.T) {
+}
+
+func TestClient_PushMsg(t *testing.T) {
+}
+
+func TestClient_callAsync(t *testing.T) {
+}
+
+func TestClient_callAsyncWith(t *testing.T) {
+}
+
+func TestClient_addSession(t *testing.T) {
+}
+
+func TestClient_getSession(t *testing.T) {
+}
+
+func TestClient_deleteSession(t *testing.T) {
+}
+
+func TestClient_addAsyncHandler(t *testing.T) {
+}
+
+func TestClient_deleteAsyncHandler(t *testing.T) {
+}
+
+func TestClient_getAndDeleteAsyncHandler(t *testing.T) {
+}
+
+func TestClient_clearAsyncHandler(t *testing.T) {
+}
+
+func TestClient_initReader(t *testing.T) {
+}
+
+func TestClient_recvLoop(t *testing.T) {
+}
+
+func TestClient_sendLoop(t *testing.T) {
+}
+
+func TestClient_newReqMessage(t *testing.T) {
+}
+
+func Test_newClientWithConn(t *testing.T) {
+}
+
+func TestNewClient(t *testing.T) {
+}
+
+func TestClientPool_Size(t *testing.T) {
+}
+
+func TestClientPool_Get(t *testing.T) {
+}
+
+func TestClientPool_Next(t *testing.T) {
+}
+
+func TestClientPool_Handler(t *testing.T) {
+}
+
+func TestClientPool_Run(t *testing.T) {
+}
+
+func TestClientPool_Stop(t *testing.T) {
+}
+
+func TestNewClientPool(t *testing.T) {
 }

@@ -1,3 +1,7 @@
+// Copyright 2020 lesismal. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 package arpc
 
 import (
@@ -7,62 +11,14 @@ import (
 )
 
 func Test_strToBytes(t *testing.T) {
-	type args struct {
-		s string
-	}
-	tests := []struct {
-		name string
-		args args
-		want []byte
-	}{
-		struct {
-			name string
-			args args
-			want []byte
-		}{
-			name: "strToBytes",
-			args: args{
-				s: "hello world",
-			},
-			want: []byte("hello world"),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := strToBytes(tt.args.s); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("strToBytes() = %v, want %v", got, tt.want)
-			}
-		})
+	if got := strToBytes("hello world"); !reflect.DeepEqual(got, []byte("hello world")) {
+		t.Errorf("strToBytes() = %v, want %v", got, []byte("hello world"))
 	}
 }
 
 func Test_bytesToStr(t *testing.T) {
-	type args struct {
-		b []byte
-	}
-	tests := []struct {
-		name string
-		args args
-		want string
-	}{
-		struct {
-			name string
-			args args
-			want string
-		}{
-			name: "bytesToStr",
-			args: args{
-				b: []byte("hello world"),
-			},
-			want: "hello world",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := bytesToStr(tt.args.b); got != tt.want {
-				t.Errorf("bytesToStr() = %v, want %v", got, tt.want)
-			}
-		})
+	if got := bytesToStr([]byte("hello world")); got != "hello world" {
+		t.Errorf("bytesToStr() = %v, want %v", got, "hello world")
 	}
 }
 
@@ -91,8 +47,8 @@ func Test_valueToBytes(t *testing.T) {
 	if got := valueToBytes(DefaultCodec, &err); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("valueToBytes() = %v, want %v", got, []byte("test"))
 	}
-	if got := valueToBytes(DefaultCodec, &struct{ I int }{I: 3}); !reflect.DeepEqual(got, []byte(`{"I":3}`)) {
-		t.Errorf("valueToBytes() = %v, want %v", got, []byte("test"))
+	if got := valueToBytes(&JSONCodec{}, &struct{ I int }{I: 3}); !reflect.DeepEqual(got, []byte(`{"I":3}`)) {
+		t.Errorf("valueToBytes() = %v, want %v", got, []byte(`{"I":3}`))
 	}
 }
 
