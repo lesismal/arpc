@@ -36,10 +36,9 @@ func (s *Server) subLoad() int64 {
 
 func (s *Server) runLoop() error {
 	var (
-		err       error
-		cli       *Client
-		conn      net.Conn
-		tempDelay time.Duration
+		err  error
+		cli  *Client
+		conn net.Conn
 	)
 
 	s.running = true
@@ -60,16 +59,8 @@ func (s *Server) runLoop() error {
 			}
 		} else {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				if tempDelay == 0 {
-					tempDelay = 5 * time.Millisecond
-				} else {
-					tempDelay *= 2
-				}
-				if max := 1 * time.Second; tempDelay > max {
-					tempDelay = max
-				}
-				logError("%v Accept error: %v; retrying in %v", s.Handler.LogTag(), err, tempDelay)
-				time.Sleep(tempDelay)
+				logError("%v Accept error: %v; retrying...", s.Handler.LogTag(), err)
+				time.Sleep(time.Second / 20)
 			} else {
 				logError("%v Accept error: %v", s.Handler.LogTag(), err)
 				break

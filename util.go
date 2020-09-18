@@ -19,19 +19,14 @@ func safe(call func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			errstr := fmt.Sprintf("%sruntime error: %v\ntraceback:\n", separator, err)
-
-			i := 2
-			for {
+			for i := 2; i <= maxStack; i++ {
 				pc, file, line, ok := runtime.Caller(i)
-				if !ok || i > maxStack {
+				if !ok {
 					break
 				}
 				errstr += fmt.Sprintf("    stack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
-				i++
 			}
-			errstr += separator
-
-			DefaultLogger.Error(errstr)
+			DefaultLogger.Error(errstr + separator)
 		}
 	}()
 	call()
