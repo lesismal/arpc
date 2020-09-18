@@ -14,17 +14,14 @@
 [10]: https://codecov.io/gh/lesismal/arpc
 
 
-| pattern | directions | description |
-| ------ | ----- | ---- |
-|  call  | c -> s<br>s -> c | request and response |
-| notify | c -> s<br>s -> c | request without response |
 
 
 ## Contents
 
-- [ARPC - More Effective Network Communication](#arpc---more--effective-network-communication)
+- [ARPC - More Effective Network Communication](#arpc---more-effective-network-communication)
 	- [Contents](#contents)
 	- [Features](#features)
+	- [Performance](#performance)
 	- [Header Layout](#header-layout)
 	- [Installation](#installation)
 	- [Quick start](#quick-start)
@@ -46,23 +43,36 @@
 
 
 ## Features
-- [x] Async Response
-- [x] Client call Server Sync
-- [x] Client call Server Async
-- [x] Client notify Server
-- [x] Server call Client Sync
-- [x] Server call Client Async
-- [x] Server notify Client
+- [x] Two-Way Calling
+- [x] Two-Way Calling Notify
+- [x] Sync and Async Calling
+- [x] Sync and Async Response
 - [x] Batch Write | Writev | net.Buffers 
 - [x] Broadcast
+
+| Pattern | Interactive Directions       | Description              |
+| ------- | ---------------------------- | ------------------------ |
+| call    | two-way:<br>c -> s<br>s -> c | request and response     |
+| notify  | two-way:<br>c -> s<br>s -> c | request without response |
+
+
+## Performance
+
+- simple echo load testing
+
+| Framework | Protocol        | Codec         | Configuration                                             | Connection Num | Goroutine Num | Qps     |
+| --------- | --------------- | ------------- | --------------------------------------------------------- | -------------- | ------------- | ------- |
+| arpc      | tcp/localhost   | encoding/json | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10            | 80-100k |
+| grpc      | http2/localhost | protobuf      | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10            | 20-30k  |
+
 
 ## Header Layout
 
 - LittleEndian
 
-|  cmd   | async  | methodlen |  null   | bodylen | sequence |       method         | body |
-| -----  |  ----  |   ----    |   ----  |  ----   |   ----   |        ----          | ---- |
-| 1 byte | 1 byte |  1 bytes  | 1 bytes | 4 bytes |  8 bytes | 0 or methodlen bytes | ...  |
+| cmd    | async  | methodlen | null    | bodylen | sequence | method               | body |
+| ------ | ------ | --------- | ------- | ------- | -------- | -------------------- | ---- |
+| 1 byte | 1 byte | 1 bytes   | 1 bytes | 4 bytes | 8 bytes  | 0 or methodlen bytes | ...  |
 
 
 
