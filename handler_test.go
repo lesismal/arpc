@@ -122,7 +122,7 @@ func Test_handler_SetRecvBufferSize(t *testing.T) {
 }
 
 func Test_handler_SendQueueSize(t *testing.T) {
-	if got := DefaultHandler.SendQueueSize(); got != 1024 {
+	if got := DefaultHandler.SendQueueSize(); got <= 0 {
 		t.Errorf("handler.RecvBufferSize() = %v, want %v", got, 1024)
 	}
 }

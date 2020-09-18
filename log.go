@@ -5,7 +5,6 @@
 package arpc
 
 import (
-	"fmt"
 	"log"
 )
 
@@ -48,7 +47,7 @@ func SetLogLevel(lvl int) {
 		DefaultLogger.SetLogLevel(lvl)
 		break
 	default:
-		panic(fmt.Errorf("invalid log level: %v", lvl))
+		log.Printf("invalid log level: %v", lvl)
 	}
 }
 
@@ -64,7 +63,7 @@ func (l *logger) SetLogLevel(lvl int) {
 		l.level = lvl
 		break
 	default:
-		panic(fmt.Errorf("invalid log level: %v", lvl))
+		log.Printf("invalid log level: %v", lvl)
 	}
 }
 

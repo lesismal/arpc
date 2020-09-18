@@ -80,7 +80,7 @@ func valueToBytes(codec Codec, v interface{}) []byte {
 		}
 		data, err = codec.Marshal(vt)
 		if err != nil {
-			panic(err)
+			logError("valueToBytes: %v", err)
 		}
 	}
 

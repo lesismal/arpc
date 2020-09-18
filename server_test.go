@@ -118,8 +118,8 @@ func TestServer_Run(t *testing.T) {
 	time.AfterFunc(time.Second/10, func() {
 		svr.Stop()
 	})
-	go svr.Run(":8888")
-	svr.Run(":8888")
+	go svr.Run(":8889")
+	svr.Run(":8889")
 	tm.Stop()
 }
 
@@ -131,6 +131,6 @@ func TestServer_Shutdown(t *testing.T) {
 	time.AfterFunc(time.Second/10, func() {
 		svr.Shutdown(context.Background())
 	})
-	svr.Run(":8888")
+	svr.Run(":8899")
 	tm.Stop()
 }

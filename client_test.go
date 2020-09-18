@@ -277,47 +277,6 @@ func newSvr() *Server {
 	go s.Run(allAddr)
 	return s
 }
-func TestClientError(t *testing.T) {
-	var src = "test"
-	var dst = ""
-	var dstB []byte
-
-	s := newSvr()
-	defer s.Stop()
-	time.Sleep(time.Second / 100)
-
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", allAddr, time.Second)
-	})
-	if err != nil {
-		log.Fatalf("NewClient() failed: %v", err)
-	}
-
-	if err = c.Call("/call", src, &dst, time.Second); err != ErrClientStopped {
-		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
-	}
-	if err = c.Call("/call", src, &dstB, time.Second); err != ErrClientStopped {
-		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dstB)
-	}
-
-	c.Handler.SetSendQueueSize(10)
-
-	c.Run()
-	defer c.Stop()
-
-	c.Conn.Close()
-	time.Sleep(time.Second / 100)
-
-	c.Call("/call", src, &dst, time.Second)
-
-	time.Sleep(time.Second)
-
-	msg := NewMessage(CmdRequest, "/overstock", src, DefaultCodec)
-	for i := 0; i < 10000; i++ {
-		c.PushMsg(msg, 0)
-	}
-	c.Call("/overstock", src, &dst, 1)
-}
 
 func TestClientNormal(t *testing.T) {
 	var src = "test"
@@ -365,4 +324,54 @@ func TestClientNormal(t *testing.T) {
 	if err = c.Call("/timeout", src, &dst, time.Second/100); err != ErrClientTimeout {
 		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
+	toCtx, cancel := context.WithTimeout(context.Background(), time.Second/1000)
+	defer cancel()
+	if err = c.CallWith(toCtx, "/timeout", src, &dst); err != ErrClientTimeout {
+		t.Fatalf("benchClient.CallWith() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+}
+
+func TestClientError(t *testing.T) {
+	var src = "test"
+	var dst = ""
+	var dstB []byte
+
+	s := newSvr()
+	defer s.Stop()
+	time.Sleep(time.Second / 100)
+
+	c, err := NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", allAddr, time.Second)
+	})
+	if err != nil {
+		log.Fatalf("NewClient() failed: %v", err)
+	}
+
+	if err = c.Call("/call", src, &dst, time.Second); err != ErrClientStopped {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	}
+	if err = c.Call("/call", src, &dstB, time.Second); err != ErrClientStopped {
+		t.Fatalf("benchClient.Call() bytes error: %v\nsrc: %v\ndst: %v", err, src, dstB)
+	}
+
+	c.Handler.SetSendQueueSize(10)
+
+	c.Run()
+	defer c.Stop()
+
+	c.Conn.Close()
+	time.Sleep(time.Second / 100)
+
+	c.Call("/call", src, &dst, time.Second)
+
+	time.Sleep(time.Second)
+
+	msg := NewMessage(CmdRequest, "/overstock", src, DefaultCodec)
+	for i := 0; i < 10000; i++ {
+		c.PushMsg(msg, 0)
+	}
+	c.Call("/overstock", src, &dst, 1)
+	c.Call("/overstock", src, &dst, 0)
+	c.Call("/nohandler", src, &dst, time.Second/100)
+	c.PushMsg(msg, -1)
 }

@@ -13,6 +13,10 @@ func TestSetLogger(t *testing.T) {
 
 func TestSetLogLevel(t *testing.T) {
 	SetLogLevel(LogLevelAll)
+	func() {
+		defer func() { recover() }()
+		SetLogLevel(1000)
+	}()
 }
 
 func Test_logger_SetLogLevel(t *testing.T) {
