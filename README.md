@@ -44,7 +44,7 @@
 
 ## Features
 - [x] Two-Way Calling
-- [x] Two-Way Calling Notify
+- [x] Two-Way Notify
 - [x] Sync and Async Calling
 - [x] Sync and Async Response
 - [x] Batch Write | Writev | net.Buffers 
