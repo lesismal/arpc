@@ -67,6 +67,18 @@ func (c *Client) Run() {
 	}
 }
 
+// RunWebsocket client
+func (c *Client) RunWebsocket() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	if !c.running {
+		c.running = true
+		c.initReader()
+		go safe(c.sendLoop)
+		c.Conn.(WebsocketConn).HandleWebsocket(c.recvLoop)
+	}
+}
+
 // Stop client
 func (c *Client) Stop() {
 	c.mux.Lock()
