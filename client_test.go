@@ -9,8 +9,11 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"testing"
 	"time"
+
+	"github.com/lesismal/arpcext/websocket"
 )
 
 var (
@@ -278,6 +281,46 @@ func newSvr() *Server {
 	return s
 }
 
+func TestWebsocket(t *testing.T) {
+	ln, _ := websocket.NewListener(":28888", nil)
+	defer ln.Close()
+	http.HandleFunc("/ws", ln.(*websocket.Listener).Handler)
+	go func() {
+		err := http.ListenAndServe(":28888", nil)
+		if err != nil {
+			t.Fatal("ListenAndServe: ", err)
+		}
+	}()
+
+	svr := NewServer()
+	svr.Handler.SetBatchRecv(false)
+	// register router
+	svr.Handler.Handle("/echo", func(ctx *Context) {
+		str := ""
+		ctx.Bind(&str)
+		ctx.Write(str)
+	})
+	go svr.Serve(ln)
+
+	client, err := NewClient(func() (net.Conn, error) {
+		return websocket.Dial("ws://localhost:28888/ws")
+	})
+	if err != nil {
+		panic(err)
+	}
+	client.Handler.SetBatchRecv(false)
+
+	client.Run()
+	defer client.Stop()
+
+	req := "hello"
+	rsp := ""
+	err = client.Call("/echo", &req, &rsp, time.Second*5)
+	if err != nil {
+		t.Fatalf("Call failed: %v", err)
+	}
+}
+
 func TestClientNormal(t *testing.T) {
 	var src = "test"
 	var dst = ""
@@ -291,7 +334,7 @@ func TestClientNormal(t *testing.T) {
 		return net.DialTimeout("tcp", allAddr, time.Second)
 	})
 	if err != nil {
-		log.Fatalf("NewClient() failed: %v", err)
+		t.Fatalf("NewClient() failed: %v", err)
 	}
 
 	c.Run()
