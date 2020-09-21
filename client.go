@@ -640,6 +640,9 @@ func NewClientPool(dialer func() (net.Conn, error), size int) (*ClientPool, erro
 			}
 			return nil, err
 		}
+		if i > 0 {
+			c.Handler = pool.clients[0].Handler
+		}
 		pool.clients[i] = c
 	}
 
