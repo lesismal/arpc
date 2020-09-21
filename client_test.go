@@ -282,11 +282,11 @@ func newSvr() *Server {
 }
 
 func TestWebsocket(t *testing.T) {
-	ln, _ := websocket.NewListener(":28888", nil)
+	ln, _ := websocket.NewListener(":16790", nil)
 	defer ln.Close()
 	http.HandleFunc("/ws", ln.(*websocket.Listener).Handler)
 	go func() {
-		err := http.ListenAndServe(":28888", nil)
+		err := http.ListenAndServe(":16790", nil)
 		if err != nil {
 			t.Fatal("ListenAndServe: ", err)
 		}
@@ -303,7 +303,7 @@ func TestWebsocket(t *testing.T) {
 	go svr.Serve(ln)
 
 	client, err := NewClient(func() (net.Conn, error) {
-		return websocket.Dial("ws://localhost:28888/ws")
+		return websocket.Dial("ws://localhost:16790/ws")
 	})
 	if err != nil {
 		panic(err)
