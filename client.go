@@ -571,7 +571,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 
 	c.Head = Header(c.head[:])
 	c.Codec = DefaultCodec
-	c.Handler = DefaultHandler
+	c.Handler = DefaultHandler.Clone()
 	c.Dialer = dialer
 	c.chSend = make(chan Message, c.Handler.SendQueueSize())
 	c.sessionMap = make(map[uint64]*rpcSession)
