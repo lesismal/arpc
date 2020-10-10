@@ -95,17 +95,17 @@ func (t *TopicAgent) Publish(s *Server, from *arpc.Client, topic *Topic) {
 		err := to.PushMsg(msg, arpc.TimeZero)
 		if err != nil {
 			if from != nil {
-				arpc.DefaultLogger.Debug("[Publish] [%v] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
+				arpc.DefaultLogger.Error("[Publish] [topic: '%v'] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Debug("[Publish] [%v] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
+				arpc.DefaultLogger.Error("[Publish] [topic: '%v'] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
 			}
 		}
 	}
 	t.mux.RUnlock()
 	if from != nil {
-		arpc.DefaultLogger.Debug("%v [Publish] [%v] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
+		arpc.DefaultLogger.Debug("%v [Publish] [topic: '%v'] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
 	} else {
-		arpc.DefaultLogger.Debug("%v [Publish] [%v] from Server", s.Handler.LogTag(), topic.Name)
+		arpc.DefaultLogger.Debug("%v [Publish] [topic: '%v'] from Server", s.Handler.LogTag(), topic.Name)
 	}
 }
 
@@ -117,15 +117,15 @@ func (t *TopicAgent) PublishToOne(s *Server, from *arpc.Client, topic *Topic) {
 		err := to.PushMsg(msg, arpc.TimeZero)
 		if err != nil {
 			if from != nil {
-				arpc.DefaultLogger.Debug("[PublishToOne] [%v] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
+				arpc.DefaultLogger.Error("[PublishToOne] [topic: '%v'] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Debug("[PublishToOne] [%v] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
+				arpc.DefaultLogger.Error("[PublishToOne] [topic: '%v'] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
 			}
 		} else {
 			if from != nil {
-				arpc.DefaultLogger.Debug("%v [PublishToOne] [%v] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
+				arpc.DefaultLogger.Debug("%v [PublishToOne] [topic: '%v'] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Debug("%v [PublishToOne] [%v] from Server", s.Handler.LogTag(), topic.Name)
+				arpc.DefaultLogger.Debug("%v [PublishToOne] [topic: '%v'] from Server", s.Handler.LogTag(), topic.Name)
 			}
 			break
 		}
