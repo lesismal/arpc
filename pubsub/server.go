@@ -23,44 +23,41 @@ type clientTopics struct {
 type Server struct {
 	*arpc.Server
 
-	Sharding int32
-
 	Password string
 
 	mux sync.RWMutex
 
 	topics map[string]*TopicAgent
 
-	topicFactory func(name string, sharding int32, data []byte, timestamp int64) Topic
-
 	clients map[*arpc.Client]map[string]*TopicAgent
 }
 
-// SetTopicFactory .
-func (s *Server) SetTopicFactory(f func(name string, sharding int32, data []byte, timestamp int64) Topic) {
-	if f == nil {
-		panic("invalid Topic Factory: nil")
-	}
-	s.topicFactory = f
-}
-
-// NewTopic .
-func (s *Server) NewTopic(name string, sharding int32, data []byte, timestamp int64) Topic {
-	return s.topicFactory(name, sharding, data, timestamp)
-}
-
 // Publish topic
-func (s *Server) Publish(topic Topic) {
-	defer arpc.HandlePanic()
-	topic.SetSharding(s.Sharding)
-	s.getOrMakeTopic(topic.GetName()).Publish(s, nil, topic)
+func (s *Server) Publish(topicName string, v interface{}) error {
+	topic, err := newTopic(topicName, arpc.ValueToBytes(s.Codec, v))
+	if err != nil {
+		return err
+	}
+	_, err = topic.toBytes()
+	if err != nil {
+		return err
+	}
+	s.getOrMakeTopic(topic.Name).Publish(s, nil, topic)
+	return nil
 }
 
 // PublishToOne topic
-func (s *Server) PublishToOne(topic Topic) {
-	defer arpc.HandlePanic()
-	topic.SetSharding(s.Sharding)
-	s.getOrMakeTopic(topic.GetName()).PublishToOne(s, nil, topic)
+func (s *Server) PublishToOne(topicName string, v interface{}) error {
+	topic, err := newTopic(topicName, arpc.ValueToBytes(s.Codec, v))
+	if err != nil {
+		return err
+	}
+	_, err = topic.toBytes()
+	if err != nil {
+		return err
+	}
+	s.getOrMakeTopic(topic.Name).PublishToOne(s, nil, topic)
+	return nil
 }
 
 func (s *Server) invalid(ctx *arpc.Context) bool {
@@ -96,21 +93,21 @@ func (s *Server) onSubscribe(ctx *arpc.Context) {
 		return
 	}
 
-	topic := s.NewTopic("", 0, nil, 0)
-	err := ctx.Bind(topic)
+	topic := &Topic{}
+	err := topic.fromBytes(ctx.Body())
 	if err != nil {
 		ctx.Error(err)
 		arpc.DefaultLogger.Warn("%v [Subscribe] failed [%v], from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
-	topicName := topic.GetName()
+	topicName := topic.Name
 	if topicName != "" {
 		cts := ctx.Client.UserData.(*clientTopics)
 		cts.mux.Lock()
 		tp, ok := cts.topicAgents[topicName]
 		if !ok {
 			tp = s.getOrMakeTopic(topicName)
-			cts.topicAgents[topic.GetName()] = tp
+			cts.topicAgents[topicName] = tp
 			cts.mux.Unlock()
 			tp.Add(ctx.Client)
 			ctx.Write(nil)
@@ -133,14 +130,14 @@ func (s *Server) onUnsubscribe(ctx *arpc.Context) {
 		return
 	}
 
-	topic := s.NewTopic("", 0, nil, 0)
-	err := ctx.Bind(topic)
+	topic := &Topic{}
+	err := topic.fromBytes(ctx.Body())
 	if err != nil {
 		ctx.Error(err)
 		arpc.DefaultLogger.Warn("%v [Unsubscribe] failed [%v], from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
-	topicName := topic.GetName()
+	topicName := topic.Name
 	if topicName != "" {
 		cts := ctx.Client.UserData.(*clientTopics)
 		cts.mux.Lock()
@@ -167,18 +164,19 @@ func (s *Server) onPublish(ctx *arpc.Context) {
 		arpc.DefaultLogger.Warn("%v [Publish] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
 		return
 	}
-	topic := s.NewTopic("", 0, nil, 0)
-	err := ctx.Bind(topic)
+
+	topic := &Topic{}
+	err := topic.fromBytes(ctx.Body())
 	if err != nil {
 		ctx.Error(err)
 		arpc.DefaultLogger.Warn("%v [Publish] failed [%v], from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
-	topicName := topic.GetName()
+	topicName := topic.Name
 	if topicName != "" {
 		ctx.Write(nil)
-		s.Publish(topic)
+		s.getOrMakeTopic(topic.Name).Publish(s, ctx.Client, topic)
 		// arpc.DefaultLogger.Debug("%v [Publish] [%v], %v from\t%v", s.Handler.LogTag(), topicName, ctx.Client.Conn.RemoteAddr())
 	} else {
 		ctx.Error(ErrInvalidTopicEmpty)
@@ -193,18 +191,18 @@ func (s *Server) onPublishToOne(ctx *arpc.Context) {
 		arpc.DefaultLogger.Warn("%v [PublishToOne] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
 		return
 	}
-	topic := s.NewTopic("", 0, nil, 0)
-	err := ctx.Bind(topic)
+	topic := &Topic{}
+	err := topic.fromBytes(ctx.Body())
 	if err != nil {
 		ctx.Error(err)
 		arpc.DefaultLogger.Warn("%v [PublishToOne] failed [%v], from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
-	topicName := topic.GetName()
+	topicName := topic.Name
 	if topicName != "" {
 		ctx.Write(nil)
-		s.PublishToOne(topic)
+		s.getOrMakeTopic(topic.Name).PublishToOne(s, ctx.Client, topic)
 		// arpc.DefaultLogger.Debug("%v [Publish] [%v], %v from\t%v", s.Handler.LogTag(), topicName, ctx.Client.Conn.RemoteAddr())
 	} else {
 		ctx.Error(ErrInvalidTopicEmpty)
@@ -262,10 +260,9 @@ func (s *Server) deleteClient(c *arpc.Client) {
 func NewServer() *Server {
 	s := arpc.NewServer()
 	svr := &Server{
-		Server:       s,
-		topics:       map[string]*TopicAgent{},
-		topicFactory: defaultTopicFactory,
-		clients:      map[*arpc.Client]map[string]*TopicAgent{},
+		Server:  s,
+		topics:  map[string]*TopicAgent{},
+		clients: map[*arpc.Client]map[string]*TopicAgent{},
 	}
 	s.Handler.SetLogTag("[APS SVR]")
 	svr.Handler.Handle(routeAuthenticate, svr.onAuthenticate)

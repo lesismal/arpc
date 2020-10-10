@@ -5,105 +5,63 @@
 package pubsub
 
 import (
+	"encoding/binary"
 	"sync"
+	"time"
 
 	"github.com/lesismal/arpc"
 )
 
-var (
-	defaultTopicFactory = func(name string, sharding int32, data []byte, timestamp int64) Topic {
-		return &topic{Name: name, Data: data, Sharding: sharding, Timestamp: timestamp}
-	}
+const (
+	MAX_TOPIC_NAME_LEN = 1024
 )
 
 // TopicHandler .
-type TopicHandler func(tp Topic)
+type TopicHandler func(tp *Topic)
 
-// Topic .
-type Topic interface {
-	GetName() string
-	SetName(string)
-	GetData() []byte
-	SetData([]byte)
-	GetSharding() int32
-	SetSharding(int32)
-	GetTimestamp() int64
-	SetTimestamp(int64)
-}
-
-// SetTopicFactory .
-func SetTopicFactory(f func(name string, sharding int32, data []byte, timestamp int64) Topic) {
-	if f == nil {
-		panic("invalid Topic Factory: nil")
-	}
-	defaultTopicFactory = f
-}
-
-// // NewTopic .
-// func NewTopic(name string, sharding int32, data []byte, timestamp int64) Topic {
-// 	if defaultTopicFactory != nil {
-// 		return defaultTopicFactory(name, sharding, data, timestamp)
-// 	}
-// 	return &topic{Name: name, Sharding: sharding, Data: data, Timestamp: timestamp}
-// }
-
-type topic struct {
+type Topic struct {
 	Name      string
 	Data      []byte
-	Sharding  int32
 	Timestamp int64
+	raw       []byte
 }
 
-func (tp *topic) GetName() string {
-	if tp != nil {
-		return tp.Name
-	}
-	return ""
+func (tp *Topic) toBytes() ([]byte, error) {
+	nameLen := uint16(len(tp.Name))
+	tail := make([]byte, len(tp.Name)+10)
+	copy(tail, tp.Name)
+	binary.LittleEndian.PutUint16(tail[nameLen:], nameLen)
+	binary.LittleEndian.PutUint64(tail[nameLen+2:], uint64(tp.Timestamp))
+	dataLen := len(tp.Data)
+	tp.Data = append(tp.Data, tail...)
+	tp.raw = tp.Data
+	tp.Data = tp.raw[:dataLen]
+	return tp.raw, nil
 }
 
-func (tp *topic) SetName(name string) {
-	if tp != nil {
-		tp.Name = name
+func (tp *Topic) fromBytes(data []byte) error {
+	if len(data) < 10 {
+		return ErrInvalidTopicBytes
 	}
-}
-
-func (tp *topic) GetData() []byte {
-	if tp != nil {
-		return tp.Data
+	nameLen := int(binary.LittleEndian.Uint16(data[len(data)-10:]))
+	if nameLen == 0 || nameLen > MAX_TOPIC_NAME_LEN {
+		return ErrInvalidTopicNameLength
 	}
+	tp.Timestamp = int64(binary.LittleEndian.Uint64(data[len(data)-8:]))
+	tp.Name = string(data[len(data)-nameLen-10 : len(data)-10])
+	tp.Data = data[:len(data)-nameLen-10]
+	tp.raw = data
 	return nil
 }
 
-func (tp *topic) SetData(data []byte) {
-	if tp != nil {
-		tp.Data = data
+func newTopic(topicName string, data []byte) (*Topic, error) {
+	if topicName == "" {
+		return nil, ErrInvalidTopicEmpty
 	}
-}
-
-func (tp *topic) GetSharding() int32 {
-	if tp != nil {
-		return tp.Sharding
+	if len(topicName) > MAX_TOPIC_NAME_LEN {
+		return nil, ErrInvalidTopicNameLength
 	}
-	return 0
-}
-
-func (tp *topic) SetSharding(sharding int32) {
-	if tp != nil {
-		tp.Sharding = sharding
-	}
-}
-
-func (tp *topic) GetTimestamp() int64 {
-	if tp != nil {
-		return tp.Timestamp
-	}
-	return 0
-}
-
-func (tp *topic) SetTimestamp(timestamp int64) {
-	if tp != nil {
-		tp.Timestamp = timestamp
-	}
+	return &Topic{Name: topicName, Data: data, Timestamp: time.Now().UnixNano()}, nil
 }
 
 // TopicAgent .
@@ -130,44 +88,44 @@ func (t *TopicAgent) Delete(c *arpc.Client) {
 }
 
 // Publish .
-func (t *TopicAgent) Publish(s *Server, from *arpc.Client, topic Topic) {
-	msg := arpc.NewMessage(arpc.CmdNotify, routePublish, topic, s.Codec)
+func (t *TopicAgent) Publish(s *Server, from *arpc.Client, topic *Topic) {
+	msg := arpc.NewMessage(arpc.CmdNotify, routePublish, topic.raw, s.Codec)
 	t.mux.RLock()
 	for to := range t.clients {
 		err := to.PushMsg(msg, arpc.TimeZero)
 		if err != nil {
 			if from != nil {
-				arpc.DefaultLogger.Debug("[Publish] [%v] failed %v, from\t%v\tto\t%v", topic.GetName(), err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
+				arpc.DefaultLogger.Debug("[Publish] [%v] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Debug("[Publish] [%v] failed %v, from Server to\t%v", topic.GetName(), err, to.Conn.RemoteAddr())
+				arpc.DefaultLogger.Debug("[Publish] [%v] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
 			}
 		}
 	}
 	t.mux.RUnlock()
 	if from != nil {
-		arpc.DefaultLogger.Debug("%v [Publish] [%v] from\t%v", s.Handler.LogTag(), topic.GetName(), from.Conn.RemoteAddr())
+		arpc.DefaultLogger.Debug("%v [Publish] [%v] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
 	} else {
-		arpc.DefaultLogger.Debug("%v [Publish] [%v] from Server", s.Handler.LogTag(), topic.GetName())
+		arpc.DefaultLogger.Debug("%v [Publish] [%v] from Server", s.Handler.LogTag(), topic.Name)
 	}
 }
 
 // PublishToOne .
-func (t *TopicAgent) PublishToOne(s *Server, from *arpc.Client, topic Topic) {
-	msg := arpc.NewMessage(arpc.CmdNotify, routePublish, topic, s.Codec)
+func (t *TopicAgent) PublishToOne(s *Server, from *arpc.Client, topic *Topic) {
+	msg := arpc.NewMessage(arpc.CmdNotify, routePublish, topic.raw, s.Codec)
 	t.mux.RLock()
 	for to := range t.clients {
 		err := to.PushMsg(msg, arpc.TimeZero)
 		if err != nil {
 			if from != nil {
-				arpc.DefaultLogger.Debug("[PublishToOne] [%v] failed %v, from\t%v\tto\t%v", topic.GetName(), err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
+				arpc.DefaultLogger.Debug("[PublishToOne] [%v] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Debug("[PublishToOne] [%v] failed %v, from Server to\t%v", topic.GetName(), err, to.Conn.RemoteAddr())
+				arpc.DefaultLogger.Debug("[PublishToOne] [%v] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
 			}
 		} else {
 			if from != nil {
-				arpc.DefaultLogger.Debug("%v [PublishToOne] [%v] from\t%v", s.Handler.LogTag(), topic.GetName(), from.Conn.RemoteAddr())
+				arpc.DefaultLogger.Debug("%v [PublishToOne] [%v] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Debug("%v [PublishToOne] [%v] from Server", s.Handler.LogTag(), topic.GetName())
+				arpc.DefaultLogger.Debug("%v [PublishToOne] [%v] from Server", s.Handler.LogTag(), topic.Name)
 			}
 			break
 		}

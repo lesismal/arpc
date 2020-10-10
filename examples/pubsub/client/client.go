@@ -17,8 +17,11 @@ var (
 	topicName = "Broadcast"
 )
 
-func onTopic(topic pubsub.Topic) {
-	arpc.DefaultLogger.Info("[OnTopic] [%v] \"%v\" %v", topic.GetName(), string(topic.GetData()), time.Unix(topic.GetTimestamp(), 0).Format("15:04:05"))
+func onTopic(topic *pubsub.Topic) {
+	arpc.DefaultLogger.Info("[OnTopic] [%v] \"%v\", [%v]",
+		topic.Name,
+		string(topic.Data),
+		time.Unix(topic.Timestamp/1000000000, topic.Timestamp%1000000000).Format("2006-01-02 15:04:05.000"))
 }
 
 func consumer(c *pubsub.Client) {
@@ -35,9 +38,9 @@ func producer(c *pubsub.Client) {
 			break
 		}
 		if i%5 == 0 {
-			c.Publish(topicName, fmt.Sprintf("message %d", i), time.Second)
+			c.Publish(topicName, fmt.Sprintf("message from client %d", i), time.Second)
 		} else {
-			c.PublishToOne(topicName, fmt.Sprintf("message %d", i), time.Second)
+			c.PublishToOne(topicName, fmt.Sprintf("message from client %d", i), time.Second)
 		}
 	}
 }
