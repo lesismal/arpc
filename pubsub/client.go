@@ -132,18 +132,13 @@ func (c *Client) OnPublish(h TopicHandler) {
 	c.onPublishHandler = h
 }
 
-// onConfigItemChange .
-func (c *Client) onConfigItemChange(tp Topic) {
+// func (c *Client) invalidTopic(topic string) bool {
+// 	c.mux.RLock()
+// 	_, ok := c.topicHandlerMap[topic]
+// 	c.mux.RUnlock()
 
-}
-
-func (c *Client) invalidTopic(topic string) bool {
-	c.mux.RLock()
-	_, ok := c.topicHandlerMap[topic]
-	c.mux.RUnlock()
-
-	return !ok
-}
+// 	return !ok
+// }
 
 func (c *Client) initTopics() {
 	c.mux.RLock()
@@ -168,6 +163,8 @@ func (c *Client) initTopics() {
 }
 
 func (c *Client) onPublish(ctx *arpc.Context) {
+	defer arpc.HandlePanic()
+
 	topic := &Topic{}
 	msg := ctx.Message
 	if msg.IsError() {

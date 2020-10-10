@@ -40,7 +40,7 @@
 		- [Custom operations before conn's recv and send](#custom-operations-before-conns-recv-and-send)
 		- [Custom arpc.Client's Reader from wrapping net.Conn](#custom-arpcclients-reader-from-wrapping-netconn)
 		- [Custom arpc.Client's send queue capacity](#custom-arpcclients-send-queue-capacity)
-
+	- [PUB/SUB Examples](#pubsub-examples)
 
 ## Features
 - [x] Two-Way Calling
@@ -49,6 +49,7 @@
 - [x] Sync and Async Response
 - [x] Batch Write | Writev | net.Buffers 
 - [x] Broadcast
+- [x] PUB/SUB
 
 | Pattern | Interactive Directions       | Description              |
 | ------- | ---------------------------- | ------------------------ |
@@ -419,3 +420,121 @@ arpc.DefaultHandler.SetReaderWrapper(func(conn net.Conn) io.Reader) {
 ```golang
 arpc.DefaultHandler.SetSendQueueSize(4096)
 ```
+
+## PUB/SUB Examples
+
+- start a server
+```golang
+import "github.com/lesismal/arpc/pubsub"
+
+var (
+	address = "localhost:8888"
+
+	password = "123qwe"
+
+	topicName = "Broadcast"
+)
+
+func main() {
+	s := pubsub.NewServer()
+	s.Password = password
+
+	// server publish to all clients
+	go func() {
+		for i := 0; true; i++ {
+			time.Sleep(time.Second)
+			s.Publish(topicName, fmt.Sprintf("message from server %v", i))
+		}
+	}()
+
+	s.Run(address)
+}
+```
+
+- start a subscribe client
+```golang
+import "github.com/lesismal/arpc"
+import "github.com/lesismal/arpc/pubsub"
+
+var (
+	address = "localhost:8888"
+
+	password = "123qwe"
+
+	topicName = "Broadcast"
+)
+
+func onTopic(topic *pubsub.Topic) {
+	arpc.DefaultLogger.Info("[OnTopic] [%v] \"%v\", [%v]",
+		topic.Name,
+		string(topic.Data),
+		time.Unix(topic.Timestamp/1000000000, topic.Timestamp%1000000000).Format("2006-01-02 15:04:05.000"))
+}
+
+func main() {
+	client, err := pubsub.NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", address, time.Second*3)
+	})
+	if err != nil {
+		panic(err)
+	}
+	client.Password = password
+	client.Run()
+
+	// authentication
+	err = client.Authenticate()
+	if err != nil {
+		panic(err)
+	}
+
+	// subscribe topic
+	if err := client.Subscribe(topicName, onTopic, time.Second); err != nil {
+		panic(err)
+	}
+
+	<-make(chan int)
+}
+```
+
+- start a publish client
+```golang
+import "github.com/lesismal/arpc/pubsub"
+
+var (
+	address = "localhost:8888"
+
+	password = "123qwe"
+
+	topicName = "Broadcast"
+)
+
+func main() {
+	client, err := pubsub.NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", address, time.Second*3)
+	})
+	if err != nil {
+		panic(err)
+	}
+	client.Password = password
+	client.Run()
+
+	// authentication
+	err = client.Authenticate()
+	if err != nil {
+		panic(err)
+	}
+
+	for i := 0; true; i++ {
+		if i%5 == 0 {
+			// publish msg to all clients
+			client.Publish(topicName, fmt.Sprintf("message from client %d", i), time.Second)
+		} else {
+			// publish msg to only one client
+			client.PublishToOne(topicName, fmt.Sprintf("message from client %d", i), time.Second)
+		}
+		time.Sleep(time.Second)
+	}
+}
+```
+
+
