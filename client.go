@@ -595,8 +595,17 @@ func (pool *ClientPool) Get(i int) *Client {
 
 // Next returns a Client by round robin
 func (pool *ClientPool) Next() *Client {
-	i := atomic.AddUint64(&pool.round, 1)
-	return pool.clients[i%pool.size]
+	var client = pool.clients[atomic.AddUint64(&pool.round, 1)%pool.size]
+	if client.running && !client.reconnecting {
+		return client
+	}
+	for i := uint64(1); i < pool.size; i++ {
+		client = pool.clients[atomic.AddUint64(&pool.round, 1)%pool.size]
+		if client.running && !client.reconnecting {
+			return client
+		}
+	}
+	return client
 }
 
 // Handler returns Handler
