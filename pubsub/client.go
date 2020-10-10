@@ -90,7 +90,7 @@ func (c *Client) Unsubscribe(topic string, timeout time.Duration) error {
 
 // Publish .
 func (c *Client) Publish(topic string, v interface{}, timeout time.Duration) error {
-	err := c.Call(routePublish, c.NewTopic(topic, 0, valueToBytes(c.Codec, v), time.Now().Unix()), nil, timeout)
+	err := c.Call(routePublish, c.NewTopic(topic, 0, arpc.ValueToBytes(c.Codec, v), time.Now().Unix()), nil, timeout)
 	if err != nil {
 		arpc.DefaultLogger.Error("%v [Publish] [%v] failed [%v] to\t%v", c.Handler.LogTag(), topic, err, c.Conn.RemoteAddr())
 	}
@@ -99,7 +99,7 @@ func (c *Client) Publish(topic string, v interface{}, timeout time.Duration) err
 
 // PublishToOne .
 func (c *Client) PublishToOne(topic string, v interface{}, timeout time.Duration) error {
-	err := c.Call(routePublishToOne, c.NewTopic(topic, 0, valueToBytes(c.Codec, v), time.Now().Unix()), nil, timeout)
+	err := c.Call(routePublishToOne, c.NewTopic(topic, 0, arpc.ValueToBytes(c.Codec, v), time.Now().Unix()), nil, timeout)
 	if err != nil {
 		arpc.DefaultLogger.Error("%v [PublishToOne] [%v] failed [%v] to\t%v", c.Handler.LogTag(), topic, err, c.Conn.RemoteAddr())
 	}
@@ -128,7 +128,7 @@ func (c *Client) initTopics() {
 	c.mux.RLock()
 	for topic := range c.topicHandlerMap {
 		topicName := topic
-		go safe(func() {
+		go arpc.Safe(func() {
 			for i := 0; i < 10; i++ {
 				err := c.Call(routeSubscribe, c.NewTopic(topicName, 0, nil, time.Now().Unix()), nil, time.Second*10)
 				if err == nil {

@@ -51,14 +51,14 @@ func (s *Server) NewTopic(name string, sharding int32, data []byte, timestamp in
 
 // Publish topic
 func (s *Server) Publish(topic Topic) {
-	defer handlePanic()
+	defer arpc.HandlePanic()
 	topic.SetSharding(s.Sharding)
 	s.getOrMakeTopic(topic.GetName()).Publish(s, nil, topic)
 }
 
 // PublishToOne topic
 func (s *Server) PublishToOne(topic Topic) {
-	defer handlePanic()
+	defer arpc.HandlePanic()
 	topic.SetSharding(s.Sharding)
 	s.getOrMakeTopic(topic.GetName()).PublishToOne(s, nil, topic)
 }
@@ -68,7 +68,7 @@ func (s *Server) invalid(ctx *arpc.Context) bool {
 }
 
 func (s *Server) onAuthenticate(ctx *arpc.Context) {
-	defer handlePanic()
+	defer arpc.HandlePanic()
 
 	passwd := ""
 	err := ctx.Bind(&passwd)
@@ -89,7 +89,7 @@ func (s *Server) onAuthenticate(ctx *arpc.Context) {
 }
 
 func (s *Server) onSubscribe(ctx *arpc.Context) {
-	defer handlePanic()
+	defer arpc.HandlePanic()
 
 	if s.invalid(ctx) {
 		arpc.DefaultLogger.Warn("%v [Subscribe] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
@@ -126,7 +126,7 @@ func (s *Server) onSubscribe(ctx *arpc.Context) {
 }
 
 func (s *Server) onUnsubscribe(ctx *arpc.Context) {
-	defer handlePanic()
+	defer arpc.HandlePanic()
 
 	if s.invalid(ctx) {
 		arpc.DefaultLogger.Warn("%v [Unsubscribe] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
@@ -161,7 +161,7 @@ func (s *Server) onUnsubscribe(ctx *arpc.Context) {
 }
 
 func (s *Server) onPublish(ctx *arpc.Context) {
-	defer handlePanic()
+	defer arpc.HandlePanic()
 
 	if s.invalid(ctx) {
 		arpc.DefaultLogger.Warn("%v [Publish] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
@@ -187,7 +187,7 @@ func (s *Server) onPublish(ctx *arpc.Context) {
 }
 
 func (s *Server) onPublishToOne(ctx *arpc.Context) {
-	defer handlePanic()
+	defer arpc.HandlePanic()
 
 	if s.invalid(ctx) {
 		arpc.DefaultLogger.Warn("%v [PublishToOne] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
@@ -247,7 +247,7 @@ func (s *Server) deleteClient(c *arpc.Client) {
 		return
 	}
 
-	defer handlePanic()
+	defer arpc.HandlePanic()
 
 	cts := c.UserData.(*clientTopics)
 	cts.mux.RLock()

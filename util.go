@@ -15,7 +15,28 @@ const (
 	separator = "---------------------------------------\n"
 )
 
-func safe(call func()) {
+type Empty struct{}
+
+func HandlePanic() {
+	if err := recover(); err != nil {
+		errstr := fmt.Sprintf("%sruntime error: %v\ntraceback:\n", separator, err)
+
+		i := 2
+		for {
+			pc, file, line, ok := runtime.Caller(i)
+			if !ok || i > maxStack {
+				break
+			}
+			errstr += fmt.Sprintf("    stack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
+			i++
+		}
+		errstr += separator
+
+		logError(errstr)
+	}
+}
+
+func Safe(call func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			errstr := fmt.Sprintf("%sruntime error: %v\ntraceback:\n", separator, err)
@@ -26,29 +47,23 @@ func safe(call func()) {
 				}
 				errstr += fmt.Sprintf("    stack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
 			}
-			DefaultLogger.Error(errstr + separator)
+			logError(errstr + separator)
 		}
 	}()
 	call()
 }
 
-func memGet(size int) []byte {
-	return make([]byte, size)
-}
-
-func strToBytes(s string) []byte {
-	// return []byte(s)
+func StrToBytes(s string) []byte {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}
 	return *(*[]byte)(unsafe.Pointer(&h))
 }
 
-func bytesToStr(b []byte) string {
-	// return string(b)
+func BytesToStr(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
-func valueToBytes(codec Codec, v interface{}) []byte {
+func ValueToBytes(codec Codec, v interface{}) []byte {
 	if v == nil {
 		return nil
 	}
@@ -62,22 +77,26 @@ func valueToBytes(codec Codec, v interface{}) []byte {
 	case *[]byte:
 		data = *vt
 	case string:
-		data = strToBytes(vt)
+		data = StrToBytes(vt)
 	case *string:
-		data = strToBytes(*vt)
+		data = StrToBytes(*vt)
 	case error:
-		data = strToBytes(vt.Error())
+		data = StrToBytes(vt.Error())
 	case *error:
-		data = strToBytes((*vt).Error())
+		data = StrToBytes((*vt).Error())
 	default:
 		if codec == nil {
 			codec = DefaultCodec
 		}
 		data, err = codec.Marshal(vt)
 		if err != nil {
-			logError("valueToBytes: %v", err)
+			logError("ValueToBytes: %v", err)
 		}
 	}
 
 	return data
+}
+
+func memGet(size int) []byte {
+	return make([]byte, size)
 }

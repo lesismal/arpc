@@ -94,7 +94,7 @@ func (m Message) Error() error {
 	if !m.IsError() {
 		return nil
 	}
-	return errors.New(bytesToStr(m[HeadLen:]))
+	return errors.New(BytesToStr(m[HeadLen:]))
 }
 
 // MethodLen returns method length
@@ -131,7 +131,7 @@ func NewMessage(cmd byte, method string, v interface{}, codec Codec) Message {
 		bodyLen int
 	)
 
-	data = valueToBytes(codec, v)
+	data = ValueToBytes(codec, v)
 	bodyLen = len(method) + len(data)
 
 	msg = Message(memGet(HeadLen + bodyLen))

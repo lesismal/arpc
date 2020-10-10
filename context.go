@@ -35,7 +35,7 @@ func (ctx *Context) Bind(v interface{}) error {
 		case *string:
 			*vt = string(data)
 		case *error:
-			*vt = errors.New(bytesToStr(data))
+			*vt = errors.New(BytesToStr(data))
 		default:
 			return ctx.Client.Codec.Unmarshal(data, v)
 		}
@@ -73,7 +73,7 @@ func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
 		isError = 1
 	}
 
-	data = valueToBytes(ctx.Client.Codec, v)
+	data = ValueToBytes(ctx.Client.Codec, v)
 
 	bodyLen = len(data)
 	msg = Message(memGet(HeadLen + bodyLen))

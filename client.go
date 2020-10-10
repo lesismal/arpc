@@ -62,8 +62,8 @@ func (c *Client) Run() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		go safe(c.sendLoop)
-		go safe(c.recvLoop)
+		go Safe(c.sendLoop)
+		go Safe(c.recvLoop)
 	}
 }
 
@@ -74,7 +74,7 @@ func (c *Client) RunWebsocket() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		go safe(c.sendLoop)
+		go Safe(c.sendLoop)
 		c.Conn.(WebsocketConn).HandleWebsocket(c.recvLoop)
 	}
 }
@@ -137,28 +137,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		return ErrClientTimeout
 	}
 
-	switch msg.Cmd() {
-	case CmdResponse:
-		if msg.IsError() {
-			return msg.Error()
-		}
-		if rsp != nil {
-			switch vt := rsp.(type) {
-			case *string:
-				*vt = string(msg[HeadLen:])
-			case *[]byte:
-				*vt = msg[HeadLen:]
-			// case *error:
-			// 	*vt = msg.Error()
-			default:
-				return c.Codec.Unmarshal(msg[HeadLen:], rsp)
-			}
-		}
-	default:
-		return ErrInvalidRspMessage
-	}
-
-	return nil
+	return c.parseResponse(msg, rsp)
 }
 
 // CallWith make rpc call with context
@@ -195,6 +174,13 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 		return ErrClientTimeout
 	}
 
+	return c.parseResponse(msg, rsp)
+}
+
+func (c *Client) parseResponse(msg Message, rsp interface{}) error {
+	if msg == nil {
+		return ErrClientReconnecting
+	}
 	switch msg.Cmd() {
 	case CmdResponse:
 		if msg.IsError() {
@@ -215,7 +201,6 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 	default:
 		return ErrInvalidRspMessage
 	}
-
 	return nil
 }
 
@@ -364,6 +349,15 @@ func (c *Client) getSession(seq uint64) (*rpcSession, bool) {
 	return session, ok
 }
 
+func (c *Client) clearSession() {
+	c.mux.Lock()
+	for _, sess := range c.sessionMap {
+		close(sess.done)
+	}
+	c.sessionMap = make(map[uint64]*rpcSession)
+	c.mux.Unlock()
+}
+
 // func (c *Client) deleteSession(seq uint64) {
 // 	c.mux.Lock()
 // 	delete(c.sessionMap, seq)
@@ -444,6 +438,8 @@ func (c *Client) recvLoop() {
 
 			c.reconnecting = true
 			c.Conn.Close()
+			c.clearSession()
+			c.clearAsyncHandler()
 
 			for c.running {
 				logInfo("%v\t%v\tReconnecting ...", c.Handler.LogTag(), addr)
@@ -452,8 +448,6 @@ func (c *Client) recvLoop() {
 					c.Conn = conn
 
 					c.initReader()
-
-					c.clearAsyncHandler()
 
 					c.reconnecting = false
 
@@ -524,7 +518,7 @@ func (c *Client) newReqMessage(cmd byte, method string, req interface{}, async b
 		bodyLen int
 	)
 
-	data = valueToBytes(c.Codec, req)
+	data = ValueToBytes(c.Codec, req)
 
 	bodyLen = len(method) + len(data)
 

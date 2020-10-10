@@ -112,13 +112,13 @@ type TopicAgent struct {
 
 	mux sync.RWMutex
 
-	clients map[*arpc.Client]empty
+	clients map[*arpc.Client]arpc.Empty
 }
 
 // Add .
 func (t *TopicAgent) Add(c *arpc.Client) {
 	t.mux.Lock()
-	t.clients[c] = empty{}
+	t.clients[c] = arpc.Empty{}
 	t.mux.Unlock()
 }
 
@@ -178,6 +178,6 @@ func (t *TopicAgent) PublishToOne(s *Server, from *arpc.Client, topic Topic) {
 func newTopicAgent(topic string) *TopicAgent {
 	return &TopicAgent{
 		Name:    topic,
-		clients: map[*arpc.Client]empty{},
+		clients: map[*arpc.Client]arpc.Empty{},
 	}
 }
