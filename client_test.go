@@ -336,7 +336,7 @@ func TestClientNormal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
-
+	c.Handler.SetBatchSend(false)
 	c.Run()
 	defer c.Stop()
 
