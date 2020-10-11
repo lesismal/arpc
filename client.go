@@ -481,11 +481,13 @@ func (c *Client) sendLoop() {
 			}
 		}
 	} else {
+		var currLen = 0
 		var conn net.Conn
 		var buffers net.Buffers = make([][]byte, 10)[0:0]
 		for msg := range c.chSend {
 			buffers = append(buffers, msg)
-			for i := 1; i < 10; i++ {
+			currLen = len(c.chSend)
+			for i := 1; i < currLen && i < 10; i++ {
 				select {
 				case msg = <-c.chSend:
 					buffers = append(buffers, msg)
