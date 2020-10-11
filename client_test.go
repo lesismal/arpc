@@ -230,13 +230,21 @@ func TestClientPool(t *testing.T) {
 	if err = pool.Next().Call("/echo/bytes", src, &dst, time.Second); err != nil {
 		t.Fatalf("pool.Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
-	pool, err = NewClientPoolFromDialers([]DialerFunc{dialer, dialer})
+
+	pool2, err := NewClientPoolFromDialers([]DialerFunc{dialer, dialer})
 	if err != nil {
 		t.Fatalf("NewClientPoolFromDialers error: %v", err)
 	}
-	pool, err = NewClientPoolFromDialers([]DialerFunc{})
+	if pool2 != nil {
+		pool2.Stop()
+	}
+
+	pool3, err := NewClientPoolFromDialers([]DialerFunc{})
 	if err == nil {
 		t.Fatalf("NewClientPoolFromDialers with invalid dialer num(<=0) should not be allowed")
+	}
+	if pool3 != nil {
+		pool3.Stop()
 	}
 }
 
@@ -290,11 +298,11 @@ func newSvr() *Server {
 }
 
 func TestWebsocket(t *testing.T) {
-	ln, _ := websocket.NewListener(":13456", nil)
+	ln, _ := websocket.NewListener(":25341", nil)
 	defer ln.Close()
 	http.HandleFunc("/ws", ln.(*websocket.Listener).Handler)
 	go func() {
-		err := http.ListenAndServe(":13456", nil)
+		err := http.ListenAndServe(":25341", nil)
 		if err != nil {
 			t.Fatal("ListenAndServe: ", err)
 		}
@@ -310,8 +318,10 @@ func TestWebsocket(t *testing.T) {
 	})
 	go svr.Serve(ln)
 
+	time.Sleep(time.Second / 100)
+
 	client, err := NewClient(func() (net.Conn, error) {
-		return websocket.Dial("ws://localhost:13456/ws")
+		return websocket.Dial("ws://localhost:25341/ws")
 	})
 	if err != nil {
 		panic(err)
