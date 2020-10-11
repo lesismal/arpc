@@ -230,6 +230,14 @@ func TestClientPool(t *testing.T) {
 	if err = pool.Next().Call("/echo/bytes", src, &dst, time.Second); err != nil {
 		t.Fatalf("pool.Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
+	pool, err = NewClientPoolFromDialers([]DialerFunc{dialer, dialer})
+	if err != nil {
+		t.Fatalf("NewClientPoolFromDialers error: %v", err)
+	}
+	pool, err = NewClientPoolFromDialers([]DialerFunc{})
+	if err == nil {
+		t.Fatalf("NewClientPoolFromDialers with invalid dialer num(<=0) should not be allowed")
+	}
 }
 
 func newSvr() *Server {

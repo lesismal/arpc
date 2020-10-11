@@ -22,6 +22,9 @@ const (
 	TimeForever time.Duration = 1<<63 - 1
 )
 
+// DialerFunc .
+type DialerFunc func() (net.Conn, error)
+
 type rpcSession struct {
 	seq  uint64
 	done chan Message
@@ -39,7 +42,7 @@ type Client struct {
 	Head     Header
 	Codec    Codec
 	Handler  Handler
-	Dialer   func() (net.Conn, error)
+	Dialer   DialerFunc
 	UserData interface{}
 
 	running      bool
@@ -556,7 +559,7 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 }
 
 // NewClient factory
-func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
+func NewClient(dialer DialerFunc) (*Client, error) {
 	conn, err := dialer()
 	if err != nil {
 		return nil, err
@@ -630,7 +633,7 @@ func (pool *ClientPool) Stop() {
 }
 
 // NewClientPool factory
-func NewClientPool(dialer func() (net.Conn, error), size int) (*ClientPool, error) {
+func NewClientPool(dialer DialerFunc, size int) (*ClientPool, error) {
 	pool := &ClientPool{
 		size:    uint64(size),
 		round:   0xFFFFFFFFFFFFFFFF,
@@ -650,6 +653,38 @@ func NewClientPool(dialer func() (net.Conn, error), size int) (*ClientPool, erro
 		}
 		pool.clients[i] = c
 	}
+
+	return pool, nil
+}
+
+// NewClientPoolFromDialers factory
+func NewClientPoolFromDialers(dialers []DialerFunc) (*ClientPool, error) {
+	pool := &ClientPool{
+		size:    0,
+		round:   0xFFFFFFFFFFFFFFFF,
+		clients: []*Client{},
+	}
+
+	if len(dialers) == 0 {
+		return nil, fmt.Errorf("invalid dialers: empty array")
+	}
+	var h Handler
+	for _, dialer := range dialers {
+		c, err := NewClient(dialer)
+		if err != nil {
+			for j := 0; j < len(pool.clients); j++ {
+				pool.clients[j].Stop()
+			}
+			return nil, err
+		}
+		if h == nil {
+			h = c.Handler
+		} else {
+			c.Handler = h
+		}
+		pool.clients = append(pool.clients, c)
+	}
+	pool.size = uint64(len(pool.clients))
 
 	return pool, nil
 }
