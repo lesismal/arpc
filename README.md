@@ -27,6 +27,7 @@
 	- [Quick start](#quick-start)
 	- [API Examples](#api-examples)
 		- [Register Routers](#register-routers)
+		- [Use Middleware](#use-middleware)
 		- [Client Call, CallAsync, Notify](#client-call-callasync-notify)
 		- [Server Call, CallAsync, Notify](#server-call-callasync-notify)
 		- [Broadcast - Notify](#broadcast---notify)
@@ -49,6 +50,7 @@
 - [x] Sync and Async Response
 - [x] Batch Write | Writev | net.Buffers 
 - [x] Broadcast
+- [x] Middleware
 - [x] Pub/Sub
 
 | Pattern | Interactive Directions       | Description              |
@@ -167,12 +169,31 @@ handler = server.Handler
 // client
 handler = client.Handler
 
+// message would be default handled one by one  in the same conn reader goroutine
 handler.Handle("/route", func(ctx *arpc.Context) { ... })
 handler.Handle("/route2", func(ctx *arpc.Context) { ... })
-handler.Handle("method", func(ctx *arpc.Context) { ... })
+
+// this make message handled by a new goroutine
+async := true
+handler.Handle("/asyncResponse", func(ctx *arpc.Context) { ... }, async)
 ```
 
+### Use Middleware
 
+```golang
+var handler arpc.Handler
+
+// package
+handler = arpc.DefaultHandler
+// server
+handler = server.Handler
+// client
+handler = client.Handler
+
+handler.Use(  func(ctx *arpc.Context) { ... })
+handler.Handle("/echo", func(ctx *arpc.Context) { ... })
+handler.Use(  func(ctx *arpc.Context) { ... })
+```
 
 ### Client Call, CallAsync, Notify
 
