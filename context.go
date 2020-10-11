@@ -65,10 +65,13 @@ func (ctx *Context) Error(err error) error {
 // Next .
 func (ctx *Context) Next() {
 	ctx.index++
-	for !ctx.done && ctx.index < len(ctx.handlers) {
+	if !ctx.done && ctx.index < len(ctx.handlers) {
 		ctx.handlers[ctx.index](ctx)
-		ctx.index++
 	}
+	// for !ctx.done && ctx.index < len(ctx.handlers) {
+	// 	ctx.handlers[ctx.index](ctx)
+	// 	ctx.index++
+	// }
 }
 
 // Done .

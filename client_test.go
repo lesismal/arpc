@@ -268,7 +268,7 @@ func newSvr() *Server {
 			log.Fatalf("Bind failed: %v", err)
 		}
 		ctx.Write(src)
-	})
+	}, true)
 	s.Handler.Handle("/notify", func(ctx *Context) {
 		src := ""
 		err := ctx.Bind(&src)

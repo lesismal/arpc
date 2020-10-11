@@ -17,6 +17,12 @@ var DefaultHandler Handler = NewHandler()
 // HandlerFunc type define
 type HandlerFunc func(*Context)
 
+// RouterHandler handle message
+type RouterHandler struct {
+	Async    bool
+	Handlers []HandlerFunc
+}
+
 // Handler defines net message handler
 type Handler interface {
 	// Clone returns a copy
@@ -87,7 +93,7 @@ type Handler interface {
 	Use(cb HandlerFunc)
 
 	// Handle registers method handler
-	Handle(m string, h HandlerFunc)
+	Handle(m string, h HandlerFunc, args ...interface{})
 
 	// OnMessage dispatches messages
 	OnMessage(c *Client, m Message)
@@ -111,16 +117,19 @@ type handler struct {
 	wrapReader func(conn net.Conn) io.Reader
 
 	middles []HandlerFunc
-	routes  map[string][]HandlerFunc
+	routes  map[string]RouterHandler
 }
 
 func (h *handler) Clone() Handler {
 	cp := *h
-	cp.routes = map[string][]HandlerFunc{}
+	cp.routes = map[string]RouterHandler{}
 	for k, v := range h.routes {
-		handlers := make([]HandlerFunc, len(v))
-		copy(handlers, v)
-		cp.routes[k] = handlers
+		rh := RouterHandler{
+			Async:    v.Async,
+			Handlers: make([]HandlerFunc, len(v.Handlers)),
+		}
+		copy(rh.Handlers, v.Handlers)
+		cp.routes[k] = rh
 	}
 	return &cp
 }
@@ -225,15 +234,25 @@ func (h *handler) SetSendQueueSize(size int) {
 }
 
 func (h *handler) Use(cb HandlerFunc) {
-	h.middles = append(h.middles, cb)
-	for k, handlers := range h.routes {
-		h.routes[k] = append(handlers, cb)
+	cbWithNext := func(ctx *Context) {
+		cb(ctx)
+		ctx.Next()
+	}
+	h.middles = append(h.middles, cbWithNext)
+	for k, v := range h.routes {
+		rh := RouterHandler{
+			Async:    v.Async,
+			Handlers: make([]HandlerFunc, len(v.Handlers)+1),
+		}
+		copy(rh.Handlers, v.Handlers)
+		rh.Handlers[len(v.Handlers)] = cbWithNext
+		h.routes[k] = rh
 	}
 }
 
-func (h *handler) Handle(method string, cb HandlerFunc) {
+func (h *handler) Handle(method string, cb HandlerFunc, args ...interface{}) {
 	if h.routes == nil {
-		h.routes = map[string][]HandlerFunc{}
+		h.routes = map[string]RouterHandler{}
 	}
 	if len(method) > MaxMethodLen {
 		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
@@ -242,10 +261,22 @@ func (h *handler) Handle(method string, cb HandlerFunc) {
 		panic(fmt.Errorf("handler exist for method %v ", method))
 	}
 
-	handlers := make([]HandlerFunc, len(h.middles)+1)
-	copy(handlers, h.middles)
-	handlers[len(h.middles)] = cb
-	h.routes[method] = handlers
+	async := false
+	if len(args) > 0 {
+		if bv, ok := args[0].(bool); ok {
+			async = bv
+		}
+	}
+	rh := RouterHandler{
+		Async:    async,
+		Handlers: make([]HandlerFunc, len(h.middles)+1),
+	}
+	copy(rh.Handlers, h.middles)
+	rh.Handlers[len(h.middles)] = func(ctx *Context) {
+		cb(ctx)
+		ctx.Next()
+	}
+	h.routes[method] = rh
 }
 
 func (h *handler) Recv(c *Client) (Message, error) {
@@ -301,9 +332,13 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 	switch msg.Cmd() {
 	case CmdRequest, CmdNotify:
 		method := BytesToStr(msg[HeadLen : HeadLen+ml])
-		if handlers, ok := h.routes[method]; ok {
-			ctx := newContext(c, msg, handlers)
-			ctx.Next()
+		if rh, ok := h.routes[method]; ok {
+			ctx := newContext(c, msg, rh.Handlers)
+			if !rh.Async {
+				ctx.Next()
+			} else {
+				go ctx.Next()
+			}
 		} else {
 			logWarn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
