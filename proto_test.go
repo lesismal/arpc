@@ -113,6 +113,10 @@ func TestMessage_BodyLen(t *testing.T) {
 	if got := msg.BodyLen(); got != 10 {
 		t.Errorf("Message.BodyLen() = %v, want %v", got, 10)
 	}
+	msg.SetBodyLen(100)
+	if got := msg.BodyLen(); got != 100 {
+		t.Errorf("Message.BodyLen() = %v, want %v", got, 100)
+	}
 }
 
 func TestMessage_Seq(t *testing.T) {

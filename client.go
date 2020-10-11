@@ -38,7 +38,7 @@ func newSession(seq uint64) *rpcSession {
 type Client struct {
 	Conn     net.Conn
 	Reader   io.Reader
-	head     [HeadLen]byte
+	head     [4]byte
 	Head     Header
 	Codec    Codec
 	Handler  Handler

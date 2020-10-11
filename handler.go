@@ -111,7 +111,11 @@ type handler struct {
 }
 
 func (h *handler) Clone() Handler {
-	var cp = *h
+	cp := *h
+	cp.routes = map[string]HandlerFunc{}
+	for k, v := range h.routes {
+		cp.routes[k] = v
+	}
 	return &cp
 }
 
@@ -239,14 +243,14 @@ func (h *handler) Recv(c *Client) (Message, error) {
 		}
 	}
 
-	_, err = io.ReadFull(c.Reader, c.Head)
+	_, err = io.ReadFull(c.Reader, c.Head[:headerIndexBodyLenEnd])
 	if err != nil {
 		return nil, err
 	}
 
 	message, err = c.Head.message()
 	if err == nil && len(message) > HeadLen {
-		_, err = io.ReadFull(c.Reader, message[HeadLen:])
+		_, err = io.ReadFull(c.Reader, message[headerIndexBodyLenEnd:])
 	}
 
 	return message, err
@@ -270,7 +274,7 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 	n64, err := buffers.WriteTo(conn)
 	return int(n64), err
 }
- 
+
 func (h *handler) OnMessage(c *Client, msg Message) {
 	ml := msg.MethodLen()
 	if ml <= 0 || ml > MaxMethodLen || ml > (len(msg)-HeadLen) {

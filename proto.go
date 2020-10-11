@@ -56,13 +56,13 @@ func (h Header) BodyLen() int {
 
 // message clones header with body length
 func (h Header) message() (Message, error) {
-	l := h.BodyLen()
-	if l < 0 || l > MaxBodyLen {
-		return nil, fmt.Errorf("invalid body length: %v", l)
+	bodyLen := h.BodyLen()
+	if bodyLen < 0 || bodyLen > MaxBodyLen {
+		return nil, fmt.Errorf("invalid body length: %v", bodyLen)
 	}
 
-	m := Message(memGet(HeadLen + l))
-	copy(m, h)
+	m := Message(memGet(HeadLen + bodyLen))
+	binary.LittleEndian.PutUint32(h[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	return m, nil
 }
 
@@ -107,9 +107,14 @@ func (m Message) Method() string {
 	return string(m[HeadLen : HeadLen+m.MethodLen()])
 }
 
-// BodyLen return length of whole body[ method && body ]
+// BodyLen returns length of body[ method && body ]
 func (m Message) BodyLen() int {
 	return int(binary.LittleEndian.Uint32(m[headerIndexBodyLenBegin:headerIndexBodyLenEnd]))
+}
+
+// SetBodyLen sets length of body[ method && body ]
+func (m Message) SetBodyLen(l int) {
+	binary.LittleEndian.PutUint32(m[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(l))
 }
 
 // Seq returns sequence
