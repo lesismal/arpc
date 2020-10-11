@@ -14,6 +14,10 @@ import (
 type Context struct {
 	Client  *Client
 	Message Message
+
+	done     bool
+	index    int
+	handlers []HandlerFunc
 }
 
 // Body returns body
@@ -58,6 +62,20 @@ func (ctx *Context) Error(err error) error {
 	return ctx.write(err, 1, TimeForever)
 }
 
+// Next .
+func (ctx *Context) Next() {
+	ctx.index++
+	for !ctx.done && ctx.index < len(ctx.handlers) {
+		ctx.handlers[ctx.index](ctx)
+		ctx.index++
+	}
+}
+
+// Done .
+func (ctx *Context) Done() {
+	ctx.done = true
+}
+
 func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
 	var (
 		data      []byte
@@ -99,6 +117,6 @@ func (ctx *Context) write(v interface{}, isError byte, timeout time.Duration) er
 	return ctx.Client.PushMsg(msg, timeout)
 }
 
-func newContext(c *Client, msg Message) *Context {
-	return &Context{Client: c, Message: msg}
+func newContext(c *Client, msg Message, handlers []HandlerFunc) *Context {
+	return &Context{Client: c, Message: msg, done: false, index: -1, handlers: handlers}
 }

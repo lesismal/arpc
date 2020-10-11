@@ -127,9 +127,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	c.addSession(seq, sess)
 	defer func() {
 		timer.Stop()
-		c.mux.Lock()
-		delete(c.sessionMap, seq)
-		c.mux.Unlock()
+		c.deleteSession(seq)
 	}()
 
 	select {
@@ -168,11 +166,7 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 	seq := msg.Seq()
 	sess := newSession(seq)
 	c.addSession(seq, sess)
-	defer func() {
-		c.mux.Lock()
-		delete(c.sessionMap, seq)
-		c.mux.Unlock()
-	}()
+	defer c.deleteSession(seq)
 
 	select {
 	case c.chSend <- msg:
@@ -362,6 +356,14 @@ func (c *Client) addSession(seq uint64, session *rpcSession) {
 	c.mux.Unlock()
 }
 
+func (c *Client) deleteSession(seq uint64) *rpcSession {
+	c.mux.Lock()
+	session := c.sessionMap[seq]
+	delete(c.sessionMap, seq)
+	c.mux.Unlock()
+	return session
+}
+
 func (c *Client) getSession(seq uint64) (*rpcSession, bool) {
 	c.mux.Lock()
 	session, ok := c.sessionMap[seq]
@@ -378,11 +380,13 @@ func (c *Client) clearSession() {
 	c.mux.Unlock()
 }
 
-// func (c *Client) deleteSession(seq uint64) {
-// 	c.mux.Lock()
-// 	delete(c.sessionMap, seq)
-// 	c.mux.Unlock()
-// }
+func (c *Client) dropMessage(msg Message) {
+	if !msg.IsAsync() {
+		close(c.deleteSession(msg.Seq()).done)
+	} else {
+		c.deleteAsyncHandler(msg.Seq())
+	}
+}
 
 func (c *Client) addAsyncHandler(seq uint64, h HandlerFunc) {
 	c.mux.Lock()
@@ -456,7 +460,10 @@ func (c *Client) recvLoop() {
 				c.Handler.OnMessage(c, msg)
 			}
 
+			c.mux.Lock()
 			c.reconnecting = true
+			c.mux.Unlock()
+
 			c.Conn.Close()
 			c.clearSession()
 			c.clearAsyncHandler()
@@ -496,11 +503,15 @@ func (c *Client) sendLoop() {
 			case <-c.chClose:
 				return
 			case msg = <-c.chSend:
+				c.mux.RLock()
 				conn = c.Conn
+				c.mux.RUnlock()
 				if !c.reconnecting {
 					if _, err := c.Handler.Send(conn, msg); err != nil {
 						conn.Close()
 					}
+				} else {
+					c.dropMessage(msg)
 				}
 			}
 		}
@@ -526,7 +537,9 @@ func (c *Client) sendLoop() {
 				}
 			}
 		SEND:
+			c.mux.RLock()
 			conn = c.Conn
+			c.mux.RUnlock()
 			if !c.reconnecting {
 				if len(buffers) == 1 {
 					if _, err := c.Handler.Send(conn, buffers[0]); err != nil {
@@ -536,6 +549,10 @@ func (c *Client) sendLoop() {
 					if _, err := c.Handler.SendN(conn, buffers); err != nil {
 						conn.Close()
 					}
+				}
+			} else {
+				for _, v := range buffers {
+					c.dropMessage(Message(v))
 				}
 			}
 			buffers = buffers[0:0]

@@ -259,6 +259,7 @@ func newSvr() *Server {
 			log.Fatalf("Bind failed: %v", err)
 		}
 		ctx.Write(src)
+		ctx.Done()
 	})
 	s.Handler.Handle("/callasync", func(ctx *Context) {
 		src := ""
@@ -348,6 +349,7 @@ func TestClientNormal(t *testing.T) {
 	defer s.Stop()
 	time.Sleep(time.Second / 100)
 
+	s.Handler.Use(func(ctx *Context) { ctx.Next() })
 	c, err := NewClient(func() (net.Conn, error) {
 		return net.DialTimeout("tcp", allAddr, time.Second)
 	})

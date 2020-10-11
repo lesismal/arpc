@@ -83,6 +83,9 @@ type Handler interface {
 	// SetSendQueueSize sets Client.chSend capacity
 	SetSendQueueSize(size int)
 
+	// Handle sets middleware
+	Use(cb HandlerFunc)
+
 	// Handle registers method handler
 	Handle(m string, h HandlerFunc)
 
@@ -107,14 +110,17 @@ type handler struct {
 
 	wrapReader func(conn net.Conn) io.Reader
 
-	routes map[string]HandlerFunc
+	middles []HandlerFunc
+	routes  map[string][]HandlerFunc
 }
 
 func (h *handler) Clone() Handler {
 	cp := *h
-	cp.routes = map[string]HandlerFunc{}
+	cp.routes = map[string][]HandlerFunc{}
 	for k, v := range h.routes {
-		cp.routes[k] = v
+		handlers := make([]HandlerFunc, len(v))
+		copy(handlers, v)
+		cp.routes[k] = handlers
 	}
 	return &cp
 }
@@ -218,9 +224,16 @@ func (h *handler) SetSendQueueSize(size int) {
 	h.sendQueueSize = size
 }
 
+func (h *handler) Use(cb HandlerFunc) {
+	h.middles = append(h.middles, cb)
+	for k, handlers := range h.routes {
+		h.routes[k] = append(handlers, cb)
+	}
+}
+
 func (h *handler) Handle(method string, cb HandlerFunc) {
 	if h.routes == nil {
-		h.routes = map[string]HandlerFunc{}
+		h.routes = map[string][]HandlerFunc{}
 	}
 	if len(method) > MaxMethodLen {
 		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
@@ -228,7 +241,11 @@ func (h *handler) Handle(method string, cb HandlerFunc) {
 	if _, ok := h.routes[method]; ok {
 		panic(fmt.Errorf("handler exist for method %v ", method))
 	}
-	h.routes[method] = cb
+
+	handlers := make([]HandlerFunc, len(h.middles)+1)
+	copy(handlers, h.middles)
+	handlers[len(h.middles)] = cb
+	h.routes[method] = handlers
 }
 
 func (h *handler) Recv(c *Client) (Message, error) {
@@ -284,8 +301,9 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 	switch msg.Cmd() {
 	case CmdRequest, CmdNotify:
 		method := BytesToStr(msg[HeadLen : HeadLen+ml])
-		if handler, ok := h.routes[method]; ok {
-			handler(newContext(c, msg))
+		if handlers, ok := h.routes[method]; ok {
+			ctx := newContext(c, msg, handlers)
+			ctx.Next()
 		} else {
 			logWarn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
@@ -303,7 +321,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
 			if ok {
-				handler(newContext(c, msg))
+				handler(newContext(c, msg, nil))
 			} else {
 				h.OnSessionMiss(c, msg)
 				logWarn("%v OnMessage: async handler not exist or expired", h.LogTag())
