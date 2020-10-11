@@ -113,6 +113,11 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		return fmt.Errorf("invalid timeout arg: %v", timeout)
 	}
 
+	ml := len(method)
+	if ml <= 0 || ml > MaxMethodLen {
+		return fmt.Errorf("invalid method length: %v", ml)
+	}
+
 	timer := time.NewTimer(timeout)
 
 	msg := c.newReqMessage(CmdRequest, method, req, 0)
@@ -151,6 +156,11 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 	}
 	if c.reconnecting {
 		return ErrClientReconnecting
+	}
+
+	ml := len(method)
+	if ml <= 0 || ml > MaxMethodLen {
+		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
 	msg := c.newReqMessage(CmdRequest, method, req, 0)
@@ -199,7 +209,7 @@ func (c *Client) parseResponse(msg Message, rsp interface{}) error {
 			// case *error:
 			// 	*vt = msg.Error()
 			default:
-				return c.Codec.Unmarshal(msg[HeadLen:], rsp)
+				return c.Codec.Unmarshal(msg.Data(), rsp)
 			}
 		}
 	default:
@@ -273,10 +283,13 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 		return fmt.Errorf("invalid timeout arg: %v", timeout)
 	}
 
-	var (
-		msg = c.newReqMessage(cmd, method, req, 1)
-		seq = msg.Seq()
-	)
+	ml := len(method)
+	if ml <= 0 || ml > MaxMethodLen {
+		return fmt.Errorf("invalid method length: %v", ml)
+	}
+
+	msg := c.newReqMessage(cmd, method, req, 1)
+	seq := msg.Seq()
 
 	if handler != nil {
 		c.addAsyncHandler(seq, handler)
@@ -318,10 +331,13 @@ func (c *Client) callAsyncWith(ctx context.Context, cmd byte, method string, req
 		return ErrClientReconnecting
 	}
 
-	var (
-		msg = c.newReqMessage(cmd, method, req, 1)
-		seq = msg.Seq()
-	)
+	ml := len(method)
+	if ml <= 0 || ml > MaxMethodLen {
+		return fmt.Errorf("invalid method length: %v", ml)
+	}
+
+	msg := c.newReqMessage(cmd, method, req, 1)
+	seq := msg.Seq()
 
 	if handler != nil {
 		c.addAsyncHandler(seq, handler)

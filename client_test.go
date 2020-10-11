@@ -415,6 +415,23 @@ func TestClientError(t *testing.T) {
 		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dstB)
 	}
 
+	invalidMethd := ""
+	for i := 0; i < 128; i++ {
+		invalidMethd += "a"
+	}
+	if err = c.Call(invalidMethd, src, &dstB, time.Second); err == nil {
+		t.Fatalf("Call() invalid method error is nil")
+	}
+	if err = c.CallWith(context.Background(), invalidMethd, src, &dstB); err == nil {
+		t.Fatalf("CallWith() invalid method error is nil")
+	}
+	if err = c.Notify(invalidMethd, src, time.Second); err == nil {
+		t.Fatalf("Notify() invalid method error is nil")
+	}
+	if err = c.NotifyWith(context.Background(), invalidMethd, src); err == nil {
+		t.Fatalf("NotifyWith() invalid method error is nil")
+	}
+
 	c.Handler.SetSendQueueSize(10)
 
 	c.Run()

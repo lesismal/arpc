@@ -71,9 +71,9 @@
 
 - LittleEndian
 
-| bodylen | sequence | cmd    | isError | isAsync | methodlen | method               | body |
-| ------- | -------- | ------ | ------- | ------- | --------- | -------------------- | ---- |
-| 4 bytes | 8 bytes  | 1 byte | 1 byte  | 1 bytes | 1 bytes   | 0 or methodlen bytes | ...  |
+| bodyLen | sequence | cmd    | isError | isAsync | methodLen | method          | body                    |
+| ------- | -------- | ------ | ------- | ------- | --------- | --------------- | ----------------------- |
+| 4 bytes | 8 bytes  | 1 byte | 1 byte  | 1 bytes | 1 bytes   | methodLen bytes | bodyLen-methodLen bytes |
 
 
 

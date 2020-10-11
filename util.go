@@ -15,8 +15,10 @@ const (
 	separator = "---------------------------------------\n"
 )
 
+// Empty struct
 type Empty struct{}
 
+// HandlePanic recover panic and log stacks's info
 func HandlePanic() {
 	if err := recover(); err != nil {
 		errstr := fmt.Sprintf("%sruntime error: %v\ntraceback:\n", separator, err)
@@ -36,6 +38,7 @@ func HandlePanic() {
 	}
 }
 
+// Safe wrap a closure with panic handler
 func Safe(call func()) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -53,16 +56,19 @@ func Safe(call func()) {
 	call()
 }
 
+// StrToBytes hack string to []byte
 func StrToBytes(s string) []byte {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}
 	return *(*[]byte)(unsafe.Pointer(&h))
 }
 
+// BytesToStr hack []byte to string
 func BytesToStr(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
+// ValueToBytes convert values to []byte
 func ValueToBytes(codec Codec, v interface{}) []byte {
 	if v == nil {
 		return nil

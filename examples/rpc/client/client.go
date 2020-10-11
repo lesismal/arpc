@@ -33,4 +33,22 @@ func main() {
 	} else {
 		log.Printf("Call /echo/async Response: \"%v\"", rsp)
 	}
+	done := make(chan string)
+	err = client.CallAsync("/echo/async", &req, func(ctx *arpc.Context) {
+		rsp := ""
+		err = ctx.Bind(&rsp)
+		if err != nil {
+			log.Fatalf("Call /echo/async Bind failed: %v", err)
+		}
+		if rsp != req {
+			log.Fatalf("Call /echo/async failed: %v", err)
+		}
+		done <- rsp
+	}, time.Second*5)
+	if err != nil {
+		log.Fatalf("Call /echo/async failed: %v", err)
+	} else {
+		rsp := <-done
+		log.Printf("CallAsync /echo/async Response: \"%v\"", rsp)
+	}
 }

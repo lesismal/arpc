@@ -270,15 +270,16 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 	n64, err := buffers.WriteTo(conn)
 	return int(n64), err
 }
-
+ 
 func (h *handler) OnMessage(c *Client, msg Message) {
+	ml := msg.MethodLen()
+	if ml <= 0 || ml > MaxMethodLen || ml > (len(msg)-HeadLen) {
+		logWarn("%v OnMessage: invalid request method length %v, dropped", h.LogTag())
+		return
+	}
 	switch msg.Cmd() {
 	case CmdRequest, CmdNotify:
-		if msg.MethodLen() == 0 {
-			logWarn("%v OnMessage: invalid request message with 0 method length, dropped", h.LogTag())
-			return
-		}
-		method := msg.Method()
+		method := BytesToStr(msg[HeadLen : HeadLen+ml])
 		if handler, ok := h.routes[method]; ok {
 			handler(newContext(c, msg))
 		} else {
@@ -286,10 +287,6 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		}
 		break
 	case CmdResponse:
-		// if msg.MethodLen() > 0 {
-		// 	logWarn("%v OnMessage: invalid response message with method length %v, dropped", h.LogTag(), msg.MethodLen())
-		// 	return
-		// }
 		if !msg.IsAsync() {
 			seq := msg.Seq()
 			session, ok := c.getSession(seq)
