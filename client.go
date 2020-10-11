@@ -53,7 +53,8 @@ type Client struct {
 	sessionMap      map[uint64]*rpcSession
 	asyncHandlerMap map[uint64]HandlerFunc
 
-	chSend chan Message
+	chSend  chan Message
+	chClose chan Empty
 
 	onStop func() int64
 }
@@ -91,7 +92,7 @@ func (c *Client) Stop() {
 		c.running = false
 		c.Conn.Close()
 		if c.chSend != nil {
-			close(c.chSend)
+			close(c.chClose)
 		}
 		if c.onStop != nil {
 			c.onStop()
@@ -465,29 +466,39 @@ func (c *Client) recvLoop() {
 			}
 		}
 	}
-
 }
 
 func (c *Client) sendLoop() {
 	addr := c.Conn.RemoteAddr().String()
 	logDebug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
 	defer logDebug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), addr)
-
 	if !c.Handler.BatchSend() {
+		var msg Message
 		var conn net.Conn
-		for msg := range c.chSend {
-			conn = c.Conn
-			if !c.reconnecting {
-				if _, err := c.Handler.Send(conn, msg); err != nil {
-					conn.Close()
+		for {
+			select {
+			case <-c.chClose:
+				return
+			case msg = <-c.chSend:
+				conn = c.Conn
+				if !c.reconnecting {
+					if _, err := c.Handler.Send(conn, msg); err != nil {
+						conn.Close()
+					}
 				}
 			}
 		}
 	} else {
 		var currLen = 0
+		var msg Message
 		var conn net.Conn
 		var buffers net.Buffers = make([][]byte, 10)[0:0]
-		for msg := range c.chSend {
+		for {
+			select {
+			case <-c.chClose:
+				return
+			case msg = <-c.chSend:
+			}
 			buffers = append(buffers, msg)
 			currLen = len(c.chSend)
 			for i := 1; i < currLen && i < 10; i++ {
@@ -551,6 +562,7 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 	c.Codec = codec
 	c.Handler = handler
 	c.chSend = make(chan Message, c.Handler.SendQueueSize())
+	c.chClose = make(chan Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 	c.onStop = onStop
@@ -573,6 +585,7 @@ func NewClient(dialer DialerFunc) (*Client, error) {
 	c.Handler = DefaultHandler.Clone()
 	c.Dialer = dialer
 	c.chSend = make(chan Message, c.Handler.SendQueueSize())
+	c.chClose = make(chan Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 
