@@ -286,10 +286,10 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		}
 		break
 	case CmdResponse:
-		if msg.MethodLen() > 0 {
-			logWarn("%v OnMessage: invalid response message with method length %v, dropped", h.LogTag(), msg.MethodLen())
-			return
-		}
+		// if msg.MethodLen() > 0 {
+		// 	logWarn("%v OnMessage: invalid response message with method length %v, dropped", h.LogTag(), msg.MethodLen())
+		// 	return
+		// }
 		if !msg.IsAsync() {
 			seq := msg.Seq()
 			session, ok := c.getSession(seq)

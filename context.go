@@ -60,9 +60,10 @@ func (ctx *Context) Error(err error) error {
 
 func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
 	var (
-		data    []byte
-		msg     Message
-		bodyLen int
+		data      []byte
+		msg       Message
+		bodyLen   int
+		methodLen int
 	)
 
 	// if ctx.Message.Cmd() != CmdRequest {
@@ -75,15 +76,17 @@ func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
 
 	data = ValueToBytes(ctx.Client.Codec, v)
 
-	bodyLen = len(data)
+	methodLen = ctx.Message.MethodLen()
+	bodyLen = len(data) + methodLen
 	msg = Message(memGet(HeadLen + bodyLen))
+	copy(msg[headerIndexAsync:], ctx.Message[headerIndexAsync:HeadLen+methodLen])
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
 	msg[headerIndexCmd] = CmdResponse
-	msg[headerIndexAsync] = ctx.Message.Async()
 	msg[headerIndexError] = isError
-	msg[headerIndexMethodLen] = 0
-	copy(msg[HeadLen:], data)
+	// msg[headerIndexAsync] = ctx.Message.Async()
+	// msg[headerIndexMethodLen] = byte(methodLen)
+	copy(msg[HeadLen+methodLen:], data)
 
 	return msg
 }

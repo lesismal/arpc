@@ -282,7 +282,7 @@ func newSvr() *Server {
 		if err != nil {
 			log.Fatalf("Bind failed: %v", err)
 		}
-		time.Sleep(time.Second / 100)
+		time.Sleep(time.Second / 10)
 		ctx.Write(src)
 	})
 	s.Handler.Handle("/overstock", func(ctx *Context) {
@@ -382,7 +382,7 @@ func TestClientNormal(t *testing.T) {
 	if err = c.NotifyWith(context.Background(), "/notify", src); err != nil {
 		t.Fatalf("NotifyWith() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
-	if err = c.Call("/timeout", src, &dst, time.Second/100); err != ErrClientTimeout {
+	if err = c.Call("/timeout", src, &dst, time.Second/1000); err != ErrClientTimeout {
 		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
 	toCtx, cancel := context.WithTimeout(context.Background(), time.Second/1000)

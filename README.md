@@ -49,7 +49,7 @@
 - [x] Sync and Async Response
 - [x] Batch Write | Writev | net.Buffers 
 - [x] Broadcast
-- [x] PUB/SUB
+- [x] Pub/Sub
 
 | Pattern | Interactive Directions       | Description              |
 | ------- | ---------------------------- | ------------------------ |
@@ -71,9 +71,9 @@
 
 - LittleEndian
 
-| cmd    | async  | methodlen | null    | bodylen | sequence | method               | body |
-| ------ | ------ | --------- | ------- | ------- | -------- | -------------------- | ---- |
-| 1 byte | 1 byte | 1 bytes   | 1 bytes | 4 bytes | 8 bytes  | 0 or methodlen bytes | ...  |
+| bodylen | sequence | cmd    | isError | isAsync | methodlen | method               | body |
+| ------- | -------- | ------ | ------- | ------- | --------- | -------------------- | ---- |
+| 4 bytes | 8 bytes  | 1 byte | 1 byte  | 1 bytes | 1 bytes   | 0 or methodlen bytes | ...  |
 
 
 

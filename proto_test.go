@@ -30,7 +30,7 @@ func TestHeader_message(t *testing.T) {
 		t.Errorf("len(Header.message()) = %v, want %v", len(msg2), len(msg))
 	}
 
-	head[4], head[5], head[6], head[7] = 0xFF, 0xFF, 0xFF, 0xFF
+	head[0], head[1], head[2], head[3] = 0xFF, 0xFF, 0xFF, 0xFF
 	_, err = head.message()
 	if err == nil {
 		t.Errorf("Header.message() error = nil")

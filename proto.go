@@ -25,14 +25,14 @@ const (
 )
 
 const (
-	headerIndexCmd          = 0
-	headerIndexAsync        = 1
-	headerIndexError        = 2
-	headerIndexMethodLen    = 3
-	headerIndexBodyLenBegin = 4
-	headerIndexBodyLenEnd   = 8
-	headerIndexSeqBegin     = 8
-	headerIndexSeqEnd       = 16
+	headerIndexBodyLenBegin = 0
+	headerIndexBodyLenEnd   = 4
+	headerIndexSeqBegin     = 4
+	headerIndexSeqEnd       = 12
+	headerIndexCmd          = 12
+	headerIndexError        = 13
+	headerIndexAsync        = 14
+	headerIndexMethodLen    = 15
 )
 
 const (
@@ -40,7 +40,7 @@ const (
 	HeadLen int = 16
 
 	// MaxMethodLen limit
-	MaxMethodLen int = 255
+	MaxMethodLen int = 127
 
 	// MaxBodyLen limit
 	MaxBodyLen int = 1024*1024*64 - 16
@@ -94,7 +94,7 @@ func (m Message) Error() error {
 	if !m.IsError() {
 		return nil
 	}
-	return errors.New(BytesToStr(m[HeadLen:]))
+	return errors.New(BytesToStr(m[HeadLen+m.MethodLen():]))
 }
 
 // MethodLen returns method length
@@ -104,7 +104,7 @@ func (m Message) MethodLen() int {
 
 // Method returns method
 func (m Message) Method() string {
-	return string(m[HeadLen : HeadLen+int(m[headerIndexMethodLen])])
+	return string(m[HeadLen : HeadLen+m.MethodLen()])
 }
 
 // BodyLen return length of whole body[ method && body ]
