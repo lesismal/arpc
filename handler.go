@@ -100,6 +100,12 @@ type Handler interface {
 
 	// OnMessage dispatches messages
 	OnMessage(c *Client, m Message)
+
+	// GetBuffer factory
+	GetBuffer(size int) []byte
+
+	// SetBufferFactory registers buffer factory handler
+	SetBufferFactory(f func(int) []byte)
 }
 
 type handler struct {
@@ -114,8 +120,9 @@ type handler struct {
 	onOverstock    func(c *Client, m Message)
 	onSessionMiss  func(c *Client, m Message)
 
-	beforeRecv func(net.Conn) error
-	beforeSend func(net.Conn) error
+	beforeRecv    func(net.Conn) error
+	beforeSend    func(net.Conn) error
+	bufferFactory func(int) []byte
 
 	wrapReader func(conn net.Conn) io.Reader
 
@@ -299,7 +306,7 @@ func (h *handler) Recv(c *Client) (Message, error) {
 		return nil, err
 	}
 
-	message, err = c.Head.message()
+	message, err = c.Head.message(h)
 	if err == nil && len(message) > HeadLen {
 		_, err = io.ReadFull(c.Reader, message[headerIndexBodyLenEnd:])
 	}
@@ -370,6 +377,17 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		log.Warn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
 		break
 	}
+}
+
+func (h *handler) GetBuffer(size int) []byte {
+	if h.bufferFactory != nil {
+		return h.bufferFactory(size)
+	}
+	return make([]byte, size)
+}
+
+func (h *handler) SetBufferFactory(f func(int) []byte) {
+	h.bufferFactory = f
 }
 
 // NewHandler factory

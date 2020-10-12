@@ -5,11 +5,8 @@
 package arpc
 
 import (
-	"bytes"
 	"net"
 	"testing"
-
-	"github.com/lesismal/arpc/codec"
 )
 
 func Test_handler_Clone(t *testing.T) {
@@ -139,49 +136,6 @@ func Test_handler_SetSendQueueSize(t *testing.T) {
 
 func Test_handler_Handle(t *testing.T) {
 	DefaultHandler.Handle("/hello", func(*Context) {})
-}
-
-func Test_handler_Recv(t *testing.T) {
-	c := &Client{}
-	c.Head = Header(c.head[:])
-	c.Reader = bytes.NewReader([]byte(NewMessage(CmdRequest, "hello", "hello", codec.DefaultCodec)))
-	_, err := DefaultHandler.Recv(c)
-	if err != nil {
-		t.Errorf("handler.Recv() error = nil")
-	}
-}
-
-func Test_handler_Send(t *testing.T) {
-}
-
-func Test_handler_SendN(t *testing.T) {
-}
-
-func Test_handler_OnMessage(t *testing.T) {
-
-	done := make(chan int, 1)
-	DefaultHandler.Handle("/onmessage", func(*Context) {
-		done <- 1
-	})
-	DefaultHandler.OnMessage(nil, NewMessage(CmdRequest, "/onmessage", "hello", codec.DefaultCodec))
-	select {
-	case <-done:
-	default:
-		t.Errorf("OnMessage not handled")
-	}
-
-	c := newClientWithConn(&net.TCPConn{}, codec.DefaultCodec, DefaultHandler, nil)
-	msg := NewMessage(CmdRequest, "/nohandler", "hello", codec.DefaultCodec)
-	msg[headerIndexMethodLen] = 0
-	DefaultHandler.OnMessage(c, msg)
-
-	msg = NewMessage(CmdRequest, "/onmessage", "hello", codec.DefaultCodec)
-	msg[headerIndexMethodLen] = 0
-	DefaultHandler.OnMessage(c, msg)
-
-	msg = NewMessage(CmdResponse, "/onmessage", "hello", codec.DefaultCodec)
-	msg[headerIndexMethodLen] = 0
-	DefaultHandler.OnMessage(c, msg)
 }
 
 func TestNewHandler(t *testing.T) {

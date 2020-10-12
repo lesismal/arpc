@@ -29,55 +29,6 @@ type Server struct {
 	chStop  chan error
 }
 
-func (s *Server) addLoad() int64 {
-	return atomic.AddInt64(&s.CurrLoad, 1)
-}
-
-func (s *Server) subLoad() int64 {
-	return atomic.AddInt64(&s.CurrLoad, -1)
-}
-
-func (s *Server) runLoop() error {
-	var (
-		err  error
-		cli  *Client
-		conn net.Conn
-	)
-
-	s.running = true
-	defer close(s.chStop)
-
-	for s.running {
-		conn, err = s.Listener.Accept()
-		if err == nil {
-			load := s.addLoad()
-			if s.MaxLoad <= 0 || load <= s.MaxLoad {
-				s.Accepted++
-				cli = newClientWithConn(conn, s.Codec, s.Handler, s.subLoad)
-				s.Handler.OnConnected(cli)
-				if _, ok := conn.(WebsocketConn); !ok {
-					cli.Run()
-				} else {
-					cli.RunWebsocket()
-				}
-			} else {
-				conn.Close()
-				s.subLoad()
-			}
-		} else {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				log.Error("%v Accept error: %v; retrying...", s.Handler.LogTag(), err)
-				time.Sleep(time.Second / 20)
-			} else {
-				log.Error("%v Accept error: %v", s.Handler.LogTag(), err)
-				break
-			}
-		}
-	}
-
-	return err
-}
-
 // Serve starts rpc service with listener
 func (s *Server) Serve(ln net.Listener) error {
 	s.Listener = ln
@@ -128,6 +79,60 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return ErrTimeout
 	}
 	return nil
+}
+
+// NewMessage factory
+func (s *Server) NewMessage(cmd byte, method string, v interface{}) Message {
+	return newMessage(cmd, method, v, s.Handler, s.Codec)
+}
+
+func (s *Server) addLoad() int64 {
+	return atomic.AddInt64(&s.CurrLoad, 1)
+}
+
+func (s *Server) subLoad() int64 {
+	return atomic.AddInt64(&s.CurrLoad, -1)
+}
+
+func (s *Server) runLoop() error {
+	var (
+		err  error
+		cli  *Client
+		conn net.Conn
+	)
+
+	s.running = true
+	defer close(s.chStop)
+
+	for s.running {
+		conn, err = s.Listener.Accept()
+		if err == nil {
+			load := s.addLoad()
+			if s.MaxLoad <= 0 || load <= s.MaxLoad {
+				s.Accepted++
+				cli = newClientWithConn(conn, s.Codec, s.Handler, s.subLoad)
+				s.Handler.OnConnected(cli)
+				if _, ok := conn.(WebsocketConn); !ok {
+					cli.Run()
+				} else {
+					cli.RunWebsocket()
+				}
+			} else {
+				conn.Close()
+				s.subLoad()
+			}
+		} else {
+			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+				log.Error("%v Accept error: %v; retrying...", s.Handler.LogTag(), err)
+				time.Sleep(time.Second / 20)
+			} else {
+				log.Error("%v Accept error: %v", s.Handler.LogTag(), err)
+				break
+			}
+		}
+	}
+
+	return err
 }
 
 // NewServer factory

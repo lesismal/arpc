@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lesismal/arpc/codec"
 	alog "github.com/lesismal/arpc/log"
 	"github.com/lesismal/arpcext/websocket"
 )
@@ -448,7 +447,7 @@ func TestClientError(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	msg := NewMessage(CmdRequest, "/overstock", src, codec.DefaultCodec)
+	msg := c.NewMessage(CmdRequest, "/overstock", src)
 	for i := 0; i < 10000; i++ {
 		c.PushMsg(msg, 0)
 	}

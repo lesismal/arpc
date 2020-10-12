@@ -189,33 +189,6 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 	return c.parseResponse(msg, rsp)
 }
 
-func (c *Client) parseResponse(msg Message, rsp interface{}) error {
-	if msg == nil {
-		return ErrClientReconnecting
-	}
-	switch msg.Cmd() {
-	case CmdResponse:
-		if msg.IsError() {
-			return msg.Error()
-		}
-		if rsp != nil {
-			switch vt := rsp.(type) {
-			case *string:
-				*vt = string(msg[HeadLen:])
-			case *[]byte:
-				*vt = msg[HeadLen:]
-			// case *error:
-			// 	*vt = msg.Error()
-			default:
-				return c.Codec.Unmarshal(msg.Data(), rsp)
-			}
-		}
-	default:
-		return ErrInvalidRspMessage
-	}
-	return nil
-}
-
 // CallAsync make async rpc call with timeout
 func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, timeout time.Duration) error {
 	return c.callAsync(CmdRequest, method, req, handler, timeout)
@@ -267,6 +240,38 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 		}
 	}
 
+	return nil
+}
+
+// NewMessage factory
+func (c *Client) NewMessage(cmd byte, method string, v interface{}) Message {
+	return newMessage(cmd, method, v, c.Handler, c.Codec)
+}
+
+func (c *Client) parseResponse(msg Message, rsp interface{}) error {
+	if msg == nil {
+		return ErrClientReconnecting
+	}
+	switch msg.Cmd() {
+	case CmdResponse:
+		if msg.IsError() {
+			return msg.Error()
+		}
+		if rsp != nil {
+			switch vt := rsp.(type) {
+			case *string:
+				*vt = string(msg[HeadLen:])
+			case *[]byte:
+				*vt = msg[HeadLen:]
+			// case *error:
+			// 	*vt = msg.Error()
+			default:
+				return c.Codec.Unmarshal(msg.Data(), rsp)
+			}
+		}
+	default:
+		return ErrInvalidRspMessage
+	}
 	return nil
 }
 
@@ -575,7 +580,7 @@ func (c *Client) newReqMessage(cmd byte, method string, req interface{}, async b
 
 	bodyLen = len(method) + len(data)
 
-	msg = Message(util.GetBuffer(HeadLen + bodyLen))
+	msg = Message(c.Handler.GetBuffer(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
 

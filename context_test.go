@@ -40,18 +40,3 @@ func TestContext_Write(t *testing.T) {
 		t.Errorf("Context.Write() error = %v, wantErr %v", err, ErrShouldOnlyResponseToRequestMessage)
 	}
 }
-
-func TestContext_WriteWithTimeout(t *testing.T) {
-}
-
-func TestContext_Error(t *testing.T) {
-}
-
-func TestContext_newRspMessage(t *testing.T) {
-}
-
-func TestContext_write(t *testing.T) {
-}
-
-func Test_newContext(t *testing.T) {
-}

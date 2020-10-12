@@ -91,7 +91,7 @@ func (t *TopicAgent) Delete(c *arpc.Client) {
 
 // Publish .
 func (t *TopicAgent) Publish(s *Server, from *arpc.Client, topic *Topic) {
-	msg := arpc.NewMessage(arpc.CmdNotify, routePublish, topic.raw, s.Codec)
+	msg := s.NewMessage(arpc.CmdNotify, routePublish, topic.raw)
 	t.mux.RLock()
 	for to := range t.clients {
 		err := to.PushMsg(msg, arpc.TimeZero)
@@ -113,7 +113,7 @@ func (t *TopicAgent) Publish(s *Server, from *arpc.Client, topic *Topic) {
 
 // PublishToOne .
 func (t *TopicAgent) PublishToOne(s *Server, from *arpc.Client, topic *Topic) {
-	msg := arpc.NewMessage(arpc.CmdNotify, routePublish, topic.raw, s.Codec)
+	msg := s.NewMessage(arpc.CmdNotify, routePublish, topic.raw)
 	t.mux.RLock()
 	for to := range t.clients {
 		err := to.PushMsg(msg, arpc.TimeZero)

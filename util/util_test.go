@@ -55,12 +55,6 @@ func Test_ValueToBytes(t *testing.T) {
 	}
 }
 
-func Test_GetBuffer(t *testing.T) {
-	if got := GetBuffer(100); len(got) != 100 {
-		t.Errorf("len(GetBuffer(100)) = %v, want %v", len(got), 100)
-	}
-}
-
 func Test_Safe(t *testing.T) {
 	Safe(func() {})
 }

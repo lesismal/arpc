@@ -58,13 +58,13 @@ func (h Header) BodyLen() int {
 }
 
 // message clones header with body length
-func (h Header) message() (Message, error) {
+func (h Header) message(handler Handler) (Message, error) {
 	bodyLen := h.BodyLen()
 	if bodyLen < 0 || bodyLen > MaxBodyLen {
 		return nil, fmt.Errorf("invalid body length: %v", bodyLen)
 	}
 
-	m := Message(util.GetBuffer(HeadLen + bodyLen))
+	m := Message(handler.GetBuffer(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(h[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	return m, nil
 }
@@ -131,8 +131,8 @@ func (m Message) Data() []byte {
 	return m[length:]
 }
 
-// NewMessage factory
-func NewMessage(cmd byte, method string, v interface{}, codec codec.Codec) Message {
+// newMessage factory
+func newMessage(cmd byte, method string, v interface{}, h Handler, codec codec.Codec) Message {
 	var (
 		data    []byte
 		msg     Message
@@ -142,7 +142,10 @@ func NewMessage(cmd byte, method string, v interface{}, codec codec.Codec) Messa
 	data = util.ValueToBytes(codec, v)
 	bodyLen = len(method) + len(data)
 
-	msg = Message(util.GetBuffer(HeadLen + bodyLen))
+	if h == nil {
+		h = DefaultHandler
+	}
+	msg = Message(h.GetBuffer(HeadLen + bodyLen))
 	msg[headerIndexCmd] = cmd
 	msg[headerIndexMethodLen] = byte(len(method))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))

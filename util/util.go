@@ -109,7 +109,3 @@ func ValueToBytes(codec acodec.Codec, v interface{}) []byte {
 
 	return data
 }
-
-func GetBuffer(size int) []byte {
-	return make([]byte, size)
-}
