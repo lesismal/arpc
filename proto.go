@@ -32,19 +32,18 @@ const (
 	HeaderIndexBodyLenBegin = 0
 	// HeaderIndexBodyLenEnd .
 	HeaderIndexBodyLenEnd = 4
-	// HeaderIndexSeqBegin .
-	HeaderIndexSeqBegin = 4
-	// HeaderIndexSeqEnd .
-	HeaderIndexSeqEnd = 12
-	// HeaderIndexCmd .
-	HeaderIndexCmd = 12
-	// HeaderIndexFlag .
-	HeaderIndexFlag = 13
 	// HeaderIndexReserved .
-	HeaderIndexReserved = 14
+	HeaderIndexReserved = 4
+	// HeaderIndexCmd .
+	HeaderIndexCmd = 5
+	// HeaderIndexFlag .
+	HeaderIndexFlag = 6
 	// HeaderIndexMethodLen .
-	HeaderIndexMethodLen = 15
-
+	HeaderIndexMethodLen = 7
+	// HeaderIndexSeqBegin .
+	HeaderIndexSeqBegin = 8
+	// HeaderIndexSeqEnd .
+	HeaderIndexSeqEnd = 16
 	// HeaderFlagMaskError .
 	HeaderFlagMaskError byte = 0x01
 	// HeaderFlagMaskAsync .
