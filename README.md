@@ -280,7 +280,8 @@ var mux = sync.RWMutex{}
 var clientMap = make(map[*arpc.Client]struct{})
 
 func broadcast() {
-	msg := arpc.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i), nil)
+	var svr *arpc.Server = ... 
+	msg := svr.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
 	mux.RLock()
 	for client := range clientMap {
 		client.PushMsg(msg, arpc.TimeZero)
