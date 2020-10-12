@@ -39,9 +39,10 @@
 		- [Custom Codec](#custom-codec)
 		- [Custom Logger](#custom-logger)
 		- [Custom operations before conn's recv and send](#custom-operations-before-conns-recv-and-send)
-		- [Custom arpc.Client's Reader from wrapping net.Conn](#custom-arpcclients-reader-from-wrapping-netconn)
+		- [Custom arpc.Client's Reader by wrapping net.Conn](#custom-arpcclients-reader-by-wrapping-netconn)
 		- [Custom arpc.Client's send queue capacity](#custom-arpcclients-send-queue-capacity)
-	- [PUB/SUB Examples](#pubsub-examples)
+	- [Pub/Sub Examples](#pubsub-examples)
+	- [More Examples](#more-examples)
 
 ## Features
 - [x] Two-Way Calling
@@ -63,7 +64,7 @@
 
 - simple echo load testing
 
-| Framework | Protocol        | Codec         | Configuration                                             | Connection Num | Goroutine Num | Qps     |
+| Framework | Protocol        | codec.Codec   | Configuration                                             | Connection Num | Goroutine Num | Qps     |
 | --------- | --------------- | ------------- | --------------------------------------------------------- | -------------- | ------------- | ------- |
 | arpc      | tcp/localhost   | encoding/json | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10            | 80-100k |
 | grpc      | http2/localhost | protobuf      | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10            | 20-30k  |
@@ -190,9 +191,9 @@ handler = server.Handler
 // client
 handler = client.Handler
 
-handler.Use(  func(ctx *arpc.Context) { ... })
+handler.Use(func(ctx *arpc.Context) { ... })
 handler.Handle("/echo", func(ctx *arpc.Context) { ... })
-handler.Use(  func(ctx *arpc.Context) { ... })
+handler.Use(func(ctx *arpc.Context) { ... })
 ```
 
 ### Client Call, CallAsync, Notify
@@ -300,15 +301,12 @@ handler = server.Handler
 // client
 handler = client.Handler
 
-func asyncResponse(ctx *arpc.Context, data interface{}) {
-	ctx.Write(data)
-}
-
 handler.Handle("/echo", func(ctx *arpc.Context) {
 	req := ...
 	err := ctx.Bind(req)
 	if err == nil {
-		go asyncResponse(ctx, req)
+		// async response
+		go ctx.Write(data)
 	}
 })
 ```
@@ -395,10 +393,12 @@ client, err := arpc.NewClient(dialer)
 ### Custom Codec
 
 ```golang
+import "github.com/lesismal/arpc/codec"
+
 var codec arpc.Codec = ...
 
 // package
-arpc.DefaultCodec = codec
+codec.Defaultcodec = codec
 
 // server
 svr := arpc.NewServer()
@@ -412,8 +412,10 @@ client.Codec = codec
 ### Custom Logger
 
 ```golang
+import "github.com/lesismal/arpc/log"
+
 var logger arpc.Logger = ...
-arpc.SetLogger(logger) // arpc.DefaultLogger = logger
+log.SetLogger(logger) // log.DefaultLogger = logger
 ``` 
 
 ### Custom operations before conn's recv and send
@@ -428,7 +430,7 @@ arpc.DefaultHandler.BeforeSend(func(conn net.Conn) error) {
 })
 ```
 
-### Custom arpc.Client's Reader from wrapping net.Conn 
+### Custom arpc.Client's Reader by wrapping net.Conn 
 
 ```golang
 arpc.DefaultHandler.SetReaderWrapper(func(conn net.Conn) io.Reader) {
@@ -442,7 +444,7 @@ arpc.DefaultHandler.SetReaderWrapper(func(conn net.Conn) io.Reader) {
 arpc.DefaultHandler.SetSendQueueSize(4096)
 ```
 
-## PUB/SUB Examples
+## Pub/Sub Examples
 
 - start a server
 ```golang
@@ -474,7 +476,7 @@ func main() {
 
 - start a subscribe client
 ```golang
-import "github.com/lesismal/arpc"
+import "github.com/lesismal/arpc/log"
 import "github.com/lesismal/arpc/pubsub"
 
 var (
@@ -486,7 +488,7 @@ var (
 )
 
 func onTopic(topic *pubsub.Topic) {
-	arpc.DefaultLogger.Info("[OnTopic] [%v] \"%v\", [%v]",
+	log.Info("[OnTopic] [%v] \"%v\", [%v]",
 		topic.Name,
 		string(topic.Data),
 		time.Unix(topic.Timestamp/1000000000, topic.Timestamp%1000000000).Format("2006-01-02 15:04:05.000"))
@@ -559,3 +561,6 @@ func main() {
 ```
 
 
+## More Examples
+
+- See [examples](https://github.com/lesismal/arpc/tree/master/examples)

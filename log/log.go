@@ -2,7 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
-package arpc
+package log
 
 import (
 	"log"
@@ -95,25 +95,25 @@ func (l *logger) Error(format string, v ...interface{}) {
 	}
 }
 
-func logDebug(format string, v ...interface{}) {
+func Debug(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Debug(format, v...)
 	}
 }
 
-func logInfo(format string, v ...interface{}) {
+func Info(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Info(format, v...)
 	}
 }
 
-func logWarn(format string, v ...interface{}) {
+func Warn(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Warn(format, v...)
 	}
 }
 
-func logError(format string, v ...interface{}) {
+func Error(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Error(format, v...)
 	}

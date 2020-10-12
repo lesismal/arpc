@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/lesismal/arpc"
+	"github.com/lesismal/arpc/log"
 	"github.com/lesismal/arpc/pubsub"
 )
 
@@ -18,7 +18,7 @@ var (
 )
 
 func onTopic(topic *pubsub.Topic) {
-	arpc.DefaultLogger.Info("[OnTopic] [%v] \"%v\", [%v]",
+	log.Info("[OnTopic] [%v] \"%v\", [%v]",
 		topic.Name,
 		string(topic.Data),
 		time.Unix(topic.Timestamp/1000000000, topic.Timestamp%1000000000).Format("2006-01-02 15:04:05.000"))

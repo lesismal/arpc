@@ -2,7 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
-package arpc
+package log
 
 import "testing"
 
@@ -44,18 +44,18 @@ func Test_logger_Error(t *testing.T) {
 	l.Error("logger error test")
 }
 
-func Test_logDebug(t *testing.T) {
-	logDebug("logDebug")
+func Test_Debug(t *testing.T) {
+	Debug("log.Debug")
 }
 
-func Test_logInfo(t *testing.T) {
-	logInfo("logInfo")
+func Test_Info(t *testing.T) {
+	Info("log.Info")
 }
 
-func Test_logWarn(t *testing.T) {
-	logWarn("logWarn")
+func Test_Warn(t *testing.T) {
+	Warn("log.Warn")
 }
 
-func Test_logError(t *testing.T) {
-	logError("logError")
+func Test_Error(t *testing.T) {
+	Error("log.Error")
 }

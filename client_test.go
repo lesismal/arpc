@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lesismal/arpc/codec"
+	alog "github.com/lesismal/arpc/log"
 	"github.com/lesismal/arpcext/websocket"
 )
 
@@ -121,7 +123,7 @@ func Benchmark_Call_Struct_Payload_8192(b *testing.B) {
 }
 
 func init() {
-	SetLogger(nil)
+	alog.SetLogger(nil)
 	benchServer = newBenchServer()
 	benchClient = newBenchClient()
 }
@@ -446,7 +448,7 @@ func TestClientError(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	msg := NewMessage(CmdRequest, "/overstock", src, DefaultCodec)
+	msg := NewMessage(CmdRequest, "/overstock", src, codec.DefaultCodec)
 	for i := 0; i < 10000; i++ {
 		c.PushMsg(msg, 0)
 	}

@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/lesismal/arpc"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 var (
@@ -34,7 +36,7 @@ type Server struct {
 
 // Publish topic
 func (s *Server) Publish(topicName string, v interface{}) error {
-	topic, err := newTopic(topicName, arpc.ValueToBytes(s.Codec, v))
+	topic, err := newTopic(topicName, util.ValueToBytes(s.Codec, v))
 	if err != nil {
 		return err
 	}
@@ -48,7 +50,7 @@ func (s *Server) Publish(topicName string, v interface{}) error {
 
 // PublishToOne topic
 func (s *Server) PublishToOne(topicName string, v interface{}) error {
-	topic, err := newTopic(topicName, arpc.ValueToBytes(s.Codec, v))
+	topic, err := newTopic(topicName, util.ValueToBytes(s.Codec, v))
 	if err != nil {
 		return err
 	}
@@ -65,31 +67,31 @@ func (s *Server) invalid(ctx *arpc.Context) bool {
 }
 
 func (s *Server) onAuthenticate(ctx *arpc.Context) {
-	defer arpc.HandlePanic()
+	defer util.Recover()
 
 	passwd := ""
 	err := ctx.Bind(&passwd)
 	if err != nil {
 		ctx.Error(err)
-		arpc.DefaultLogger.Error("%v [Authenticate] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Authenticate] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
 	if passwd == s.Password {
 		s.addClient(ctx.Client)
 		ctx.Write(nil)
-		arpc.DefaultLogger.Info("%v [Authenticate] success from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
+		log.Info("%v [Authenticate] success from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
 	} else {
 		ctx.Error(ErrInvalidPassword)
-		arpc.DefaultLogger.Error("%v [Authenticate] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidPassword, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Authenticate] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidPassword, ctx.Client.Conn.RemoteAddr())
 	}
 }
 
 func (s *Server) onSubscribe(ctx *arpc.Context) {
-	defer arpc.HandlePanic()
+	defer util.Recover()
 
 	if s.invalid(ctx) {
-		arpc.DefaultLogger.Error("%v [Subscribe] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Subscribe] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
@@ -97,7 +99,7 @@ func (s *Server) onSubscribe(ctx *arpc.Context) {
 	err := topic.fromBytes(ctx.Body())
 	if err != nil {
 		ctx.Error(err)
-		arpc.DefaultLogger.Error("%v [Subscribe] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Subscribe] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 	topicName := topic.Name
@@ -111,22 +113,22 @@ func (s *Server) onSubscribe(ctx *arpc.Context) {
 			cts.mux.Unlock()
 			tp.Add(ctx.Client)
 			ctx.Write(nil)
-			arpc.DefaultLogger.Info("%v [Subscribe] [topic: '%v'] success from\t%v", s.Handler.LogTag(), topicName, ctx.Client.Conn.RemoteAddr())
+			log.Info("%v [Subscribe] [topic: '%v'] success from\t%v", s.Handler.LogTag(), topicName, ctx.Client.Conn.RemoteAddr())
 		} else {
 			cts.mux.Unlock()
 			ctx.Write(nil)
 		}
 	} else {
 		ctx.Error(ErrInvalidTopicEmpty)
-		arpc.DefaultLogger.Error("%v [Subscribe] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidTopicEmpty, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Subscribe] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidTopicEmpty, ctx.Client.Conn.RemoteAddr())
 	}
 }
 
 func (s *Server) onUnsubscribe(ctx *arpc.Context) {
-	defer arpc.HandlePanic()
+	defer util.Recover()
 
 	if s.invalid(ctx) {
-		arpc.DefaultLogger.Error("%v [Unsubscribe] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Unsubscribe] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
@@ -134,7 +136,7 @@ func (s *Server) onUnsubscribe(ctx *arpc.Context) {
 	err := topic.fromBytes(ctx.Body())
 	if err != nil {
 		ctx.Error(err)
-		arpc.DefaultLogger.Error("%v [Unsubscribe] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Unsubscribe] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 	topicName := topic.Name
@@ -146,22 +148,22 @@ func (s *Server) onUnsubscribe(ctx *arpc.Context) {
 			cts.mux.Unlock()
 			ta.Delete(ctx.Client)
 			ctx.Write(nil)
-			arpc.DefaultLogger.Info("%v [Unsubscribe] [topic: '%v'] success from\t%v", s.Handler.LogTag(), ta.Name, ctx.Client.Conn.RemoteAddr())
+			log.Info("%v [Unsubscribe] [topic: '%v'] success from\t%v", s.Handler.LogTag(), ta.Name, ctx.Client.Conn.RemoteAddr())
 		} else {
 			cts.mux.Unlock()
 			ctx.Write(nil)
 		}
 	} else {
 		ctx.Error(ErrInvalidTopicEmpty)
-		arpc.DefaultLogger.Error("%v [Unsubscribe] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidTopicEmpty, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Unsubscribe] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidTopicEmpty, ctx.Client.Conn.RemoteAddr())
 	}
 }
 
 func (s *Server) onPublish(ctx *arpc.Context) {
-	defer arpc.HandlePanic()
+	defer util.Recover()
 
 	if s.invalid(ctx) {
-		arpc.DefaultLogger.Error("%v [Publish] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Publish] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
@@ -169,7 +171,7 @@ func (s *Server) onPublish(ctx *arpc.Context) {
 	err := topic.fromBytes(ctx.Body())
 	if err != nil {
 		ctx.Error(err)
-		arpc.DefaultLogger.Error("%v [Publish] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Publish] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
@@ -177,25 +179,25 @@ func (s *Server) onPublish(ctx *arpc.Context) {
 	if topicName != "" {
 		ctx.Write(nil)
 		s.getOrMakeTopic(topic.Name).Publish(s, ctx.Client, topic)
-		// arpc.DefaultLogger.Debug("%v [Publish] [%v], %v from\t%v", s.Handler.LogTag(), topicName, ctx.Client.Conn.RemoteAddr())
+		// log.Debug("%v [Publish] [%v], %v from\t%v", s.Handler.LogTag(), topicName, ctx.Client.Conn.RemoteAddr())
 	} else {
 		ctx.Error(ErrInvalidTopicEmpty)
-		arpc.DefaultLogger.Error("%v [Publish] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidTopicEmpty, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Publish] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidTopicEmpty, ctx.Client.Conn.RemoteAddr())
 	}
 }
 
 func (s *Server) onPublishToOne(ctx *arpc.Context) {
-	defer arpc.HandlePanic()
+	defer util.Recover()
 
 	if s.invalid(ctx) {
-		arpc.DefaultLogger.Error("%v [PublishToOne] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [PublishToOne] invalid ctx from\t%v", s.Handler.LogTag(), ctx.Client.Conn.RemoteAddr())
 		return
 	}
 	topic := &Topic{}
 	err := topic.fromBytes(ctx.Body())
 	if err != nil {
 		ctx.Error(err)
-		arpc.DefaultLogger.Error("%v [PublishToOne] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [PublishToOne] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
@@ -203,10 +205,10 @@ func (s *Server) onPublishToOne(ctx *arpc.Context) {
 	if topicName != "" {
 		ctx.Write(nil)
 		s.getOrMakeTopic(topic.Name).PublishToOne(s, ctx.Client, topic)
-		// arpc.DefaultLogger.Debug("%v [Publish] [%v], %v from\t%v", s.Handler.LogTag(), topicName, ctx.Client.Conn.RemoteAddr())
+		// log.Debug("%v [Publish] [%v], %v from\t%v", s.Handler.LogTag(), topicName, ctx.Client.Conn.RemoteAddr())
 	} else {
 		ctx.Error(ErrInvalidTopicEmpty)
-		arpc.DefaultLogger.Error("%v [PublishToOne] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidTopicEmpty, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [PublishToOne] failed: %v, from\t%v", s.Handler.LogTag(), ErrInvalidTopicEmpty, ctx.Client.Conn.RemoteAddr())
 	}
 }
 
@@ -245,14 +247,14 @@ func (s *Server) deleteClient(c *arpc.Client) {
 		return
 	}
 
-	defer arpc.HandlePanic()
+	defer util.Recover()
 
 	cts := c.UserData.(*clientTopics)
 	cts.mux.RLock()
 	defer cts.mux.RUnlock()
 	for _, tp := range cts.topicAgents {
 		tp.Delete(c)
-		arpc.DefaultLogger.Info("%v [Disconnected Unsubscribe] [topic: '%v'] from\t%v", s.Handler.LogTag(), tp.Name, c.Conn.RemoteAddr())
+		log.Info("%v [Disconnected Unsubscribe] [topic: '%v'] from\t%v", s.Handler.LogTag(), tp.Name, c.Conn.RemoteAddr())
 	}
 }
 

@@ -8,6 +8,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+
+	"github.com/lesismal/arpc/codec"
+	"github.com/lesismal/arpc/util"
 )
 
 const (
@@ -61,7 +64,7 @@ func (h Header) message() (Message, error) {
 		return nil, fmt.Errorf("invalid body length: %v", bodyLen)
 	}
 
-	m := Message(memGet(HeadLen + bodyLen))
+	m := Message(util.GetBuffer(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(h[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	return m, nil
 }
@@ -94,7 +97,7 @@ func (m Message) Error() error {
 	if !m.IsError() {
 		return nil
 	}
-	return errors.New(BytesToStr(m[HeadLen+m.MethodLen():]))
+	return errors.New(util.BytesToStr(m[HeadLen+m.MethodLen():]))
 }
 
 // MethodLen returns method length
@@ -129,17 +132,17 @@ func (m Message) Data() []byte {
 }
 
 // NewMessage factory
-func NewMessage(cmd byte, method string, v interface{}, codec Codec) Message {
+func NewMessage(cmd byte, method string, v interface{}, codec codec.Codec) Message {
 	var (
 		data    []byte
 		msg     Message
 		bodyLen int
 	)
 
-	data = ValueToBytes(codec, v)
+	data = util.ValueToBytes(codec, v)
 	bodyLen = len(method) + len(data)
 
-	msg = Message(memGet(HeadLen + bodyLen))
+	msg = Message(util.GetBuffer(HeadLen + bodyLen))
 	msg[headerIndexCmd] = cmd
 	msg[headerIndexMethodLen] = byte(len(method))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))

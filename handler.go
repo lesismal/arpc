@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 // DefaultHandler instance
@@ -117,14 +120,14 @@ type handler struct {
 	wrapReader func(conn net.Conn) io.Reader
 
 	middles []HandlerFunc
-	routes  map[string]RouterHandler
+	routes  map[string]*RouterHandler
 }
 
 func (h *handler) Clone() Handler {
 	cp := *h
-	cp.routes = map[string]RouterHandler{}
+	cp.routes = map[string]*RouterHandler{}
 	for k, v := range h.routes {
-		rh := RouterHandler{
+		rh := &RouterHandler{
 			Async:    v.Async,
 			Handlers: make([]HandlerFunc, len(v.Handlers)),
 		}
@@ -240,7 +243,7 @@ func (h *handler) Use(cb HandlerFunc) {
 	}
 	h.middles = append(h.middles, cbWithNext)
 	for k, v := range h.routes {
-		rh := RouterHandler{
+		rh := &RouterHandler{
 			Async:    v.Async,
 			Handlers: make([]HandlerFunc, len(v.Handlers)+1),
 		}
@@ -252,7 +255,7 @@ func (h *handler) Use(cb HandlerFunc) {
 
 func (h *handler) Handle(method string, cb HandlerFunc, args ...interface{}) {
 	if h.routes == nil {
-		h.routes = map[string]RouterHandler{}
+		h.routes = map[string]*RouterHandler{}
 	}
 	if len(method) > MaxMethodLen {
 		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
@@ -267,7 +270,7 @@ func (h *handler) Handle(method string, cb HandlerFunc, args ...interface{}) {
 			async = bv
 		}
 	}
-	rh := RouterHandler{
+	rh := &RouterHandler{
 		Async:    async,
 		Handlers: make([]HandlerFunc, len(h.middles)+1),
 	}
@@ -326,12 +329,12 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 func (h *handler) OnMessage(c *Client, msg Message) {
 	ml := msg.MethodLen()
 	if ml <= 0 || ml > MaxMethodLen || ml > (len(msg)-HeadLen) {
-		logWarn("%v OnMessage: invalid request method length %v, dropped", h.LogTag())
+		log.Warn("%v OnMessage: invalid request method length %v, dropped", h.LogTag())
 		return
 	}
 	switch msg.Cmd() {
 	case CmdRequest, CmdNotify:
-		method := BytesToStr(msg[HeadLen : HeadLen+ml])
+		method := util.BytesToStr(msg[HeadLen : HeadLen+ml])
 		if rh, ok := h.routes[method]; ok {
 			ctx := newContext(c, msg, rh.Handlers)
 			if !rh.Async {
@@ -340,7 +343,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				go ctx.Next()
 			}
 		} else {
-			logWarn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
+			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
 		break
 	case CmdResponse:
@@ -351,7 +354,7 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				session.done <- msg
 			} else {
 				h.OnSessionMiss(c, msg)
-				logWarn("%v OnMessage: session not exist or expired", h.LogTag())
+				log.Warn("%v OnMessage: session not exist or expired", h.LogTag())
 			}
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
@@ -359,12 +362,12 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				handler(newContext(c, msg, nil))
 			} else {
 				h.OnSessionMiss(c, msg)
-				logWarn("%v OnMessage: async handler not exist or expired", h.LogTag())
+				log.Warn("%v OnMessage: async handler not exist or expired", h.LogTag())
 			}
 		}
 		break
 	default:
-		logWarn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
+		log.Warn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
 		break
 	}
 }

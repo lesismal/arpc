@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 // Client .
@@ -32,9 +34,9 @@ func (c *Client) Authenticate() error {
 	}
 	err := c.Call(routeAuthenticate, c.Password, nil, time.Second*5)
 	if err == nil {
-		arpc.DefaultLogger.Info("%v [Authenticate] success from\t%v", c.Handler.LogTag(), c.Conn.RemoteAddr())
+		log.Info("%v [Authenticate] success from\t%v", c.Handler.LogTag(), c.Conn.RemoteAddr())
 	} else {
-		arpc.DefaultLogger.Error("%v [Authenticate] failed: %v, from\t%v", c.Handler.LogTag(), err, c.Conn.RemoteAddr())
+		log.Error("%v [Authenticate] failed: %v, from\t%v", c.Handler.LogTag(), err, c.Conn.RemoteAddr())
 	}
 	return err
 }
@@ -59,12 +61,12 @@ func (c *Client) Subscribe(topicName string, h TopicHandler, timeout time.Durati
 
 	err = c.Call(routeSubscribe, bs, nil, timeout)
 	if err == nil {
-		arpc.DefaultLogger.Info("%v [Subscribe] [topic: '%v'] success from\t%v", c.Handler.LogTag(), topicName, c.Conn.RemoteAddr())
+		log.Info("%v [Subscribe] [topic: '%v'] success from\t%v", c.Handler.LogTag(), topicName, c.Conn.RemoteAddr())
 	} else {
 		c.mux.Lock()
 		delete(c.topicHandlerMap, topicName)
 		c.mux.Unlock()
-		arpc.DefaultLogger.Error("%v [Subscribe] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
+		log.Error("%v [Subscribe] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
 	}
 	return err
 }
@@ -84,16 +86,16 @@ func (c *Client) Unsubscribe(topicName string, timeout time.Duration) error {
 		c.mux.Lock()
 		delete(c.topicHandlerMap, topic.Name)
 		c.mux.Unlock()
-		arpc.DefaultLogger.Info("%v[Unsubscribe] [topic: '%v'] success from\t%v", c.Handler.LogTag(), topicName, c.Conn.RemoteAddr())
+		log.Info("%v[Unsubscribe] [topic: '%v'] success from\t%v", c.Handler.LogTag(), topicName, c.Conn.RemoteAddr())
 	} else {
-		arpc.DefaultLogger.Error("%v[Unsubscribe] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
+		log.Error("%v[Unsubscribe] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
 	}
 	return err
 }
 
 // Publish .
 func (c *Client) Publish(topicName string, v interface{}, timeout time.Duration) error {
-	topic, err := newTopic(topicName, arpc.ValueToBytes(c.Codec, v))
+	topic, err := newTopic(topicName, util.ValueToBytes(c.Codec, v))
 	if err != nil {
 		return err
 	}
@@ -104,14 +106,14 @@ func (c *Client) Publish(topicName string, v interface{}, timeout time.Duration)
 
 	err = c.Call(routePublish, bs, nil, timeout)
 	if err != nil {
-		arpc.DefaultLogger.Error("%v [Publish] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
+		log.Error("%v [Publish] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
 	}
 	return err
 }
 
 // PublishToOne .
 func (c *Client) PublishToOne(topicName string, v interface{}, timeout time.Duration) error {
-	topic, err := newTopic(topicName, arpc.ValueToBytes(c.Codec, v))
+	topic, err := newTopic(topicName, util.ValueToBytes(c.Codec, v))
 	if err != nil {
 		return err
 	}
@@ -122,7 +124,7 @@ func (c *Client) PublishToOne(topicName string, v interface{}, timeout time.Dura
 
 	err = c.Call(routePublishToOne, bs, nil, timeout)
 	if err != nil {
-		arpc.DefaultLogger.Error("%v [PublishToOne] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
+		log.Error("%v [PublishToOne] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
 	}
 	return err
 }
@@ -144,16 +146,16 @@ func (c *Client) initTopics() {
 	c.mux.RLock()
 	for name := range c.topicHandlerMap {
 		topicName := name
-		go arpc.Safe(func() {
+		go util.Safe(func() {
 			for i := 0; i < 10; i++ {
-				topic, _ := newTopic(topicName, arpc.ValueToBytes(c.Codec, nil))
+				topic, _ := newTopic(topicName, util.ValueToBytes(c.Codec, nil))
 				bs, _ := topic.toBytes()
 				err := c.Call(routeSubscribe, bs, nil, time.Second*10)
 				if err == nil {
-					arpc.DefaultLogger.Info("%v [Subscribe] [topic: '%v'] success from\t%v", c.Handler.LogTag(), topicName, c.Conn.RemoteAddr())
+					log.Info("%v [Subscribe] [topic: '%v'] success from\t%v", c.Handler.LogTag(), topicName, c.Conn.RemoteAddr())
 					break
 				} else {
-					arpc.DefaultLogger.Error("%v [Subscribe] [topic: '%v'] %v times failed: %v, from\t%v", c.Handler.LogTag(), topicName, i+1, err, c.Conn.RemoteAddr())
+					log.Error("%v [Subscribe] [topic: '%v'] %v times failed: %v, from\t%v", c.Handler.LogTag(), topicName, i+1, err, c.Conn.RemoteAddr())
 				}
 				time.Sleep(time.Second)
 			}
@@ -163,17 +165,17 @@ func (c *Client) initTopics() {
 }
 
 func (c *Client) onPublish(ctx *arpc.Context) {
-	defer arpc.HandlePanic()
+	defer util.Recover()
 
 	topic := &Topic{}
 	msg := ctx.Message
 	if msg.IsError() {
-		arpc.DefaultLogger.Warn("%v [Publish IN] failed [%v], to\t%v", c.Handler.LogTag(), msg.Error(), ctx.Client.Conn.RemoteAddr())
+		log.Warn("%v [Publish IN] failed [%v], to\t%v", c.Handler.LogTag(), msg.Error(), ctx.Client.Conn.RemoteAddr())
 		return
 	}
 	err := topic.fromBytes(ctx.Body())
 	if err != nil {
-		arpc.DefaultLogger.Warn("%v [Publish IN] failed [%v], to\t%v", c.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
+		log.Warn("%v [Publish IN] failed [%v], to\t%v", c.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 

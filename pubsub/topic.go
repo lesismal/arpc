@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 const (
@@ -70,13 +72,13 @@ type TopicAgent struct {
 
 	mux sync.RWMutex
 
-	clients map[*arpc.Client]arpc.Empty
+	clients map[*arpc.Client]util.Empty
 }
 
 // Add .
 func (t *TopicAgent) Add(c *arpc.Client) {
 	t.mux.Lock()
-	t.clients[c] = arpc.Empty{}
+	t.clients[c] = util.Empty{}
 	t.mux.Unlock()
 }
 
@@ -95,17 +97,17 @@ func (t *TopicAgent) Publish(s *Server, from *arpc.Client, topic *Topic) {
 		err := to.PushMsg(msg, arpc.TimeZero)
 		if err != nil {
 			if from != nil {
-				arpc.DefaultLogger.Error("[Publish] [topic: '%v'] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
+				log.Error("[Publish] [topic: '%v'] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Error("[Publish] [topic: '%v'] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
+				log.Error("[Publish] [topic: '%v'] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
 			}
 		}
 	}
 	t.mux.RUnlock()
 	if from != nil {
-		arpc.DefaultLogger.Debug("%v [Publish] [topic: '%v'] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
+		log.Debug("%v [Publish] [topic: '%v'] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
 	} else {
-		arpc.DefaultLogger.Debug("%v [Publish] [topic: '%v'] from Server", s.Handler.LogTag(), topic.Name)
+		log.Debug("%v [Publish] [topic: '%v'] from Server", s.Handler.LogTag(), topic.Name)
 	}
 }
 
@@ -117,15 +119,15 @@ func (t *TopicAgent) PublishToOne(s *Server, from *arpc.Client, topic *Topic) {
 		err := to.PushMsg(msg, arpc.TimeZero)
 		if err != nil {
 			if from != nil {
-				arpc.DefaultLogger.Error("[PublishToOne] [topic: '%v'] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
+				log.Error("[PublishToOne] [topic: '%v'] failed %v, from\t%v\tto\t%v", topic.Name, err, from.Conn.RemoteAddr(), to.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Error("[PublishToOne] [topic: '%v'] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
+				log.Error("[PublishToOne] [topic: '%v'] failed %v, from Server to\t%v", topic.Name, err, to.Conn.RemoteAddr())
 			}
 		} else {
 			if from != nil {
-				arpc.DefaultLogger.Debug("%v [PublishToOne] [topic: '%v'] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
+				log.Debug("%v [PublishToOne] [topic: '%v'] from\t%v", s.Handler.LogTag(), topic.Name, from.Conn.RemoteAddr())
 			} else {
-				arpc.DefaultLogger.Debug("%v [PublishToOne] [topic: '%v'] from Server", s.Handler.LogTag(), topic.Name)
+				log.Debug("%v [PublishToOne] [topic: '%v'] from Server", s.Handler.LogTag(), topic.Name)
 			}
 			break
 		}
@@ -136,6 +138,6 @@ func (t *TopicAgent) PublishToOne(s *Server, from *arpc.Client, topic *Topic) {
 func newTopicAgent(topic string) *TopicAgent {
 	return &TopicAgent{
 		Name:    topic,
-		clients: map[*arpc.Client]arpc.Empty{},
+		clients: map[*arpc.Client]util.Empty{},
 	}
 }

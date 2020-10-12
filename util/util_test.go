@@ -2,7 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
-package arpc
+package util
 
 import (
 	"errors"
@@ -23,31 +23,31 @@ func Test_BytesToStr(t *testing.T) {
 }
 
 func Test_ValueToBytes(t *testing.T) {
-	if got := ValueToBytes(DefaultCodec, nil); got != nil {
+	if got := ValueToBytes(Defaultcodec.Codec, nil); got != nil {
 		t.Errorf("ValueToBytes() = %v, want %v", got, nil)
 	}
-	if got := ValueToBytes(DefaultCodec, "test"); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(Defaultcodec.Codec, "test"); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
 	str := "test"
-	if got := ValueToBytes(DefaultCodec, &str); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(Defaultcodec.Codec, &str); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
-	if got := ValueToBytes(DefaultCodec, []byte("test")); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(Defaultcodec.Codec, []byte("test")); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
 	bts := []byte("test")
-	if got := ValueToBytes(DefaultCodec, &bts); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(Defaultcodec.Codec, &bts); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
-	if got := ValueToBytes(DefaultCodec, errors.New("test")); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(Defaultcodec.Codec, errors.New("test")); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
 	err := errors.New("test")
 	if got := ValueToBytes(nil, &err); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
-	if got := ValueToBytes(&JSONCodec{}, &struct{ I int }{I: 3}); !reflect.DeepEqual(got, []byte(`{"I":3}`)) {
+	if got := ValueToBytes(&JSONcodec.Codec{}, &struct{ I int }{I: 3}); !reflect.DeepEqual(got, []byte(`{"I":3}`)) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte(`{"I":3}`))
 	}
 	if got := ValueToBytes(nil, 0); len(got) < 0 {
@@ -55,9 +55,9 @@ func Test_ValueToBytes(t *testing.T) {
 	}
 }
 
-func Test_memGet(t *testing.T) {
-	if got := memGet(100); len(got) != 100 {
-		t.Errorf("len(memGet(100)) = %v, want %v", len(got), 100)
+func Test_GetBuffer(t *testing.T) {
+	if got := GetBuffer(100); len(got) != 100 {
+		t.Errorf("len(GetBuffer(100)) = %v, want %v", len(got), 100)
 	}
 }
 

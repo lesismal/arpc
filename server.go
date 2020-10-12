@@ -9,6 +9,9 @@ import (
 	"net"
 	"sync/atomic"
 	"time"
+
+	"github.com/lesismal/arpc/codec"
+	"github.com/lesismal/arpc/log"
 )
 
 // Server definition
@@ -17,7 +20,7 @@ type Server struct {
 	CurrLoad int64
 	MaxLoad  int64
 
-	Codec   Codec
+	Codec   codec.Codec
 	Handler Handler
 
 	Listener net.Listener
@@ -63,10 +66,10 @@ func (s *Server) runLoop() error {
 			}
 		} else {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				logError("%v Accept error: %v; retrying...", s.Handler.LogTag(), err)
+				log.Error("%v Accept error: %v; retrying...", s.Handler.LogTag(), err)
 				time.Sleep(time.Second / 20)
 			} else {
-				logError("%v Accept error: %v", s.Handler.LogTag(), err)
+				log.Error("%v Accept error: %v", s.Handler.LogTag(), err)
 				break
 			}
 		}
@@ -79,8 +82,8 @@ func (s *Server) runLoop() error {
 func (s *Server) Serve(ln net.Listener) error {
 	s.Listener = ln
 	s.chStop = make(chan error)
-	logInfo("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
-	defer logInfo("%v Stopped", s.Handler.LogTag())
+	log.Info("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
+	defer log.Info("%v Stopped", s.Handler.LogTag())
 	return s.runLoop()
 }
 
@@ -88,20 +91,20 @@ func (s *Server) Serve(ln net.Listener) error {
 func (s *Server) Run(addr string) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		logInfo("%v Running failed: %v", s.Handler.LogTag(), err)
+		log.Info("%v Running failed: %v", s.Handler.LogTag(), err)
 		return err
 	}
 	s.Listener = ln
 	s.chStop = make(chan error)
-	logInfo("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
-	// defer logInfo("%v Stopped", s.Handler.LogTag())
+	log.Info("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
+	// defer log.Info("%v Stopped", s.Handler.LogTag())
 	return s.runLoop()
 }
 
 // Stop rpc service
 func (s *Server) Stop() error {
-	// logInfo("%v %v Stop...", s.Handler.LogTag(), s.Listener.Addr())
-	defer logInfo("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
+	// log.Info("%v %v Stop...", s.Handler.LogTag(), s.Listener.Addr())
+	defer log.Info("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -115,8 +118,8 @@ func (s *Server) Stop() error {
 
 // Shutdown stop rpc service
 func (s *Server) Shutdown(ctx context.Context) error {
-	// logInfo("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
-	defer logInfo("%v %v Shutdown", s.Handler.LogTag(), s.Listener.Addr())
+	// log.Info("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
+	defer log.Info("%v %v Shutdown", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -132,7 +135,7 @@ func NewServer() *Server {
 	h := DefaultHandler.Clone()
 	h.SetLogTag("[ARPC SVR]")
 	return &Server{
-		Codec:   DefaultCodec,
+		Codec:   codec.DefaultCodec,
 		Handler: h,
 	}
 }

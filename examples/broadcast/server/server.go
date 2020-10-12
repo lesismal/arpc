@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
+	"github.com/lesismal/arpc/codec"
 )
 
 var mux = sync.RWMutex{}
@@ -48,7 +49,7 @@ func main() {
 }
 
 func broadcast(i int) {
-	msg := arpc.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i), arpc.DefaultCodec)
+	msg := arpc.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i), codec.DefaultCodec)
 	mux.RLock()
 	for client := range clientMap {
 		client.PushMsg(msg, arpc.TimeZero)

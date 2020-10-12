@@ -13,6 +13,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lesismal/arpc/codec"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 const (
@@ -40,7 +44,7 @@ type Client struct {
 	Reader   io.Reader
 	head     [4]byte
 	Head     Header
-	Codec    Codec
+	Codec    codec.Codec
 	Handler  Handler
 	Dialer   DialerFunc
 	UserData interface{}
@@ -54,7 +58,7 @@ type Client struct {
 	asyncHandlerMap map[uint64]HandlerFunc
 
 	chSend  chan Message
-	chClose chan Empty
+	chClose chan util.Empty
 
 	onStop func() int64
 }
@@ -66,8 +70,8 @@ func (c *Client) Run() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		go Safe(c.sendLoop)
-		go Safe(c.recvLoop)
+		go util.Safe(c.sendLoop)
+		go util.Safe(c.recvLoop)
 	}
 }
 
@@ -78,7 +82,7 @@ func (c *Client) RunWebsocket() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		go Safe(c.sendLoop)
+		go util.Safe(c.sendLoop)
 		c.Conn.(WebsocketConn).HandleWebsocket(c.recvLoop)
 	}
 }
@@ -434,14 +438,14 @@ func (c *Client) recvLoop() {
 		addr = c.Conn.RemoteAddr().String()
 	)
 
-	logDebug("%v\t%v\trecvLoop start", c.Handler.LogTag(), addr)
-	defer logDebug("%v\t%v\trecvLoop stop", c.Handler.LogTag(), addr)
+	log.Debug("%v\t%v\trecvLoop start", c.Handler.LogTag(), addr)
+	defer log.Debug("%v\t%v\trecvLoop stop", c.Handler.LogTag(), addr)
 
 	if c.Dialer == nil {
 		for c.running {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
-				logInfo("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
+				log.Info("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
 				c.Stop()
 				return
 			}
@@ -454,7 +458,7 @@ func (c *Client) recvLoop() {
 			for {
 				msg, err = c.Handler.Recv(c)
 				if err != nil {
-					logInfo("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
+					log.Info("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
 					break
 				}
 				c.Handler.OnMessage(c, msg)
@@ -469,7 +473,7 @@ func (c *Client) recvLoop() {
 			c.clearAsyncHandler()
 
 			for c.running {
-				logInfo("%v\t%v\tReconnecting ...", c.Handler.LogTag(), addr)
+				log.Info("%v\t%v\tReconnecting ...", c.Handler.LogTag(), addr)
 				conn, err := c.Dialer()
 				if err == nil {
 					c.Conn = conn
@@ -478,7 +482,7 @@ func (c *Client) recvLoop() {
 
 					c.reconnecting = false
 
-					logInfo("%v\t%v\tReconnected", c.Handler.LogTag(), addr)
+					log.Info("%v\t%v\tReconnected", c.Handler.LogTag(), addr)
 
 					go c.Handler.OnConnected(c)
 
@@ -493,8 +497,8 @@ func (c *Client) recvLoop() {
 
 func (c *Client) sendLoop() {
 	addr := c.Conn.RemoteAddr().String()
-	logDebug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
-	defer logDebug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), addr)
+	log.Debug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
+	defer log.Debug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), addr)
 	if !c.Handler.BatchSend() {
 		var msg Message
 		var conn net.Conn
@@ -567,11 +571,11 @@ func (c *Client) newReqMessage(cmd byte, method string, req interface{}, async b
 		bodyLen int
 	)
 
-	data = ValueToBytes(c.Codec, req)
+	data = util.ValueToBytes(c.Codec, req)
 
 	bodyLen = len(method) + len(data)
 
-	msg = Message(memGet(HeadLen + bodyLen))
+	msg = Message(util.GetBuffer(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
 
@@ -586,8 +590,8 @@ func (c *Client) newReqMessage(cmd byte, method string, req interface{}, async b
 }
 
 // newClientWithConn factory
-func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func() int64) *Client {
-	logInfo("%v\t%v\tConnected", handler.LogTag(), conn.RemoteAddr())
+func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop func() int64) *Client {
+	log.Info("%v\t%v\tConnected", handler.LogTag(), conn.RemoteAddr())
 
 	c := &Client{}
 	c.Conn = conn
@@ -595,7 +599,7 @@ func newClientWithConn(conn net.Conn, codec Codec, handler Handler, onStop func(
 	c.Codec = codec
 	c.Handler = handler
 	c.chSend = make(chan Message, c.Handler.SendQueueSize())
-	c.chClose = make(chan Empty)
+	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 	c.onStop = onStop
@@ -614,15 +618,15 @@ func NewClient(dialer DialerFunc) (*Client, error) {
 	c.Conn = conn
 
 	c.Head = Header(c.head[:])
-	c.Codec = DefaultCodec
+	c.Codec = codec.DefaultCodec
 	c.Handler = DefaultHandler.Clone()
 	c.Dialer = dialer
 	c.chSend = make(chan Message, c.Handler.SendQueueSize())
-	c.chClose = make(chan Empty)
+	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 
-	logInfo("%v\t%v\tConnected", c.Handler.LogTag(), conn.RemoteAddr())
+	log.Info("%v\t%v\tConnected", c.Handler.LogTag(), conn.RemoteAddr())
 
 	return c, nil
 }

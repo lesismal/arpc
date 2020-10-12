@@ -8,6 +8,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"time"
+
+	"github.com/lesismal/arpc/util"
 )
 
 // Context definition
@@ -39,7 +41,7 @@ func (ctx *Context) Bind(v interface{}) error {
 		case *string:
 			*vt = string(data)
 		case *error:
-			*vt = errors.New(BytesToStr(data))
+			*vt = errors.New(util.BytesToStr(data))
 		default:
 			return ctx.Client.Codec.Unmarshal(data, v)
 		}
@@ -95,11 +97,11 @@ func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
 		isError = 1
 	}
 
-	data = ValueToBytes(ctx.Client.Codec, v)
+	data = util.ValueToBytes(ctx.Client.Codec, v)
 
 	methodLen = ctx.Message.MethodLen()
 	bodyLen = len(data) + methodLen
-	msg = Message(memGet(HeadLen + bodyLen))
+	msg = Message(util.GetBuffer(HeadLen + bodyLen))
 	copy(msg[headerIndexAsync:], ctx.Message[headerIndexAsync:HeadLen+methodLen])
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())

@@ -63,7 +63,7 @@ func consumer(c *Client, topicName string, chDone chan int) {
 	cnt := 0
 	err := c.Subscribe(topicName, func(topic Topic) {
 		cnt++
-		arpc.DefaultLogger.Info("[OnTopic] [%v] \"%v\" %v", topic.GetName(), string(topic.GetData()), time.Unix(topic.GetTimestamp(), 0).Format("15:04:05"))
+		log.Info("[OnTopic] [%v] \"%v\" %v", topic.GetName(), string(topic.GetData()), time.Unix(topic.GetTimestamp(), 0).Format("15:04:05"))
 		if cnt >= 3 {
 			close(chDone)
 		}
