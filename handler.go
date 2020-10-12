@@ -317,14 +317,14 @@ func (h *handler) Recv(c *Client) (Message, error) {
 		}
 	}
 
-	_, err = io.ReadFull(c.Reader, c.Head[:headerIndexBodyLenEnd])
+	_, err = io.ReadFull(c.Reader, c.Head[:HeaderIndexBodyLenEnd])
 	if err != nil {
 		return nil, err
 	}
 
 	message, err = c.Head.message(h)
 	if err == nil && len(message) > HeadLen {
-		_, err = io.ReadFull(c.Reader, message[headerIndexBodyLenEnd:])
+		_, err = io.ReadFull(c.Reader, message[HeaderIndexBodyLenEnd:])
 	}
 
 	for i := len(h.msgCoders) - 1; i >= 0; i-- {

@@ -102,10 +102,10 @@ func (ctx *Context) newRspMessage(v interface{}, isError bool) Message {
 	methodLen = ctx.Message.MethodLen()
 	bodyLen = len(data) + methodLen
 	msg = Message(ctx.Client.Handler.GetBuffer(HeadLen + bodyLen))
-	copy(msg[headerIndexFlag:], ctx.Message[headerIndexFlag:HeadLen+methodLen])
-	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
-	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
-	msg[headerIndexCmd] = CmdResponse
+	copy(msg[HeaderIndexFlag:], ctx.Message[HeaderIndexFlag:HeadLen+methodLen])
+	binary.LittleEndian.PutUint32(msg[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
+	binary.LittleEndian.PutUint64(msg[HeaderIndexSeqBegin:HeaderIndexSeqEnd], ctx.Message.Seq())
+	msg[HeaderIndexCmd] = CmdResponse
 	msg.SetError(isError)
 	copy(msg[HeadLen+methodLen:], data)
 

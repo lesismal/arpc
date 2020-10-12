@@ -584,12 +584,12 @@ func (c *Client) newReqMessage(cmd byte, method string, req interface{}, isAsync
 	bodyLen = len(method) + len(data)
 
 	msg = Message(c.Handler.GetBuffer(HeadLen + bodyLen))
-	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
-	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
-	msg[headerIndexCmd] = cmd
+	binary.LittleEndian.PutUint32(msg[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
+	binary.LittleEndian.PutUint64(msg[HeaderIndexSeqBegin:HeaderIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
+	msg[HeaderIndexCmd] = cmd
 	msg.SetAsync(isAsync)
 	msg.SetError(false)
-	msg[headerIndexMethodLen] = byte(len(method))
+	msg[HeaderIndexMethodLen] = byte(len(method))
 	copy(msg[HeadLen:HeadLen+len(method)], method)
 	copy(msg[HeadLen+len(method):], data)
 
