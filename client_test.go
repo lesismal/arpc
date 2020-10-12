@@ -171,7 +171,7 @@ func newBenchServer() *Server {
 		ctx.Write(&src)
 	})
 	go s.Run(benchAddr)
-	time.Sleep(time.Second)
+	time.Sleep(time.Second / 10)
 	return s
 }
 
@@ -318,6 +318,10 @@ func TestWebsocket(t *testing.T) {
 		ctx.Bind(&str)
 		ctx.Write(str)
 	})
+	svr.Handler.Clone()
+	svr.Handler.BeforeRecv(func(net.Conn) error { return nil })
+	svr.Handler.BeforeSend(func(net.Conn) error { return nil })
+	svr.Handler.SetBufferFactory(func(size int) []byte { return make([]byte, size) })
 	go svr.Serve(ln)
 
 	time.Sleep(time.Second / 100)
