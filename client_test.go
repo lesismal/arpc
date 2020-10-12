@@ -6,6 +6,7 @@ package arpc
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -170,6 +171,7 @@ func newBenchServer() *Server {
 		}
 		ctx.Write(&src)
 	})
+
 	go s.Run(benchAddr)
 	time.Sleep(time.Second / 10)
 	return s
@@ -295,6 +297,9 @@ func newSvr() *Server {
 		}
 		ctx.Write(src)
 	})
+	s.Handler.Handle("/error", func(ctx *Context) {
+		ctx.Error(fmt.Errorf("invlaid router"))
+	})
 	go s.Run(allAddr)
 	return s
 }
@@ -345,6 +350,16 @@ func TestWebsocket(t *testing.T) {
 	}
 }
 
+type testCoder int
+
+func (tc *testCoder) Encode(m Message) Message {
+	return m
+}
+
+func (tc *testCoder) Decode(m Message) Message {
+	return m
+}
+
 func TestClientNormal(t *testing.T) {
 	var src = "test"
 	var dst = ""
@@ -355,6 +370,7 @@ func TestClientNormal(t *testing.T) {
 	time.Sleep(time.Second / 100)
 
 	s.Handler.Use(func(ctx *Context) { ctx.Next() })
+	s.Handler.UseCoder(new(testCoder))
 	c, err := NewClient(func() (net.Conn, error) {
 		return net.DialTimeout("tcp", allAddr, time.Second)
 	})
@@ -364,7 +380,13 @@ func TestClientNormal(t *testing.T) {
 	c.Handler.SetBatchSend(false)
 	c.Run()
 	defer c.Stop()
-
+	if err = c.Call("/error", src, &dstB, time.Second); err == nil {
+		t.Fatalf("Call() '/error' returns nil error")
+	} else if err.Error() != "invlaid router" {
+		t.Fatalf("Call() '/error' returns: %v", err)
+	} else {
+		// t.Logf("Call() '/error' returns: %v", err)
+	}
 	if err = c.Call("/call", src, &dst, time.Second); err != nil {
 		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
@@ -380,9 +402,9 @@ func TestClientNormal(t *testing.T) {
 	if err = c.CallAsync("/callasync", src, func(*Context) {}, time.Second); err != nil {
 		t.Fatalf("CallAsync() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
-	if err = c.CallAsyncWith(context.Background(), "/callasync", src, func(*Context) {}); err != nil {
-		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
-	}
+	// if err = c.CallAsyncWith(context.Background(), "/callasync", src, func(*Context) {}); err != nil {
+	// 	t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
+	// }
 	if err = c.Notify("/notify", src, time.Second); err != nil {
 		t.Fatalf("Notify() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
@@ -397,6 +419,7 @@ func TestClientNormal(t *testing.T) {
 	if err = c.CallWith(toCtx, "/timeout", src, &dst); err != ErrClientTimeout {
 		t.Fatalf("CallWith() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
+
 }
 
 func TestClientError(t *testing.T) {

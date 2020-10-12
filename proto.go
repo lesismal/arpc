@@ -28,14 +28,15 @@ const (
 )
 
 const (
-	headerIndexBodyLenBegin = 0
-	headerIndexBodyLenEnd   = 4
-	headerIndexSeqBegin     = 4
-	headerIndexSeqEnd       = 12
-	headerIndexCmd          = 12
-	headerIndexError        = 13
-	headerIndexAsync        = 14
-	headerIndexMethodLen    = 15
+	headerIndexBodyLenBegin      = 0
+	headerIndexBodyLenEnd        = 4
+	headerIndexSeqBegin          = 4
+	headerIndexSeqEnd            = 12
+	headerIndexCmd               = 12
+	headerIndexFlag              = 13
+	headerFlagMaskError     byte = 0x01
+	headerFlagMaskAsync     byte = 0x02
+	headerIndexMethodLen         = 15
 )
 
 const (
@@ -77,19 +78,32 @@ func (m Message) Cmd() byte {
 	return m[headerIndexCmd]
 }
 
-// Async returns async flag value
-func (m Message) Async() byte {
-	return m[headerIndexAsync]
-}
-
 // IsAsync returns async flag
 func (m Message) IsAsync() bool {
-	return m[headerIndexAsync] == 1
+	return m[headerIndexFlag]&headerFlagMaskAsync > 0
+}
+
+// SetAsync sets async flag
+func (m Message) SetAsync(isAsync bool) {
+	if isAsync {
+		m[headerIndexFlag] |= headerFlagMaskAsync
+	} else {
+		m[headerIndexFlag] &= ^headerFlagMaskAsync
+	}
 }
 
 // IsError returns error flag
 func (m Message) IsError() bool {
-	return m[headerIndexError] == 1
+	return m[headerIndexFlag]&headerFlagMaskError > 0
+}
+
+// SetError sets error flag
+func (m Message) SetError(isError bool) {
+	if isError {
+		m[headerIndexFlag] |= headerFlagMaskError
+	} else {
+		m[headerIndexFlag] &= ^headerFlagMaskError
+	}
 }
 
 // Error returns error
@@ -153,4 +167,10 @@ func newMessage(cmd byte, method string, v interface{}, h Handler, codec codec.C
 	copy(msg[HeadLen+len(method):], data)
 
 	return msg
+}
+
+// MessageCoder .
+type MessageCoder interface {
+	Encode(Message) Message
+	Decode(Message) Message
 }

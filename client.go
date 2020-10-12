@@ -124,7 +124,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 
 	timer := time.NewTimer(timeout)
 
-	msg := c.newReqMessage(CmdRequest, method, req, 0)
+	msg := c.newReqMessage(CmdRequest, method, req, false)
 
 	seq := msg.Seq()
 	sess := newSession(seq)
@@ -165,7 +165,7 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
-	msg := c.newReqMessage(CmdRequest, method, req, 0)
+	msg := c.newReqMessage(CmdRequest, method, req, false)
 
 	seq := msg.Seq()
 	sess := newSession(seq)
@@ -194,10 +194,11 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 	return c.callAsync(CmdRequest, method, req, handler, timeout)
 }
 
+// deprecated: can not graceful clear missing asynchandler in time
 // CallAsyncWith make async rpc call with context
-func (c *Client) CallAsyncWith(ctx context.Context, method string, req interface{}, handler HandlerFunc) error {
-	return c.callAsyncWith(ctx, CmdRequest, method, req, handler)
-}
+// func (c *Client) CallAsyncWith(ctx context.Context, method string, req interface{}, handler HandlerFunc) error {
+// 	return c.callAsyncWith(ctx, CmdRequest, method, req, handler)
+// }
 
 // Notify make rpc notify with timeout
 func (c *Client) Notify(method string, data interface{}, timeout time.Duration) error {
@@ -206,7 +207,7 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration) 
 
 // NotifyWith make rpc notify with context
 func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}) error {
-	return c.callAsyncWith(ctx, CmdNotify, method, data, nil)
+	return c.callAsyncWith(ctx, CmdNotify, method, data)
 }
 
 // PushMsg push msg to client's send queue
@@ -291,11 +292,12 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
-	msg := c.newReqMessage(cmd, method, req, 1)
+	msg := c.newReqMessage(cmd, method, req, true)
 	seq := msg.Seq()
 
 	if handler != nil {
 		c.addAsyncHandler(seq, handler)
+		time.AfterFunc(timeout, func() { c.deleteAsyncHandler(seq) })
 	}
 
 	switch timeout {
@@ -326,7 +328,7 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 	return nil
 }
 
-func (c *Client) callAsyncWith(ctx context.Context, cmd byte, method string, req interface{}, handler HandlerFunc) error {
+func (c *Client) callAsyncWith(ctx context.Context, cmd byte, method string, req interface{}) error {
 	if !c.running {
 		return ErrClientStopped
 	}
@@ -339,20 +341,21 @@ func (c *Client) callAsyncWith(ctx context.Context, cmd byte, method string, req
 		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
-	msg := c.newReqMessage(cmd, method, req, 1)
-	seq := msg.Seq()
+	msg := c.newReqMessage(cmd, method, req, true)
+	// seq := msg.Seq()
 
-	if handler != nil {
-		c.addAsyncHandler(seq, handler)
-	}
+	// if handler != nil {
+	// 	c.addAsyncHandler(seq, handler)
+	// 	// time.AfterFunc(timeout, func() { c.deleteAsyncHandler(seq) })
+	// }
 
 	select {
 	case c.chSend <- msg:
 	case <-ctx.Done():
 		c.Handler.OnOverstock(c, msg)
-		if handler != nil {
-			c.deleteAsyncHandler(seq)
-		}
+		// if handler != nil {
+		// 	c.deleteAsyncHandler(seq)
+		// }
 		return ErrClientTimeout
 	}
 
@@ -569,7 +572,7 @@ func (c *Client) sendLoop() {
 	}
 }
 
-func (c *Client) newReqMessage(cmd byte, method string, req interface{}, async byte) Message {
+func (c *Client) newReqMessage(cmd byte, method string, req interface{}, isAsync bool) Message {
 	var (
 		data    []byte
 		msg     Message
@@ -583,10 +586,9 @@ func (c *Client) newReqMessage(cmd byte, method string, req interface{}, async b
 	msg = Message(c.Handler.GetBuffer(HeadLen + bodyLen))
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
-
 	msg[headerIndexCmd] = cmd
-	msg[headerIndexAsync] = async
-	msg[headerIndexError] = 0
+	msg.SetAsync(isAsync)
+	msg.SetError(false)
 	msg[headerIndexMethodLen] = byte(len(method))
 	copy(msg[HeadLen:HeadLen+len(method)], method)
 	copy(msg[HeadLen+len(method):], data)

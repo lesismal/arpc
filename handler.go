@@ -93,7 +93,10 @@ type Handler interface {
 	SetSendQueueSize(size int)
 
 	// Handle sets middleware
-	Use(cb HandlerFunc)
+	Use(h HandlerFunc)
+
+	// UseCoder sets middleware for message encoding/decoding
+	UseCoder(coder MessageCoder)
 
 	// Handle registers method handler
 	Handle(m string, h HandlerFunc, args ...interface{})
@@ -126,12 +129,20 @@ type handler struct {
 
 	wrapReader func(conn net.Conn) io.Reader
 
-	middles []HandlerFunc
-	routes  map[string]*RouterHandler
+	middles   []HandlerFunc
+	msgCoders []MessageCoder
+
+	routes map[string]*RouterHandler
 }
 
 func (h *handler) Clone() Handler {
 	cp := *h
+	cp.middles = make([]HandlerFunc, len(h.middles))
+	copy(cp.middles, h.middles)
+
+	cp.msgCoders = make([]MessageCoder, len(h.msgCoders))
+	copy(cp.msgCoders, h.msgCoders)
+
 	cp.routes = map[string]*RouterHandler{}
 	for k, v := range h.routes {
 		rh := &RouterHandler{
@@ -141,6 +152,7 @@ func (h *handler) Clone() Handler {
 		copy(rh.Handlers, v.Handlers)
 		cp.routes[k] = rh
 	}
+
 	return &cp
 }
 
@@ -260,6 +272,10 @@ func (h *handler) Use(cb HandlerFunc) {
 	}
 }
 
+func (h *handler) UseCoder(coder MessageCoder) {
+	h.msgCoders = append(h.msgCoders, coder)
+}
+
 func (h *handler) Handle(method string, cb HandlerFunc, args ...interface{}) {
 	if h.routes == nil {
 		h.routes = map[string]*RouterHandler{}
@@ -311,6 +327,10 @@ func (h *handler) Recv(c *Client) (Message, error) {
 		_, err = io.ReadFull(c.Reader, message[headerIndexBodyLenEnd:])
 	}
 
+	for i := len(h.msgCoders) - 1; i >= 0; i-- {
+		message = h.msgCoders[i].Decode(message)
+	}
+
 	return message, err
 }
 
@@ -320,6 +340,11 @@ func (h *handler) Send(conn net.Conn, m Message) (int, error) {
 			return -1, err
 		}
 	}
+
+	for i := 0; i < len(h.msgCoders); i++ {
+		m = h.msgCoders[i].Encode(m)
+	}
+
 	return conn.Write(m)
 }
 
@@ -327,6 +352,11 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 	if h.beforeSend != nil {
 		if err := h.beforeSend(conn); err != nil {
 			return -1, err
+		}
+	}
+	for i := 0; i < len(buffers); i++ {
+		for j := 0; j < len(h.msgCoders); j++ {
+			buffers[i] = h.msgCoders[j].Encode(buffers[i])
 		}
 	}
 	n64, err := buffers.WriteTo(conn)

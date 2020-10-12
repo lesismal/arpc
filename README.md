@@ -221,14 +221,6 @@ err := client.CallAsync("/call/echo", request, func(ctx *arpc.Context) {
 	ctx.Bind(response)
 	...	
 }, timeout)
-
-// ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-// defer cancel()
-// err := client.CallAsyncWith(ctx, "/call/echo", request, func(ctx *arpc.Context) {
-// 	response := &Echo{}
-// 	ctx.Bind(response)
-// 	...	
-// })
 ```
 
 3. Notify (same as CallAsync with timeout/context, without callback)

@@ -58,11 +58,11 @@ func TestMessage_Cmd(t *testing.T) {
 
 func TestMessage_Async(t *testing.T) {
 	msg := newMessage(CmdRequest, "hello", "hello", DefaultHandler, codec.DefaultCodec)
-	if got := msg.Async(); got != 0 {
+	if got := msg.IsAsync(); got != false {
 		t.Errorf("Message.Async() = %v, want %v", got, 0)
 	}
-	msg[headerIndexAsync] = 1
-	if got := msg.Async(); got != 1 {
+	msg.SetAsync(true)
+	if got := msg.IsAsync(); got != true {
 		t.Errorf("Message.Async() = %v, want %v", got, 1)
 	}
 }
@@ -72,7 +72,7 @@ func TestMessage_IsAsync(t *testing.T) {
 	if got := msg.IsAsync(); got != false {
 		t.Errorf("Message.IsAsync() = %v, want %v", got, false)
 	}
-	msg[headerIndexAsync] = 1
+	msg.SetAsync(true)
 	if got := msg.IsAsync(); got != true {
 		t.Errorf("Message.IsAsync() = %v, want %v", got, true)
 	}
@@ -83,7 +83,7 @@ func TestMessage_IsError(t *testing.T) {
 	if got := msg.IsError(); got != false {
 		t.Errorf("Message.IsError() = %v, want %v", got, false)
 	}
-	msg[headerIndexError] = 1
+	msg.SetError(true)
 	if got := msg.IsError(); got != true {
 		t.Errorf("Message.IsError() = %v, want %v", got, true)
 	}

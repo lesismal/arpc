@@ -51,17 +51,17 @@ func (ctx *Context) Bind(v interface{}) error {
 
 // Write responses message to client
 func (ctx *Context) Write(v interface{}) error {
-	return ctx.write(v, 0, TimeForever)
+	return ctx.write(v, false, TimeForever)
 }
 
 // WriteWithTimeout responses message to client with timeout
 func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error {
-	return ctx.write(v, 0, timeout)
+	return ctx.write(v, false, timeout)
 }
 
 // Error responses error message to client
 func (ctx *Context) Error(err error) error {
-	return ctx.write(err, 1, TimeForever)
+	return ctx.write(err, true, TimeForever)
 }
 
 // Next .
@@ -81,7 +81,7 @@ func (ctx *Context) Done() {
 	ctx.done = true
 }
 
-func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
+func (ctx *Context) newRspMessage(v interface{}, isError bool) Message {
 	var (
 		data      []byte
 		msg       Message
@@ -94,7 +94,7 @@ func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
 	// }
 
 	if _, ok := v.(error); ok {
-		isError = 1
+		isError = true
 	}
 
 	data = util.ValueToBytes(ctx.Client.Codec, v)
@@ -102,19 +102,17 @@ func (ctx *Context) newRspMessage(v interface{}, isError byte) Message {
 	methodLen = ctx.Message.MethodLen()
 	bodyLen = len(data) + methodLen
 	msg = Message(ctx.Client.Handler.GetBuffer(HeadLen + bodyLen))
-	copy(msg[headerIndexAsync:], ctx.Message[headerIndexAsync:HeadLen+methodLen])
+	copy(msg[headerIndexFlag:], ctx.Message[headerIndexFlag:HeadLen+methodLen])
 	binary.LittleEndian.PutUint32(msg[headerIndexBodyLenBegin:headerIndexBodyLenEnd], uint32(bodyLen))
 	binary.LittleEndian.PutUint64(msg[headerIndexSeqBegin:headerIndexSeqEnd], ctx.Message.Seq())
 	msg[headerIndexCmd] = CmdResponse
-	msg[headerIndexError] = isError
-	// msg[headerIndexAsync] = ctx.Message.Async()
-	// msg[headerIndexMethodLen] = byte(methodLen)
+	msg.SetError(isError)
 	copy(msg[HeadLen+methodLen:], data)
 
 	return msg
 }
 
-func (ctx *Context) write(v interface{}, isError byte, timeout time.Duration) error {
+func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
 	if ctx.Message.Cmd() != CmdRequest {
 		return ErrShouldOnlyResponseToRequestMessage
 	}
