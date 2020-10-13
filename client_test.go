@@ -387,6 +387,9 @@ func TestClientNormal(t *testing.T) {
 	} else {
 		// t.Logf("Call() '/error' returns: %v", err)
 	}
+	if err = c.Call("invalid method", src, &dst, time.Second); err.Error() != ErrMethodNotFound.Error() {
+		t.Fatalf("Call() error is: %v, need: %v", err, ErrMethodNotFound)
+	}
 	if err = c.Call("/call", src, &dst, time.Second); err != nil {
 		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}

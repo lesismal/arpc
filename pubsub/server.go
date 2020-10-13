@@ -72,7 +72,7 @@ func (s *Server) onAuthenticate(ctx *arpc.Context) {
 	passwd := ""
 	err := ctx.Bind(&passwd)
 	if err != nil {
-		ctx.Error(err)
+		ctx.Error(ErrInvalidPassword)
 		log.Error("%v [Authenticate] failed: %v, from\t%v", s.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}

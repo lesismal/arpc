@@ -380,6 +380,8 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				go ctx.Next()
 			}
 		} else {
+			ctx := newContext(c, msg, nil)
+			ctx.Error(ErrMethodNotFound)
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
 		break
