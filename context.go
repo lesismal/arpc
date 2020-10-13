@@ -60,8 +60,8 @@ func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error
 }
 
 // Error responses error message to client
-func (ctx *Context) Error(err error) error {
-	return ctx.write(err, true, TimeForever)
+func (ctx *Context) Error(v interface{}) error {
+	return ctx.write(v, true, TimeForever)
 }
 
 // Next .
@@ -89,10 +89,6 @@ func (ctx *Context) newRspMessage(v interface{}, isError bool) Message {
 		methodLen int
 	)
 
-	// if ctx.Message.Cmd() != CmdRequest {
-	// 	return nil
-	// }
-
 	if _, ok := v.(error); ok {
 		isError = true
 	}
@@ -113,9 +109,6 @@ func (ctx *Context) newRspMessage(v interface{}, isError bool) Message {
 }
 
 func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
-	if ctx.Message.Cmd() != CmdRequest {
-		return ErrShouldOnlyResponseToRequestMessage
-	}
 	msg := ctx.newRspMessage(v, isError)
 	return ctx.Client.PushMsg(msg, timeout)
 }

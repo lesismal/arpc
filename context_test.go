@@ -31,13 +31,3 @@ func TestContext_Bind(t *testing.T) {
 		t.Errorf("Context.Bind() error = nil, want %v", err)
 	}
 }
-
-func TestContext_Write(t *testing.T) {
-	ctx := &Context{
-		Client:  &Client{Codec: codec.DefaultCodec},
-		Message: newMessage(CmdNotify, "method", "data", DefaultHandler, codec.DefaultCodec),
-	}
-	if err := ctx.Write(nil); err != ErrShouldOnlyResponseToRequestMessage {
-		t.Errorf("Context.Write() error = %v, wantErr %v", err, ErrShouldOnlyResponseToRequestMessage)
-	}
-}

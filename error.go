@@ -27,10 +27,7 @@ var (
 // context error
 var (
 	// ErrMethodNotFound
-	ErrMethodNotFound = errors.New("404")
-
-	// ErrShouldOnlyResponseToRequestMessage
-	ErrShouldOnlyResponseToRequestMessage = errors.New("invalid operation: should only response to a request message")
+	ErrMethodNotFound = errors.New("method not found")
 )
 
 // general errors

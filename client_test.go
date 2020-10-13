@@ -323,6 +323,9 @@ func TestWebsocket(t *testing.T) {
 		ctx.Bind(&str)
 		ctx.Write(str)
 	})
+	svr.Handler.HandleNotFound(func(ctx *Context) {
+		ctx.Error(ErrMethodNotFound)
+	})
 	svr.Handler.Clone()
 	svr.Handler.BeforeRecv(func(net.Conn) error { return nil })
 	svr.Handler.BeforeSend(func(net.Conn) error { return nil })

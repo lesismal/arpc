@@ -101,6 +101,9 @@ type Handler interface {
 	// Handle registers method handler
 	Handle(m string, h HandlerFunc, args ...interface{})
 
+	// HandleNotFound registers "" method handler
+	HandleNotFound(h HandlerFunc)
+
 	// OnMessage dispatches messages
 	OnMessage(c *Client, m Message)
 
@@ -277,13 +280,38 @@ func (h *handler) UseCoder(coder MessageCoder) {
 }
 
 func (h *handler) Handle(method string, cb HandlerFunc, args ...interface{}) {
+	if method == "" {
+		panic(fmt.Errorf("empty('') method is reserved for [method not found], should use HandleNotFound to register '' handler"))
+	}
+	h.handle(method, cb, args...)
+}
+
+func (h *handler) HandleNotFound(cb HandlerFunc) {
+	h.handle("", cb)
+}
+
+func (h *handler) handle(method string, cb HandlerFunc, args ...interface{}) {
 	if h.routes == nil {
 		h.routes = map[string]*RouterHandler{}
 	}
 	if len(method) > MaxMethodLen {
 		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
 	}
-	if _, ok := h.routes[method]; ok {
+
+	if _, ok := h.routes[""]; !ok {
+		rh := &RouterHandler{
+			Async:    false,
+			Handlers: make([]HandlerFunc, len(h.middles)+1),
+		}
+		copy(rh.Handlers, h.middles)
+		rh.Handlers[len(h.middles)] = func(ctx *Context) {
+			ctx.Error(ErrMethodNotFound)
+			ctx.Next()
+		}
+		h.routes[""] = rh
+	}
+
+	if _, ok := h.routes[method]; ok && method != "" {
 		panic(fmt.Errorf("handler exist for method %v ", method))
 	}
 
@@ -380,8 +408,13 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				go ctx.Next()
 			}
 		} else {
-			ctx := newContext(c, msg, nil)
-			ctx.Error(ErrMethodNotFound)
+			if rh, ok = h.routes[""]; ok {
+				ctx := newContext(c, msg, rh.Handlers)
+				ctx.Next()
+			} else {
+				ctx := newContext(c, msg, nil)
+				ctx.Error(ErrMethodNotFound)
+			}
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
 		break
