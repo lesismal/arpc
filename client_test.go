@@ -467,7 +467,6 @@ func TestClientError(t *testing.T) {
 	}
 
 	c.Handler.SetSendQueueSize(10)
-	defer c.Stop()
 
 	c.Conn.Close()
 	time.Sleep(time.Second / 100)
@@ -475,6 +474,13 @@ func TestClientError(t *testing.T) {
 	c.Call("/call", src, &dst, time.Second)
 
 	time.Sleep(time.Second)
+
+	c, err = NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", allAddr, time.Second)
+	})
+	if err != nil {
+		log.Fatalf("NewClient() failed: %v", err)
+	}
 
 	msg := c.NewMessage(CmdRequest, "/overstock", src)
 	for i := 0; i < 10000; i++ {
@@ -484,4 +490,10 @@ func TestClientError(t *testing.T) {
 	c.Call("/overstock", src, &dst, 0)
 	c.Call("/nohandler", src, &dst, time.Second/100)
 	c.PushMsg(msg, -1)
+
+	s.Stop()
+	time.Sleep(time.Second / 10)
+	if err = c.Call("/call", src, &dst, time.Second); err != ErrClientReconnecting {
+		t.Fatalf("Call() error: %v", err)
+	}
 }

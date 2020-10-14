@@ -7,11 +7,13 @@ package arpc
 import (
 	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/arpc/codec"
 	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 // Server definition
@@ -25,9 +27,12 @@ type Server struct {
 
 	Listener net.Listener
 
+	mux sync.Mutex
+
 	seq     uint64
 	running bool
 	chStop  chan error
+	clients map[*Client]util.Empty
 }
 
 // Serve starts rpc service with listener
@@ -56,7 +61,10 @@ func (s *Server) Run(addr string) error {
 // Stop rpc service
 func (s *Server) Stop() error {
 	// log.Info("%v %v Stop...", s.Handler.LogTag(), s.Listener.Addr())
-	defer log.Info("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
+	defer func() {
+		s.clearClients()
+		log.Info("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
+	}()
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -71,7 +79,10 @@ func (s *Server) Stop() error {
 // Shutdown stop rpc service
 func (s *Server) Shutdown(ctx context.Context) error {
 	// log.Info("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
-	defer log.Info("%v %v Shutdown", s.Handler.LogTag(), s.Listener.Addr())
+	defer func() {
+		s.clearClients()
+		log.Info("%v %v Shutdown", s.Handler.LogTag(), s.Listener.Addr())
+	}()
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -95,6 +106,27 @@ func (s *Server) subLoad() int64 {
 	return atomic.AddInt64(&s.CurrLoad, -1)
 }
 
+func (s *Server) addClient(c *Client) {
+	s.mux.Lock()
+	s.clients[c] = util.Empty{}
+	s.mux.Unlock()
+}
+
+func (s *Server) deleteClient(c *Client) {
+	s.mux.Lock()
+	delete(s.clients, c)
+	s.mux.Unlock()
+}
+
+func (s *Server) clearClients() {
+	s.mux.Lock()
+	for c, _ := range s.clients {
+		go c.Stop()
+	}
+	s.clients = map[*Client]util.Empty{}
+	s.mux.Unlock()
+}
+
 func (s *Server) runLoop() error {
 	var (
 		err  error
@@ -111,7 +143,11 @@ func (s *Server) runLoop() error {
 			load := s.addLoad()
 			if s.MaxLoad <= 0 || load <= s.MaxLoad {
 				s.Accepted++
-				cli = newClientWithConn(conn, s.Codec, s.Handler, s.subLoad)
+				cli = newClientWithConn(conn, s.Codec, s.Handler, func(c *Client) {
+					s.deleteClient(c)
+					s.subLoad()
+				})
+				s.addClient(cli)
 				s.Handler.OnConnected(cli)
 			} else {
 				conn.Close()
@@ -138,5 +174,6 @@ func NewServer() *Server {
 	return &Server{
 		Codec:   codec.DefaultCodec,
 		Handler: h,
+		clients: map[*Client]util.Empty{},
 	}
 }

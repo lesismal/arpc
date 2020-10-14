@@ -59,7 +59,7 @@ type Client struct {
 	chSend  chan Message
 	chClose chan util.Empty
 
-	onStop func() int64
+	onStop func(*Client)
 }
 
 // Stop client
@@ -74,7 +74,7 @@ func (c *Client) Stop() {
 			close(c.chClose)
 		}
 		if c.onStop != nil {
-			c.onStop()
+			c.onStop(c)
 		}
 		c.Handler.OnDisconnected(c)
 	}
@@ -599,7 +599,7 @@ func (c *Client) sendLoop() {
 }
 
 // newClientWithConn factory
-func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop func() int64) *Client {
+func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop func(*Client)) *Client {
 	log.Info("%v\t%v\tConnected", handler.LogTag(), conn.RemoteAddr())
 
 	c := &Client{}
