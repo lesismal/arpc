@@ -37,8 +37,6 @@ func main() {
 			log.Println("NewClient failed:", err)
 			return
 		}
-
-		client.Run()
 		defer client.Stop()
 
 		clients = append(clients, client)

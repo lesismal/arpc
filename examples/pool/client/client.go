@@ -18,7 +18,6 @@ func main() {
 	for i := 0; i < pool.Size(); i++ {
 		pool.Get(i).UserData = i
 	}
-	pool.Run()
 	defer pool.Stop()
 
 	for i := 0; i < 10; i++ {

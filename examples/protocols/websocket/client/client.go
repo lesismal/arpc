@@ -16,9 +16,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	client.Handler.SetBatchRecv(false)
-
-	client.Run()
 	defer client.Stop()
 
 	req := "hello"

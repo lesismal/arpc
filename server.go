@@ -116,11 +116,6 @@ func (s *Server) runLoop() error {
 				s.Accepted++
 				cli = newClientWithConn(conn, s.Codec, s.Handler, s.subLoad)
 				s.Handler.OnConnected(cli)
-				if _, ok := conn.(WebsocketConn); !ok {
-					cli.Run()
-				} else {
-					cli.RunWebsocket()
-				}
 			} else {
 				conn.Close()
 				s.subLoad()

@@ -80,6 +80,7 @@ func Test_handler_SetBatchRecv(t *testing.T) {
 	if got := DefaultHandler.BatchRecv(); got != false {
 		t.Errorf("handler.BatchRecv() = %v, want %v", got, false)
 	}
+	DefaultHandler.SetBatchRecv(true)
 }
 
 func Test_handler_BatchSend(t *testing.T) {
@@ -93,6 +94,7 @@ func Test_handler_SetBatchSend(t *testing.T) {
 	if got := DefaultHandler.BatchSend(); got != false {
 		t.Errorf("handler.BatchSend() = %v, want %v", got, false)
 	}
+	DefaultHandler.SetBatchSend(true)
 }
 
 func Test_handler_WrapReader(t *testing.T) {

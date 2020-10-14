@@ -42,8 +42,6 @@ func main() {
 
 	// register handler for method
 	client.Handler.Handle(methodNotify, OnServerNotify)
-
-	client.Run()
 	defer client.Stop()
 
 	payload := "hello from client.Call"

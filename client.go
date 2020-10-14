@@ -613,6 +613,12 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 	c.onStop = onStop
 
+	if _, ok := conn.(WebsocketConn); !ok {
+		c.Run()
+	} else {
+		c.RunWebsocket()
+	}
+
 	return c
 }
 
@@ -634,6 +640,8 @@ func NewClient(dialer DialerFunc) (*Client, error) {
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+
+	c.Run()
 
 	log.Info("%v\t%v\tConnected", c.Handler.LogTag(), conn.RemoteAddr())
 

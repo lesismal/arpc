@@ -47,7 +47,6 @@ func main() {
 			return
 		}
 		clients[i] = client
-		client.Run()
 		defer client.Stop()
 	}
 

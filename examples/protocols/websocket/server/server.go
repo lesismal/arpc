@@ -19,7 +19,6 @@ func main() {
 	}()
 
 	svr := arpc.NewServer()
-	svr.Handler.SetBatchRecv(false)
 	// register router
 	svr.Handler.Handle("/echo", func(ctx *arpc.Context) {
 		str := ""

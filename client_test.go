@@ -316,7 +316,7 @@ func TestWebsocket(t *testing.T) {
 	}()
 
 	svr := NewServer()
-	svr.Handler.SetBatchRecv(false)
+	// svr.Handler.SetBatchRecv(false)
 	// register router
 	svr.Handler.Handle("/echo", func(ctx *Context) {
 		str := ""
@@ -333,16 +333,12 @@ func TestWebsocket(t *testing.T) {
 	go svr.Serve(ln)
 
 	time.Sleep(time.Second / 100)
-
 	client, err := NewClient(func() (net.Conn, error) {
 		return websocket.Dial("ws://localhost:25341/ws")
 	})
 	if err != nil {
 		panic(err)
 	}
-	client.Handler.SetBatchRecv(false)
-
-	client.Run()
 	defer client.Stop()
 
 	req := "hello"
@@ -444,9 +440,10 @@ func TestClientError(t *testing.T) {
 	if err != nil {
 		log.Fatalf("NewClient() failed: %v", err)
 	}
+	c.Stop()
 
 	if err = c.Call("/call", src, &dst, time.Second); err != ErrClientStopped {
-		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
+		t.Fatalf("Call() error: %v", err)
 	}
 	if err = c.Call("/call", src, &dstB, time.Second); err != ErrClientStopped {
 		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dstB)
@@ -470,8 +467,6 @@ func TestClientError(t *testing.T) {
 	}
 
 	c.Handler.SetSendQueueSize(10)
-
-	c.Run()
 	defer c.Stop()
 
 	c.Conn.Close()

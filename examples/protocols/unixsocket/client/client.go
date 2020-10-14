@@ -19,8 +19,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	client.Run()
 	defer client.Stop()
 
 	req := "hello"

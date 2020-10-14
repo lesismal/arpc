@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	// MAX_TOPIC_NAME_LEN .
 	MAX_TOPIC_NAME_LEN = 1024
 )
 

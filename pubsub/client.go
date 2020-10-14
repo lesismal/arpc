@@ -205,14 +205,9 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 	}
 	cli.Handler = cli.Handler.Clone()
 	cli.Handler.Handle(routePublish, cli.onPublish)
-	reconnected := false
 	cli.Handler.HandleConnected(func(c *arpc.Client) {
-		if reconnected == false {
-			reconnected = true
-		} else {
-			if cli.Authenticate() == nil {
-				cli.initTopics()
-			}
+		if cli.Authenticate() == nil {
+			cli.initTopics()
 		}
 	})
 	return cli, nil

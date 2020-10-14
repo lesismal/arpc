@@ -139,8 +139,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	client.Run()
 	defer client.Stop()
 
 	req := "hello"
@@ -495,7 +493,6 @@ func main() {
 		panic(err)
 	}
 	client.Password = password
-	client.Run()
 
 	// authentication
 	err = client.Authenticate()
@@ -532,7 +529,6 @@ func main() {
 		panic(err)
 	}
 	client.Password = password
-	client.Run()
 
 	// authentication
 	err = client.Authenticate()
