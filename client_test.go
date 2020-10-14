@@ -390,6 +390,9 @@ func TestClientNormal(t *testing.T) {
 	if err = c.Call("/call", src, &dst, time.Second); err != nil {
 		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dst)
 	}
+	c.Stop()
+	time.Sleep(time.Second / 10)
+	c.Restart()
 	if err = c.Call("/call", src, &dstB, time.Second); err != nil {
 		t.Fatalf("Call() error: %v\nsrc: %v\ndst: %v", err, src, dstB)
 	}

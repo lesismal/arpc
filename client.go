@@ -62,30 +62,6 @@ type Client struct {
 	onStop func() int64
 }
 
-// Run client
-func (c *Client) Run() {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	if !c.running {
-		c.running = true
-		c.initReader()
-		go util.Safe(c.sendLoop)
-		go util.Safe(c.recvLoop)
-	}
-}
-
-// RunWebsocket client
-func (c *Client) RunWebsocket() {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	if !c.running {
-		c.running = true
-		c.initReader()
-		go util.Safe(c.sendLoop)
-		c.Conn.(WebsocketConn).HandleWebsocket(c.recvLoop)
-	}
-}
-
 // Stop client
 func (c *Client) Stop() {
 	c.mux.Lock()
@@ -426,6 +402,61 @@ func (c *Client) clearAsyncHandler() {
 	c.mux.Unlock()
 }
 
+// Restart stop and restarts a client
+func (c *Client) Restart() error {
+	c.Stop()
+
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	if !c.running {
+		conn, err := c.Dialer()
+		if err != nil {
+			return err
+		}
+
+		preConn := c.Conn
+		c.Conn = conn
+
+		c.chSend = make(chan Message, c.Handler.SendQueueSize())
+		c.chClose = make(chan util.Empty)
+		c.sessionMap = make(map[uint64]*rpcSession)
+		c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+
+		c.initReader()
+		go util.Safe(c.sendLoop)
+		go util.Safe(c.recvLoop)
+
+		c.running = true
+		c.reconnecting = false
+
+		log.Info("%v\t[%v] Restarted to [%v]", c.Handler.LogTag(), preConn.RemoteAddr(), conn.RemoteAddr())
+	}
+
+	return nil
+}
+
+func (c *Client) run() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	if !c.running {
+		c.running = true
+		c.initReader()
+		go util.Safe(c.sendLoop)
+		go util.Safe(c.recvLoop)
+	}
+}
+
+func (c *Client) runWebsocket() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	if !c.running {
+		c.running = true
+		c.initReader()
+		go util.Safe(c.sendLoop)
+		c.Conn.(WebsocketConn).HandleWebsocket(c.recvLoop)
+	}
+}
+
 func (c *Client) initReader() {
 	if c.Handler.BatchRecv() {
 		c.Reader = c.Handler.WrapReader(c.Conn)
@@ -583,9 +614,9 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 	c.onStop = onStop
 
 	if _, ok := conn.(WebsocketConn); !ok {
-		c.Run()
+		c.run()
 	} else {
-		c.RunWebsocket()
+		c.runWebsocket()
 	}
 
 	return c
@@ -610,7 +641,7 @@ func NewClient(dialer DialerFunc) (*Client, error) {
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
 
-	c.Run()
+	c.run()
 
 	log.Info("%v\t%v\tConnected", c.Handler.LogTag(), conn.RemoteAddr())
 
@@ -652,13 +683,6 @@ func (pool *ClientPool) Next() *Client {
 // Handler returns Handler
 func (pool *ClientPool) Handler() Handler {
 	return pool.Next().Handler
-}
-
-// Run all clients
-func (pool *ClientPool) Run() {
-	for _, c := range pool.clients {
-		c.Run()
-	}
 }
 
 // Stop all clients
