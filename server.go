@@ -6,6 +6,7 @@ package arpc
 
 import (
 	"context"
+	"encoding/binary"
 	"net"
 	"sync/atomic"
 	"time"
@@ -25,6 +26,7 @@ type Server struct {
 
 	Listener net.Listener
 
+	seq     uint64
 	running bool
 	chStop  chan error
 }
@@ -83,7 +85,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 // NewMessage factory
 func (s *Server) NewMessage(cmd byte, method string, v interface{}) Message {
-	return newMessage(cmd, method, v, s.Handler, s.Codec)
+	msg := newMessage(cmd, method, v, s.Handler, s.Codec)
+	binary.LittleEndian.PutUint64(msg[HeaderIndexSeqBegin:HeaderIndexSeqEnd], atomic.AddUint64(&s.seq, 1))
+	return msg
 }
 
 func (s *Server) addLoad() int64 {

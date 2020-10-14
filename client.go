@@ -246,7 +246,9 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 
 // NewMessage factory
 func (c *Client) NewMessage(cmd byte, method string, v interface{}) Message {
-	return newMessage(cmd, method, v, c.Handler, c.Codec)
+	msg := newMessage(cmd, method, v, c.Handler, c.Codec)
+	binary.LittleEndian.PutUint64(msg[HeaderIndexSeqBegin:HeaderIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
+	return msg
 }
 
 func (c *Client) parseResponse(msg Message, rsp interface{}) error {

@@ -72,6 +72,8 @@ func TestServer_subLoad(t *testing.T) {
 		t.Fatalf("addLoad failed: %v != %v", s.CurrLoad, total)
 	}
 
+	s.NewMessage(CmdNotify, "method", "data")
+
 	for i := int64(0); i < half; i++ {
 		s.subLoad()
 	}

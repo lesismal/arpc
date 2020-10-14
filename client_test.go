@@ -383,6 +383,7 @@ func TestClientNormal(t *testing.T) {
 	c.Handler.SetBatchSend(false)
 	c.Run()
 	defer c.Stop()
+	c.NewMessage(CmdNotify, "method", "data")
 	if err = c.Call("/error", src, &dstB, time.Second); err == nil {
 		t.Fatalf("Call() '/error' returns nil error")
 	} else if err.Error() != "invlaid router" {
