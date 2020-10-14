@@ -182,7 +182,6 @@ func newBenchClient() *Client {
 	if err != nil {
 		log.Fatalf("NewClient() failed: %v", err)
 	}
-	c.Run()
 	return c
 }
 
@@ -222,7 +221,6 @@ func TestClientPool(t *testing.T) {
 		t.Fatalf("invalid pool size: %v", pool.Size())
 	}
 	pool.Handler().Handle("/poolmethod", func(*Context) {})
-	pool.Run()
 	defer pool.Stop()
 
 	var src = "test"
@@ -298,7 +296,7 @@ func newSvr() *Server {
 		ctx.Write(src)
 	})
 	s.Handler.Handle("/error", func(ctx *Context) {
-		ctx.Error(fmt.Errorf("invlaid router"))
+		ctx.Error(fmt.Errorf("/error router"))
 	})
 	go s.Run(allAddr)
 	return s
@@ -377,15 +375,14 @@ func TestClientNormal(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 	c.Handler.SetBatchSend(false)
-	c.Run()
 	defer c.Stop()
 	c.NewMessage(CmdNotify, "method", "data")
 	if err = c.Call("/error", src, &dstB, time.Second); err == nil {
 		t.Fatalf("Call() '/error' returns nil error")
-	} else if err.Error() != "invlaid router" {
+	} else if err.Error() != "/error router" {
 		t.Fatalf("Call() '/error' returns: %v", err)
 	} else {
-		// t.Logf("Call() '/error' returns: %v", err)
+		t.Logf("Call() '/error' returns: %v", err)
 	}
 	if err = c.Call("invalid method", src, &dst, time.Second); err.Error() != ErrMethodNotFound.Error() {
 		t.Fatalf("Call() error is: %v, need: %v", err, ErrMethodNotFound)

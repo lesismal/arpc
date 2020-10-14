@@ -14,7 +14,7 @@ import (
 func TestContext_Body(t *testing.T) {
 	ctx := &Context{
 		Client:  &Client{Codec: codec.DefaultCodec},
-		Message: newMessage(CmdRequest, "method", "data", DefaultHandler, codec.DefaultCodec),
+		Message: newMessage(CmdRequest, "method", "data", false, false, 0, DefaultHandler, codec.DefaultCodec),
 	}
 	if got := ctx.Body(); !reflect.DeepEqual(got, []byte("data")) {
 		t.Errorf("Context.Body() = %v, want %v", got, []byte{1, 2, 3, 4, 5, 6, 7, 8})
@@ -24,7 +24,7 @@ func TestContext_Body(t *testing.T) {
 func TestContext_Bind(t *testing.T) {
 	ctx := &Context{
 		Client:  &Client{Codec: codec.DefaultCodec},
-		Message: newMessage(CmdRequest, "method", "data", DefaultHandler, codec.DefaultCodec),
+		Message: newMessage(CmdRequest, "method", "data", false, false, 0, DefaultHandler, codec.DefaultCodec),
 	}
 	ctx.Message.SetError(true)
 	if err := ctx.Bind(nil); err == nil {

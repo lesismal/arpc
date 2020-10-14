@@ -5,7 +5,6 @@
 package arpc
 
 import (
-	"encoding/binary"
 	"errors"
 	"time"
 
@@ -81,36 +80,14 @@ func (ctx *Context) Done() {
 	ctx.done = true
 }
 
-func (ctx *Context) newRspMessage(v interface{}, isError bool) Message {
-	var (
-		data      []byte
-		msg       Message
-		bodyLen   int
-		methodLen int
-	)
-
+func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
 	if _, ok := v.(error); ok {
 		isError = true
 	}
-
-	data = util.ValueToBytes(ctx.Client.Codec, v)
-
-	methodLen = ctx.Message.MethodLen()
-	bodyLen = len(data) + methodLen
-	msg = Message(ctx.Client.Handler.GetBuffer(HeadLen + bodyLen))
-	copy(msg[HeaderIndexFlag:], ctx.Message[HeaderIndexFlag:HeadLen+methodLen])
-	binary.LittleEndian.PutUint32(msg[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
-	// binary.LittleEndian.PutUint64(msg[HeaderIndexSeqBegin:HeaderIndexSeqEnd], ctx.Message.Seq())
-	msg[HeaderIndexCmd] = CmdResponse
-	msg.SetError(isError)
-	copy(msg[HeadLen+methodLen:], data)
-
-	return msg
-}
-
-func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
-	msg := ctx.newRspMessage(v, isError)
-	return ctx.Client.PushMsg(msg, timeout)
+	cli := ctx.Client
+	req := ctx.Message
+	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec)
+	return ctx.Client.PushMsg(rsp, timeout)
 }
 
 func newContext(c *Client, msg Message, handlers []HandlerFunc) *Context {

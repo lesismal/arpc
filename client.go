@@ -6,7 +6,6 @@ package arpc
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -124,8 +123,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 
 	timer := time.NewTimer(timeout)
 
-	msg := c.newReqMessage(CmdRequest, method, req, false)
-
+	msg := newMessage(CmdRequest, method, req, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
 	seq := msg.Seq()
 	sess := newSession(seq)
 	c.addSession(seq, sess)
@@ -165,8 +163,7 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
-	msg := c.newReqMessage(CmdRequest, method, req, false)
-
+	msg := newMessage(CmdRequest, method, req, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
 	seq := msg.Seq()
 	sess := newSession(seq)
 	c.addSession(seq, sess)
@@ -246,9 +243,7 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 
 // NewMessage factory
 func (c *Client) NewMessage(cmd byte, method string, v interface{}) Message {
-	msg := newMessage(cmd, method, v, c.Handler, c.Codec)
-	binary.LittleEndian.PutUint64(msg[HeaderIndexSeqBegin:HeaderIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
-	return msg
+	return newMessage(cmd, method, v, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
 }
 
 func (c *Client) parseResponse(msg Message, rsp interface{}) error {
@@ -294,9 +289,8 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
-	msg := c.newReqMessage(cmd, method, req, true)
+	msg := newMessage(CmdRequest, method, req, false, true, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
 	seq := msg.Seq()
-
 	if handler != nil {
 		c.addAsyncHandler(seq, handler)
 		time.AfterFunc(timeout, func() { c.deleteAsyncHandler(seq) })
@@ -343,9 +337,8 @@ func (c *Client) callAsyncWith(ctx context.Context, cmd byte, method string, req
 		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
-	msg := c.newReqMessage(cmd, method, req, true)
+	msg := newMessage(CmdRequest, method, req, false, true, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
 	// seq := msg.Seq()
-
 	// if handler != nil {
 	// 	c.addAsyncHandler(seq, handler)
 	// 	// time.AfterFunc(timeout, func() { c.deleteAsyncHandler(seq) })
@@ -572,30 +565,6 @@ func (c *Client) sendLoop() {
 			buffers = buffers[0:0]
 		}
 	}
-}
-
-func (c *Client) newReqMessage(cmd byte, method string, req interface{}, isAsync bool) Message {
-	var (
-		data    []byte
-		msg     Message
-		bodyLen int
-	)
-
-	data = util.ValueToBytes(c.Codec, req)
-
-	bodyLen = len(method) + len(data)
-
-	msg = Message(c.Handler.GetBuffer(HeadLen + bodyLen))
-	binary.LittleEndian.PutUint32(msg[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
-	binary.LittleEndian.PutUint64(msg[HeaderIndexSeqBegin:HeaderIndexSeqEnd], atomic.AddUint64(&c.seq, 1))
-	msg[HeaderIndexCmd] = cmd
-	msg.SetAsync(isAsync)
-	msg.SetError(false)
-	msg[HeaderIndexMethodLen] = byte(len(method))
-	copy(msg[HeadLen:HeadLen+len(method)], method)
-	copy(msg[HeadLen+len(method):], data)
-
-	return msg
 }
 
 // newClientWithConn factory

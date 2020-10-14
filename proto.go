@@ -89,18 +89,9 @@ func (m Message) Cmd() byte {
 	return m[HeaderIndexCmd]
 }
 
-// IsAsync returns async flag
-func (m Message) IsAsync() bool {
-	return m[HeaderIndexFlag]&HeaderFlagMaskAsync > 0
-}
-
-// SetAsync sets async flag
-func (m Message) SetAsync(isAsync bool) {
-	if isAsync {
-		m[HeaderIndexFlag] |= HeaderFlagMaskAsync
-	} else {
-		m[HeaderIndexFlag] &= ^HeaderFlagMaskAsync
-	}
+// SetCmd sets cmd
+func (m Message) SetCmd(cmd byte) {
+	m[HeaderIndexCmd] = cmd
 }
 
 // IsError returns error flag
@@ -125,14 +116,37 @@ func (m Message) Error() error {
 	return errors.New(util.BytesToStr(m[HeadLen+m.MethodLen():]))
 }
 
+// IsAsync returns async flag
+func (m Message) IsAsync() bool {
+	return m[HeaderIndexFlag]&HeaderFlagMaskAsync > 0
+}
+
+// SetAsync sets async flag
+func (m Message) SetAsync(isAsync bool) {
+	if isAsync {
+		m[HeaderIndexFlag] |= HeaderFlagMaskAsync
+	} else {
+		m[HeaderIndexFlag] &= ^HeaderFlagMaskAsync
+	}
+}
+
 // MethodLen returns method length
 func (m Message) MethodLen() int {
 	return int(m[HeaderIndexMethodLen])
 }
 
+// SetMethodLen sets method length
+func (m Message) SetMethodLen(l int) {
+	m[HeaderIndexMethodLen] = byte(l)
+}
+
 // Method returns method
 func (m Message) Method() string {
 	return string(m[HeadLen : HeadLen+m.MethodLen()])
+}
+
+func (m Message) method() string {
+	return util.BytesToStr(m[HeadLen : HeadLen+m.MethodLen()])
 }
 
 // BodyLen returns length of body[ method && body ]
@@ -150,6 +164,11 @@ func (m Message) Seq() uint64 {
 	return binary.LittleEndian.Uint64(m[HeaderIndexSeqBegin:HeaderIndexSeqEnd])
 }
 
+// SetSeq sets sequence
+func (m Message) SetSeq(seq uint64) {
+	binary.LittleEndian.PutUint64(m[HeaderIndexSeqBegin:HeaderIndexSeqEnd], seq)
+}
+
 // Data returns data after method
 func (m Message) Data() []byte {
 	length := HeadLen + m.MethodLen()
@@ -157,7 +176,7 @@ func (m Message) Data() []byte {
 }
 
 // newMessage factory
-func newMessage(cmd byte, method string, v interface{}, h Handler, codec codec.Codec) Message {
+func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec) Message {
 	var (
 		data    []byte
 		msg     Message
@@ -170,10 +189,14 @@ func newMessage(cmd byte, method string, v interface{}, h Handler, codec codec.C
 	if h == nil {
 		h = DefaultHandler
 	}
+
 	msg = Message(h.GetBuffer(HeadLen + bodyLen))
-	msg[HeaderIndexCmd] = cmd
-	msg[HeaderIndexMethodLen] = byte(len(method))
-	binary.LittleEndian.PutUint32(msg[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
+	msg.SetCmd(cmd)
+	msg.SetError(isError)
+	msg.SetAsync(isAsync)
+	msg.SetMethodLen(len(method))
+	msg.SetBodyLen(bodyLen)
+	msg.SetSeq(seq)
 	copy(msg[HeadLen:HeadLen+len(method)], method)
 	copy(msg[HeadLen+len(method):], data)
 

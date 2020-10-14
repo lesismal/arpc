@@ -6,7 +6,6 @@ package arpc
 
 import (
 	"context"
-	"encoding/binary"
 	"net"
 	"sync/atomic"
 	"time"
@@ -85,9 +84,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 // NewMessage factory
 func (s *Server) NewMessage(cmd byte, method string, v interface{}) Message {
-	msg := newMessage(cmd, method, v, s.Handler, s.Codec)
-	binary.LittleEndian.PutUint64(msg[HeaderIndexSeqBegin:HeaderIndexSeqEnd], atomic.AddUint64(&s.seq, 1))
-	return msg
+	return newMessage(cmd, method, v, false, false, atomic.AddUint64(&s.seq, 1), s.Handler, s.Codec)
 }
 
 func (s *Server) addLoad() int64 {
