@@ -50,7 +50,6 @@ func newClient(t *testing.T, address, password string) *Client {
 		t.Fatal(err)
 	}
 	client.Password = password
-	client.Run()
 
 	// authentication
 	err = client.Authenticate()
