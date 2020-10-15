@@ -49,74 +49,62 @@ function Context(cli, head, body, method, data, msgObj) {
     this.method = method;
     this.data = data;
     this.msgObj = msgObj;
-
-    // TODO
-    // Write = function (data) {
-    //     return JSON.parse(data);
-    // }
 }
 
 
 function ArpcClient(url, codec) {
-    var ws;
-    var url = url;
-    var codec = codec || new Codec();
+    var client = this;
 
-    var seqNum = 0;
-    var sessionMap = {};
+    this.ws;
+    this.url = url;
+    this.codec = codec || new Codec();
 
-    var handlers = {};
+    this.seqNum = 0;
+    this.sessionMap = {};
 
-    var init;
-    var onMessage;
+    this.handlers = {};
 
-    // export method
-    var Handle;
-    var Call;
-    var Notify;
-    var Shutdown;
+    this.state = SOCK_STATE_CONNECTING;
 
-    var state = SOCK_STATE_CONNECTING;
-
-    Handle = function (method, h, obj) {
-        if (handlers[method]) {
+    this.Handle = function (method, h, obj) {
+        if (this.handlers[method]) {
             throw ("handler for [${method}] exists")
         }
-        handlers[method] = { h: h, obj: obj };
+        this.handlers[method] = { h: h, obj: obj };
     }
 
-    Call = function (method, request, reply, timeout) {
-        if (state == SOCK_STATE_CLOSED) {
+    this.Call = function (method, request, reply, timeout) {
+        if (this.state == SOCK_STATE_CLOSED) {
             return new Promise(function (resolve, reject) {
                 resolve({ data: null, err: ErrClosed });
             });
         }
-        if (state == SOCK_STATE_CONNECTING) {
+        if (this.state == SOCK_STATE_CONNECTING) {
             return new Promise(function (resolve, reject) {
                 resolve({ data: null, err: ErrReconnecting });
             });
         }
-        seqNum++;
-        var seq = seqNum
+        this.seqNum++;
+        var seq = this.seqNum
         var session = {};
         var p = new Promise(function (resolve, reject) {
             session.resolve = resolve;
             session.reject = reject;
             session.reply = reply;
         });
-        sessionMap[seq] = session;
+        this.sessionMap[seq] = session;
 
         if (timeout > 0) {
             session.timer = setTimeout(function () {
                 var isErr = 1;
-                delete (sessionMap[seq]);
+                delete (this.sessionMap[seq]);
                 session.resolve(null, "timeout");
             }, timeout)
         }
 
         var buffer;
         if (request) {
-            var data = codec.Marshal(request);
+            var data = this.codec.Marshal(request);
             if (data) {
                 buffer = new Uint8Array(16 + method.length + data.length);
                 for (var i = 0; i < data.length; i++) {
@@ -142,22 +130,22 @@ function ArpcClient(url, codec) {
             buffer[16 + i] = methodBuffer[i];
         }
 
-        ws.send(buffer);
+        this.ws.send(buffer);
 
         return p;
     }
 
-    Notify = function (method, notify) {
-        if (state == SOCK_STATE_CLOSED) {
+    this.Notify = function (method, notify) {
+        if (this.state == SOCK_STATE_CLOSED) {
             return ErrClosed;
         }
-        if (state == SOCK_STATE_CONNECTING) {
+        if (this.state == SOCK_STATE_CONNECTING) {
             return ErrReconnecting;
         }
-        seqNum++;
+        this.seqNum++;
         var buffer;
         if (notify) {
-            var data = codec.Marshal(notify);
+            var data = this.codec.Marshal(notify);
             if (data) {
                 buffer = new Uint8Array(16 + method.length + data.length);
                 for (var i = 0; i < data.length; i++) {
@@ -175,7 +163,7 @@ function ArpcClient(url, codec) {
         buffer[HeaderIndexCmd] = CmdNotify % 0xFF;
         buffer[HeaderIndexMethodLen] = method.length % 0xFF;
         for (var i = HeaderIndexSeqBegin; i < HeaderIndexSeqBegin + 4; i++) {
-            buffer[i] = (seqNum >> ((i - HeaderIndexSeqBegin) * 8)) % 0xFF;
+            buffer[i] = (this.seqNum >> ((i - HeaderIndexSeqBegin) * 8)) % 0xFF;
         }
 
         var methodBuffer = new TextEncoder("utf-8").encode(method);
@@ -183,15 +171,15 @@ function ArpcClient(url, codec) {
             buffer[16 + i] = methodBuffer[i];
         }
 
-        ws.send(buffer);
+        this.ws.send(buffer);
     }
 
-    Shutdown = function () {
-        ws.close();
+    this.Shutdown = function () {
+        this.ws.close();
         state = SOCK_STATE_CLOSED;
     }
 
-    onMessage = function (event) {
+    this.onMessage = function (event) {
         try {
             var offset = 0;
             while (offset < event.data.byteLength) {
@@ -223,37 +211,37 @@ function ArpcClient(url, codec) {
                 switch (cmd) {
                     case CmdRequest:
                     case CmdNotify:
-                        var handler = handlers[method]
+                        var handler = client.handlers[method]
                         if (handler) {
-                            var ret = codec.Unmarshal(bodyArr, handler.obj);
+                            var ret = client.codec.Unmarshal(bodyArr, handler.obj);
                             var data = ret[0];
                             var err = ret[1];
                             if (err) {
                                 console.log(`handle [${method}] codec.Unmarshal failed: ${err}`);
                                 return;
                             }
-                            handler.h(new Context(this, headArr, bodyArr, method, data));
+                            handler.h(new Context(client, headArr, bodyArr, method, data));
                         } else {
                             console.log("invalid method: [%s], no handler", method);
                             return
                         }
                         break;
                     case CmdResponse:
-                        var session = sessionMap[seq];
+                        var session = client.sessionMap[seq];
                         if (session) {
                             clearTimeout(session.timer);
-                            delete (sessionMap[seq]);
+                            delete (client.sessionMap[seq]);
                             if (isError) {
                                 var err = new TextDecoder("utf-8").decode(event.data.slice(offset + 16 + methodLen, offset + 16 + bodyLen));
                                 session.resolve({ data: null, err: err });
                                 return;
                             }
-                            var ret = codec.Unmarshal(bodyArr, session.reply);
+                            var ret = client.codec.Unmarshal(bodyArr, session.reply);
                             var data = ret[0];
                             var err = ret[1];
                             session.resolve({ data: data, err: err });
                         } else {
-                            console.log("session [%d] missing:", seqNum);
+                            console.log("session [%d] missing:", seq);
                             return;
                         }
                         break;
@@ -267,57 +255,52 @@ function ArpcClient(url, codec) {
         }
     }
 
-    init = function () {
+    this.init = function () {
         if ('WebSocket' in window) {
-            ws = new WebSocket(url);
+            client.ws = new WebSocket(this.url);
         } else if ('MozWebSocket' in window) {
-            ws = new MozWebSocket(url);
+            client.ws = new MozWebSocket(this.url);
         } else {
-            ws = new SockJS(url);
+            client.ws = new SockJS(this.url);
         }
 
         // 消息类型,不设置则默认为'text'
-        ws.binaryType = 'arraybuffer';
+        client.ws.binaryType = 'arraybuffer';
 
-        state = SOCK_STATE_CONNECTING;
+        client.state = SOCK_STATE_CONNECTING;
 
-        ws.onopen = function (event) {
-            state = SOCK_STATE_CONNECTED;
-            if (this.onOpen) {
-                this.onOpen(this);
+        client.ws.onopen = function (event) {
+            client.state = SOCK_STATE_CONNECTED;
+            if (client.onOpen) {
+                client.onOpen(client);
             }
         };
-        ws.onclose = function (event) {
-            if (this.onClose) {
-                this.onClose(this);
+        client.ws.onclose = function (event) {
+            if (client.onClose) {
+                client.onClose(client);
             }
-            ws.close();
+            client.ws.close();
 
             // shutdown
-            if (state == SOCK_STATE_CLOSED) {
+            if (client.state == SOCK_STATE_CLOSED) {
                 return;
             }
-            state = SOCK_STATE_CONNECTING;
-            init();
+            client.state = SOCK_STATE_CONNECTING;
+            client.init();
         };
-        ws.onerror = function (event) {
-            if (this.onError) {
-                this.onError(this);
+        client.ws.onerror = function (event) {
+            if (client.onError) {
+                client.onError(client);
             }
         };
-        ws.onmessage = onMessage;
+        client.ws.onmessage = client.onMessage;
     }
 
     try {
-        init();
+        this.init();
     } catch (e) {
-        console.log("Websocket constructor failed:", e);
+        console.log("ArpcClient init() failed:", e);
     }
-
-    this.Handle = Handle;
-    this.Call = Call;
-    this.Notify = Notify;
-    this.Shutdown = Shutdown;
 }
 
 

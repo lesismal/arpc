@@ -9,10 +9,12 @@
     <script src="./websocket.js" type="text/javascript"></script>
     <script type="text/javascript">
         var client = new ArpcClient("ws://localhost:8888/ws");
-        // TODO
-        // client.Handle("/server/call", function (ctx) {
-        //     ctx.Write(ctx.data);
-        // }, "");
+        client.onOpen = function () {
+            console.log("ArpcClient onOpen")
+        }
+        client.onClose = function () {
+            console.log("ArpcClient onClose")
+        }
         client.Handle("/server/notify", function (ctx) {
             console.log("[/server/notify]:", ctx.data)
             document.getElementById("notify").innerHTML = ctx.data;
