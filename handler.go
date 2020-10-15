@@ -351,7 +351,11 @@ func (h *handler) Recv(c *Client) (Message, error) {
 	}
 
 	message, err = c.Head.message(h)
-	if err == nil && len(message) > HeadLen {
+	if err != nil {
+		return nil, err
+	}
+
+	if len(message) > HeadLen {
 		_, err = io.ReadFull(c.Reader, message[HeaderIndexBodyLenEnd:])
 	}
 
@@ -394,7 +398,7 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 func (h *handler) OnMessage(c *Client, msg Message) {
 	ml := msg.MethodLen()
 	if ml <= 0 || ml > MaxMethodLen || ml > (len(msg)-HeadLen) {
-		log.Warn("%v OnMessage: invalid request method length %v, dropped", h.LogTag())
+		log.Warn("%v OnMessage: invalid request method length %v, dropped", h.LogTag(), ml)
 		return
 	}
 	switch msg.Cmd() {

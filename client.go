@@ -226,6 +226,7 @@ func (c *Client) parseResponse(msg Message, rsp interface{}) error {
 	if msg == nil {
 		return ErrClientReconnecting
 	}
+
 	switch msg.Cmd() {
 	case CmdResponse:
 		if msg.IsError() {
@@ -234,9 +235,9 @@ func (c *Client) parseResponse(msg Message, rsp interface{}) error {
 		if rsp != nil {
 			switch vt := rsp.(type) {
 			case *string:
-				*vt = string(msg[HeadLen:])
+				*vt = string(msg.Data())
 			case *[]byte:
-				*vt = msg[HeadLen:]
+				*vt = msg.Data()
 			// case *error:
 			// 	*vt = msg.Error()
 			default:
@@ -265,7 +266,7 @@ func (c *Client) callAsync(cmd byte, method string, req interface{}, handler Han
 		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
-	msg := newMessage(CmdRequest, method, req, false, true, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
+	msg := newMessage(cmd, method, req, false, true, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
 	seq := msg.Seq()
 	if handler != nil {
 		c.addAsyncHandler(seq, handler)
@@ -313,7 +314,7 @@ func (c *Client) callAsyncWith(ctx context.Context, cmd byte, method string, req
 		return fmt.Errorf("invalid method length: %v", ml)
 	}
 
-	msg := newMessage(CmdRequest, method, req, false, true, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
+	msg := newMessage(cmd, method, req, false, true, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
 	// seq := msg.Seq()
 	// if handler != nil {
 	// 	c.addAsyncHandler(seq, handler)

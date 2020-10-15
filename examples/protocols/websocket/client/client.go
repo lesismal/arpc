@@ -18,9 +18,15 @@ func main() {
 	}
 	defer client.Stop()
 
+	client.Handler.Handle("/server/notify", func(ctx *arpc.Context) {
+		str := ""
+		err := ctx.Bind(&str)
+		log.Printf("/server/notify: \"%v\", error: %v", str, err)
+	})
+
 	req := "hello"
 	rsp := ""
-	err = client.Call("/echo", &req, &rsp, time.Second*5)
+	err = client.Call("/call/echo", &req, &rsp, time.Second*5)
 	if err != nil {
 		log.Fatalf("Call failed: %v", err)
 	} else {

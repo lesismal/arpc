@@ -77,7 +77,7 @@ func (h Header) message(handler Handler) (Message, error) {
 	}
 
 	m := Message(handler.GetBuffer(HeadLen + bodyLen))
-	binary.LittleEndian.PutUint32(h[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
+	binary.LittleEndian.PutUint32(m[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
 	return m, nil
 }
 
