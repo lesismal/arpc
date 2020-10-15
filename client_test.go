@@ -303,7 +303,7 @@ func newSvr() *Server {
 }
 
 func TestWebsocket(t *testing.T) {
-	ln, _ := websocket.NewListener(":25341", nil)
+	ln, _ := websocket.Listen(":25341", nil)
 	defer ln.Close()
 	http.HandleFunc("/ws", ln.(*websocket.Listener).Handler)
 	go func() {

@@ -60,11 +60,7 @@ func (s *Server) Run(addr string) error {
 
 // Stop rpc service
 func (s *Server) Stop() error {
-	// log.Info("%v %v Stop...", s.Handler.LogTag(), s.Listener.Addr())
-	defer func() {
-		s.clearClients()
-		log.Info("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
-	}()
+	defer log.Info("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -78,11 +74,7 @@ func (s *Server) Stop() error {
 
 // Shutdown stop rpc service
 func (s *Server) Shutdown(ctx context.Context) error {
-	// log.Info("%v %v Shutdown...", s.Handler.LogTag(), s.Listener.Addr())
-	defer func() {
-		s.clearClients()
-		log.Info("%v %v Shutdown", s.Handler.LogTag(), s.Listener.Addr())
-	}()
+	defer log.Info("%v %v Shutdown", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -120,7 +112,7 @@ func (s *Server) deleteClient(c *Client) {
 
 func (s *Server) clearClients() {
 	s.mux.Lock()
-	for c, _ := range s.clients {
+	for c := range s.clients {
 		go c.Stop()
 	}
 	s.clients = map[*Client]util.Empty{}
@@ -135,7 +127,10 @@ func (s *Server) runLoop() error {
 	)
 
 	s.running = true
-	defer close(s.chStop)
+	defer func() {
+		s.clearClients()
+		close(s.chStop)
+	}()
 
 	for s.running {
 		conn, err = s.Listener.Accept()
