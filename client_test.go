@@ -349,11 +349,11 @@ func TestWebsocket(t *testing.T) {
 
 type testCoder int
 
-func (tc *testCoder) Encode(m Message) Message {
+func (tc *testCoder) Encode(m *Message) *Message {
 	return m
 }
 
-func (tc *testCoder) Decode(m Message) Message {
+func (tc *testCoder) Decode(m *Message) *Message {
 	return m
 }
 

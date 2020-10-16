@@ -30,11 +30,11 @@ type DialerFunc func() (net.Conn, error)
 
 type rpcSession struct {
 	seq  uint64
-	done chan Message
+	done chan *Message
 }
 
 func newSession(seq uint64) *rpcSession {
-	return &rpcSession{seq: seq, done: make(chan Message, 1)}
+	return &rpcSession{seq: seq, done: make(chan *Message, 1)}
 }
 
 // Client defines rpc client struct
@@ -56,7 +56,7 @@ type Client struct {
 	sessionMap      map[uint64]*rpcSession
 	asyncHandlerMap map[uint64]HandlerFunc
 
-	chSend  chan Message
+	chSend  chan *Message
 	chClose chan util.Empty
 
 	onStop func(*Client)
@@ -184,7 +184,7 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 }
 
 // PushMsg push msg to client's send queue
-func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
+func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 	if !c.running {
 		return ErrClientStopped
 	}
@@ -218,11 +218,11 @@ func (c *Client) PushMsg(msg Message, timeout time.Duration) error {
 }
 
 // NewMessage factory
-func (c *Client) NewMessage(cmd byte, method string, v interface{}) Message {
+func (c *Client) NewMessage(cmd byte, method string, v interface{}) *Message {
 	return newMessage(cmd, method, v, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec)
 }
 
-func (c *Client) parseResponse(msg Message, rsp interface{}) error {
+func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
 	if msg == nil {
 		return ErrClientReconnecting
 	}
@@ -364,7 +364,7 @@ func (c *Client) clearSession() {
 	c.mux.Unlock()
 }
 
-func (c *Client) dropMessage(msg Message) {
+func (c *Client) dropMessage(msg *Message) {
 	if !msg.IsAsync() {
 		close(c.deleteSession(msg.Seq()).done)
 	} else {
@@ -418,7 +418,7 @@ func (c *Client) Restart() error {
 		preConn := c.Conn
 		c.Conn = conn
 
-		c.chSend = make(chan Message, c.Handler.SendQueueSize())
+		c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 		c.chClose = make(chan util.Empty)
 		c.sessionMap = make(map[uint64]*rpcSession)
 		c.asyncHandlerMap = make(map[uint64]HandlerFunc)
@@ -469,7 +469,7 @@ func (c *Client) initReader() {
 func (c *Client) recvLoop() {
 	var (
 		err  error
-		msg  Message
+		msg  *Message
 		addr = c.Conn.RemoteAddr().String()
 	)
 
@@ -535,7 +535,7 @@ func (c *Client) sendLoop() {
 	log.Debug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
 	defer log.Debug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), addr)
 	if !c.Handler.BatchSend() {
-		var msg Message
+		var msg *Message
 		var conn net.Conn
 		for {
 			select {
@@ -556,8 +556,9 @@ func (c *Client) sendLoop() {
 		}
 	} else {
 		var currLen = 0
-		var msg Message
+		var msg *Message
 		var conn net.Conn
+		var messages []*Message = make([]*Message, 10)[0:0]
 		var buffers net.Buffers = make([][]byte, 10)[0:0]
 		for {
 			select {
@@ -565,12 +566,12 @@ func (c *Client) sendLoop() {
 				return
 			case msg = <-c.chSend:
 			}
-			buffers = append(buffers, msg)
+			messages = append(messages, msg)
 			currLen = len(c.chSend)
 			for i := 1; i < currLen && i < 10; i++ {
 				select {
 				case msg = <-c.chSend:
-					buffers = append(buffers, msg)
+					messages = append(messages, msg)
 				default:
 					goto SEND
 				}
@@ -580,21 +581,23 @@ func (c *Client) sendLoop() {
 			conn = c.Conn
 			c.mux.RUnlock()
 			if !c.reconnecting {
-				if len(buffers) == 1 {
-					if _, err := c.Handler.Send(conn, buffers[0]); err != nil {
+				if len(messages) == 1 {
+					if _, err := c.Handler.Send(conn, messages[0]); err != nil {
 						conn.Close()
 					}
 				} else {
-					if _, err := c.Handler.SendN(conn, buffers); err != nil {
+					if _, err := c.Handler.SendN(conn, messages, buffers); err != nil {
 						conn.Close()
 					}
+					buffers = buffers[0:0]
 				}
 			} else {
-				for _, v := range buffers {
-					c.dropMessage(Message(v))
+				for _, m := range messages {
+					c.dropMessage(m)
 				}
 			}
-			buffers = buffers[0:0]
+			messages = messages[0:0]
+
 		}
 	}
 }
@@ -608,7 +611,7 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 	c.Head = Header(c.head[:])
 	c.Codec = codec
 	c.Handler = handler
-	c.chSend = make(chan Message, c.Handler.SendQueueSize())
+	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
@@ -637,7 +640,7 @@ func NewClient(dialer DialerFunc) (*Client, error) {
 	c.Codec = codec.DefaultCodec
 	c.Handler = DefaultHandler.Clone()
 	c.Dialer = dialer
-	c.chSend = make(chan Message, c.Handler.SendQueueSize())
+	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)

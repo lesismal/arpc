@@ -10,6 +10,12 @@ import (
 )
 
 func main() {
+	arpc.DefaultHandler.Handle("/server/notify", func(ctx *arpc.Context) {
+		str := ""
+		err := ctx.Bind(&str)
+		log.Printf("/server/notify: \"%v\", error: %v", str, err)
+	})
+
 	client, err := arpc.NewClient(func() (net.Conn, error) {
 		return websocket.Dial("ws://localhost:8888/ws")
 	})
@@ -17,12 +23,6 @@ func main() {
 		panic(err)
 	}
 	defer client.Stop()
-
-	client.Handler.Handle("/server/notify", func(ctx *arpc.Context) {
-		str := ""
-		err := ctx.Bind(&str)
-		log.Printf("/server/notify: \"%v\", error: %v", str, err)
-	})
 
 	req := "hello"
 	rsp := ""

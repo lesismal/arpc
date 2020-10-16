@@ -46,7 +46,7 @@ func Test_handler_OnDisconnected(t *testing.T) {
 }
 
 func Test_handler_HandleOverstock(t *testing.T) {
-	DefaultHandler.HandleOverstock(func(c *Client, m Message) {})
+	DefaultHandler.HandleOverstock(func(c *Client, m *Message) {})
 }
 
 func Test_handler_OnOverstock(t *testing.T) {
@@ -54,7 +54,7 @@ func Test_handler_OnOverstock(t *testing.T) {
 }
 
 func Test_handler_HandleSessionMiss(t *testing.T) {
-	DefaultHandler.HandleSessionMiss(func(c *Client, m Message) {})
+	DefaultHandler.HandleSessionMiss(func(c *Client, m *Message) {})
 }
 
 func Test_handler_OnSessionMiss(t *testing.T) {

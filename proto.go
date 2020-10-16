@@ -70,116 +70,124 @@ func (h Header) BodyLen() int {
 }
 
 // message clones header with body length
-func (h Header) message(handler Handler) (Message, error) {
+func (h Header) message(handler Handler) (*Message, error) {
 	bodyLen := h.BodyLen()
 	if bodyLen < 0 || bodyLen > MaxBodyLen {
 		return nil, fmt.Errorf("invalid body length: %v", bodyLen)
 	}
 
-	m := Message(handler.GetBuffer(HeadLen + bodyLen))
-	binary.LittleEndian.PutUint32(m[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
+	m := &Message{Buffer: handler.GetBuffer(HeadLen + bodyLen)}
+	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
 	return m, nil
 }
 
 // Message defines rpc packet
-type Message []byte
+type Message struct {
+	Buffer []byte
+	Values map[string]interface{}
+}
+
+// Len returns total length of buffer
+func (m *Message) Len() int {
+	return len(m.Buffer)
+}
 
 // Cmd returns cmd
-func (m Message) Cmd() byte {
-	return m[HeaderIndexCmd]
+func (m *Message) Cmd() byte {
+	return m.Buffer[HeaderIndexCmd]
 }
 
 // SetCmd sets cmd
-func (m Message) SetCmd(cmd byte) {
-	m[HeaderIndexCmd] = cmd
+func (m *Message) SetCmd(cmd byte) {
+	m.Buffer[HeaderIndexCmd] = cmd
 }
 
 // IsError returns error flag
-func (m Message) IsError() bool {
-	return m[HeaderIndexFlag]&HeaderFlagMaskError > 0
+func (m *Message) IsError() bool {
+	return m.Buffer[HeaderIndexFlag]&HeaderFlagMaskError > 0
 }
 
 // SetError sets error flag
-func (m Message) SetError(isError bool) {
+func (m *Message) SetError(isError bool) {
 	if isError {
-		m[HeaderIndexFlag] |= HeaderFlagMaskError
+		m.Buffer[HeaderIndexFlag] |= HeaderFlagMaskError
 	} else {
-		m[HeaderIndexFlag] &= ^HeaderFlagMaskError
+		m.Buffer[HeaderIndexFlag] &= ^HeaderFlagMaskError
 	}
 }
 
 // Error returns error
-func (m Message) Error() error {
+func (m *Message) Error() error {
 	if !m.IsError() {
 		return nil
 	}
-	return errors.New(util.BytesToStr(m[HeadLen+m.MethodLen():]))
+	return errors.New(util.BytesToStr(m.Buffer[HeadLen+m.MethodLen():]))
 }
 
 // IsAsync returns async flag
-func (m Message) IsAsync() bool {
-	return m[HeaderIndexFlag]&HeaderFlagMaskAsync > 0
+func (m *Message) IsAsync() bool {
+	return m.Buffer[HeaderIndexFlag]&HeaderFlagMaskAsync > 0
 }
 
 // SetAsync sets async flag
-func (m Message) SetAsync(isAsync bool) {
+func (m *Message) SetAsync(isAsync bool) {
 	if isAsync {
-		m[HeaderIndexFlag] |= HeaderFlagMaskAsync
+		m.Buffer[HeaderIndexFlag] |= HeaderFlagMaskAsync
 	} else {
-		m[HeaderIndexFlag] &= ^HeaderFlagMaskAsync
+		m.Buffer[HeaderIndexFlag] &= ^HeaderFlagMaskAsync
 	}
 }
 
 // MethodLen returns method length
-func (m Message) MethodLen() int {
-	return int(m[HeaderIndexMethodLen])
+func (m *Message) MethodLen() int {
+	return int(m.Buffer[HeaderIndexMethodLen])
 }
 
 // SetMethodLen sets method length
-func (m Message) SetMethodLen(l int) {
-	m[HeaderIndexMethodLen] = byte(l)
+func (m *Message) SetMethodLen(l int) {
+	m.Buffer[HeaderIndexMethodLen] = byte(l)
 }
 
 // Method returns method
-func (m Message) Method() string {
-	return string(m[HeadLen : HeadLen+m.MethodLen()])
+func (m *Message) Method() string {
+	return string(m.Buffer[HeadLen : HeadLen+m.MethodLen()])
 }
 
-func (m Message) method() string {
-	return util.BytesToStr(m[HeadLen : HeadLen+m.MethodLen()])
+func (m *Message) method() string {
+	return util.BytesToStr(m.Buffer[HeadLen : HeadLen+m.MethodLen()])
 }
 
 // BodyLen returns length of body[ method && body ]
-func (m Message) BodyLen() int {
-	return int(binary.LittleEndian.Uint32(m[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd]))
+func (m *Message) BodyLen() int {
+	return int(binary.LittleEndian.Uint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd]))
 }
 
 // SetBodyLen sets length of body[ method && body ]
-func (m Message) SetBodyLen(l int) {
-	binary.LittleEndian.PutUint32(m[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(l))
+func (m *Message) SetBodyLen(l int) {
+	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(l))
 }
 
 // Seq returns sequence
-func (m Message) Seq() uint64 {
-	return binary.LittleEndian.Uint64(m[HeaderIndexSeqBegin:HeaderIndexSeqEnd])
+func (m *Message) Seq() uint64 {
+	return binary.LittleEndian.Uint64(m.Buffer[HeaderIndexSeqBegin:HeaderIndexSeqEnd])
 }
 
 // SetSeq sets sequence
-func (m Message) SetSeq(seq uint64) {
-	binary.LittleEndian.PutUint64(m[HeaderIndexSeqBegin:HeaderIndexSeqEnd], seq)
+func (m *Message) SetSeq(seq uint64) {
+	binary.LittleEndian.PutUint64(m.Buffer[HeaderIndexSeqBegin:HeaderIndexSeqEnd], seq)
 }
 
 // Data returns data after method
-func (m Message) Data() []byte {
+func (m *Message) Data() []byte {
 	length := HeadLen + m.MethodLen()
-	return m[length:]
+	return m.Buffer[length:]
 }
 
 // newMessage factory
-func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec) Message {
+func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec) *Message {
 	var (
 		data    []byte
-		msg     Message
+		msg     *Message
 		bodyLen int
 	)
 
@@ -190,21 +198,21 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 		h = DefaultHandler
 	}
 
-	msg = Message(h.GetBuffer(HeadLen + bodyLen))
+	msg = &Message{Buffer: h.GetBuffer(HeadLen + bodyLen)}
 	msg.SetCmd(cmd)
 	msg.SetError(isError)
 	msg.SetAsync(isAsync)
 	msg.SetMethodLen(len(method))
 	msg.SetBodyLen(bodyLen)
 	msg.SetSeq(seq)
-	copy(msg[HeadLen:HeadLen+len(method)], method)
-	copy(msg[HeadLen+len(method):], data)
+	copy(msg.Buffer[HeadLen:HeadLen+len(method)], method)
+	copy(msg.Buffer[HeadLen+len(method):], data)
 
 	return msg
 }
 
 // MessageCoder .
 type MessageCoder interface {
-	Encode(Message) Message
-	Decode(Message) Message
+	Encode(*Message) *Message
+	Decode(*Message) *Message
 }

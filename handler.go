@@ -11,7 +11,6 @@ import (
 	"net"
 
 	"github.com/lesismal/arpc/log"
-	"github.com/lesismal/arpc/util"
 )
 
 // DefaultHandler instance
@@ -47,14 +46,14 @@ type Handler interface {
 	OnDisconnected(c *Client)
 
 	// HandleOverstock registers callback on Client chSend overstockll
-	HandleOverstock(onOverstock func(c *Client, m Message))
+	HandleOverstock(onOverstock func(c *Client, m *Message))
 	// OnOverstock would be called when Client chSend is full
-	OnOverstock(c *Client, m Message)
+	OnOverstock(c *Client, m *Message)
 
 	// HandleSessionMiss registers callback on async message seq not found
-	HandleSessionMiss(onSessionMiss func(c *Client, m Message))
+	HandleSessionMiss(onSessionMiss func(c *Client, m *Message))
 	// OnSessionMiss would be called when Client async message seq not found
-	OnSessionMiss(c *Client, m Message)
+	OnSessionMiss(c *Client, m *Message)
 
 	// BeforeRecv registers callback before Recv
 	BeforeRecv(bh func(net.Conn) error)
@@ -76,11 +75,11 @@ type Handler interface {
 	SetReaderWrapper(wrapper func(conn net.Conn) io.Reader)
 
 	// Recv reads and returns a message from a client
-	Recv(c *Client) (Message, error)
+	Recv(c *Client) (*Message, error)
 	// Send writes a message to a connection
-	Send(c net.Conn, m Message) (int, error)
+	Send(c net.Conn, m *Message) (int, error)
 	// SendN writes batch messages to a connection
-	SendN(conn net.Conn, buffers net.Buffers) (int, error)
+	SendN(conn net.Conn, messages []*Message, buffers net.Buffers) (int, error)
 
 	// RecvBufferSize returns Client.Reader size
 	RecvBufferSize() int
@@ -105,7 +104,7 @@ type Handler interface {
 	HandleNotFound(h HandlerFunc)
 
 	// OnMessage dispatches messages
-	OnMessage(c *Client, m Message)
+	OnMessage(c *Client, m *Message)
 
 	// GetBuffer factory
 	GetBuffer(size int) []byte
@@ -123,8 +122,8 @@ type handler struct {
 
 	onConnected    func(*Client)
 	onDisConnected func(*Client)
-	onOverstock    func(c *Client, m Message)
-	onSessionMiss  func(c *Client, m Message)
+	onOverstock    func(c *Client, m *Message)
+	onSessionMiss  func(c *Client, m *Message)
 
 	beforeRecv    func(net.Conn) error
 	beforeSend    func(net.Conn) error
@@ -187,21 +186,21 @@ func (h *handler) OnDisconnected(c *Client) {
 	}
 }
 
-func (h *handler) HandleOverstock(onOverstock func(c *Client, m Message)) {
+func (h *handler) HandleOverstock(onOverstock func(c *Client, m *Message)) {
 	h.onOverstock = onOverstock
 }
 
-func (h *handler) OnOverstock(c *Client, m Message) {
+func (h *handler) OnOverstock(c *Client, m *Message) {
 	if h.onOverstock != nil {
 		h.onOverstock(c, m)
 	}
 }
 
-func (h *handler) HandleSessionMiss(onSessionMiss func(c *Client, m Message)) {
+func (h *handler) HandleSessionMiss(onSessionMiss func(c *Client, m *Message)) {
 	h.onSessionMiss = onSessionMiss
 }
 
-func (h *handler) OnSessionMiss(c *Client, m Message) {
+func (h *handler) OnSessionMiss(c *Client, m *Message) {
 	if h.onSessionMiss != nil {
 		h.onSessionMiss(c, m)
 	}
@@ -333,10 +332,10 @@ func (h *handler) handle(method string, cb HandlerFunc, args ...interface{}) {
 	h.routes[method] = rh
 }
 
-func (h *handler) Recv(c *Client) (Message, error) {
+func (h *handler) Recv(c *Client) (*Message, error) {
 	var (
 		err     error
-		message Message
+		message *Message
 	)
 
 	if h.beforeRecv != nil {
@@ -355,8 +354,8 @@ func (h *handler) Recv(c *Client) (Message, error) {
 		return nil, err
 	}
 
-	if len(message) > HeadLen {
-		_, err = io.ReadFull(c.Reader, message[HeaderIndexBodyLenEnd:])
+	if message.Len() > HeadLen {
+		_, err = io.ReadFull(c.Reader, message.Buffer[HeaderIndexBodyLenEnd:])
 	}
 
 	for i := len(h.msgCoders) - 1; i >= 0; i-- {
@@ -366,7 +365,7 @@ func (h *handler) Recv(c *Client) (Message, error) {
 	return message, err
 }
 
-func (h *handler) Send(conn net.Conn, m Message) (int, error) {
+func (h *handler) Send(conn net.Conn, msg *Message) (int, error) {
 	if h.beforeSend != nil {
 		if err := h.beforeSend(conn); err != nil {
 			return -1, err
@@ -374,37 +373,41 @@ func (h *handler) Send(conn net.Conn, m Message) (int, error) {
 	}
 
 	for i := 0; i < len(h.msgCoders); i++ {
-		m = h.msgCoders[i].Encode(m)
+		msg = h.msgCoders[i].Encode(msg)
 	}
 
-	return conn.Write(m)
+	return conn.Write(msg.Buffer)
 }
 
-func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
+func (h *handler) SendN(conn net.Conn, messages []*Message, buffers net.Buffers) (int, error) {
 	if h.beforeSend != nil {
 		if err := h.beforeSend(conn); err != nil {
 			return -1, err
 		}
 	}
-	for i := 0; i < len(buffers); i++ {
+
+	for i := 0; i < len(messages); i++ {
 		for j := 0; j < len(h.msgCoders); j++ {
-			buffers[i] = h.msgCoders[j].Encode(buffers[i])
+			messages[i] = h.msgCoders[j].Encode(messages[i])
+			buffers = append(buffers, messages[i].Buffer)
 		}
 	}
+
 	n64, err := buffers.WriteTo(conn)
 	return int(n64), err
 }
 
-func (h *handler) OnMessage(c *Client, msg Message) {
+func (h *handler) OnMessage(c *Client, msg *Message) {
 	ml := msg.MethodLen()
-	if ml <= 0 || ml > MaxMethodLen || ml > (len(msg)-HeadLen) {
+	if ml <= 0 || ml > MaxMethodLen || ml > (msg.Len()-HeadLen) {
 		log.Warn("%v OnMessage: invalid request method length %v, dropped", h.LogTag(), ml)
 		return
 	}
+	// log.Info("---- ml: %v", ml)
 	cmd := msg.Cmd()
 	switch cmd {
 	case CmdRequest, CmdNotify:
-		method := util.BytesToStr(msg[HeadLen : HeadLen+ml])
+		method := msg.method()
 		if rh, ok := h.routes[method]; ok {
 			ctx := newContext(c, msg, rh.Handlers)
 			if !rh.Async {

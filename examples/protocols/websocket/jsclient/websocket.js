@@ -7,16 +7,16 @@ var CmdRequest = 1;
 var CmdResponse = 2;
 var CmdNotify = 3;
 
-var HeaderIndexBodyLenBegin = 0
-var HeaderIndexBodyLenEnd = 4
-var HeaderIndexReserved = 4
-var HeaderIndexCmd = 5
-var HeaderIndexFlag = 6
-var HeaderIndexMethodLen = 7
-var HeaderIndexSeqBegin = 8
-var HeaderIndexSeqEnd = 16
-var HeaderFlagMaskError = 0x01
-var HeaderFlagMaskAsync = 0x02
+var HeaderIndexBodyLenBegin = 0;
+var HeaderIndexBodyLenEnd = 4;
+var HeaderIndexReserved = 4;
+var HeaderIndexCmd = 5;
+var HeaderIndexFlag = 6;
+var HeaderIndexMethodLen = 7;
+var HeaderIndexSeqBegin = 8;
+var HeaderIndexSeqEnd = 16;
+var HeaderFlagMaskError = 0x01;
+var HeaderFlagMaskAsync = 0x02;
 
 var ErrClosed = "[client stopped]";
 var ErrReconnecting = "[error reconnecting]";
@@ -36,7 +36,7 @@ function Codec() {
         try {
             data = JSON.parse(data);
         } catch (e) {
-            return [null, e]
+            return [null, e];
         }
         return [data, null];
     }
@@ -68,7 +68,7 @@ function ArpcClient(url, codec) {
 
     this.Handle = function (method, h, obj) {
         if (this.handlers[method]) {
-            throw ("handler for [${method}] exists")
+            throw ("handler for [${method}] exists");
         }
         this.handlers[method] = { h: h, obj: obj };
     }
@@ -85,7 +85,7 @@ function ArpcClient(url, codec) {
             });
         }
         this.seqNum++;
-        var seq = this.seqNum
+        var seq = this.seqNum;
         var session = {};
         var p = new Promise(function (resolve, reject) {
             session.resolve = resolve;
@@ -99,7 +99,7 @@ function ArpcClient(url, codec) {
                 var isErr = 1;
                 delete (this.sessionMap[seq]);
                 session.resolve(null, "timeout");
-            }, timeout)
+            }, timeout);
         }
 
         var buffer;
@@ -184,11 +184,10 @@ function ArpcClient(url, codec) {
             var offset = 0;
             while (offset < event.data.byteLength) {
                 var headArr = new Uint8Array(event.data.slice(offset, offset + 16));
-                var bodyLen = 0;// headArr.readUint32LE(offset + HeaderIndexBodyLenBegin);
+                var bodyLen = 0;
                 for (var i = HeaderIndexBodyLenBegin; i < HeaderIndexBodyLenEnd; i++) {
                     bodyLen |= (headArr[i] << ((i - HeaderIndexBodyLenBegin) * 8)) % 0xFF;
                 }
-                // var bodyLen = headArr[4] | headArr[5] << 8 | headArr[6] << 16 | headArr[7] << 24;
                 var cmd = headArr[HeaderIndexCmd];
                 var isError = headArr[HeaderIndexFlag] & HeaderFlagMaskError;
                 var isAsync = headArr[HeaderIndexFlag] & HeaderFlagMaskAsync;
@@ -204,7 +203,7 @@ function ArpcClient(url, codec) {
                 }
 
                 if (methodLen == 0) {
-                    console.log("%v OnMessage: invalid request message with 0 method length, dropped", h.LogTag())
+                    console.log("[ArpcClient] onMessage: invalid request message with 0 method length, dropped");
                     return
                 }
 
@@ -217,12 +216,12 @@ function ArpcClient(url, codec) {
                             var data = ret[0];
                             var err = ret[1];
                             if (err) {
-                                console.log(`handle [${method}] codec.Unmarshal failed: ${err}`);
+                                console.log(`[ArpcClient] onMessage: handle [${method}] codec.Unmarshal failed: ${err}`);
                                 return;
                             }
                             handler.h(new Context(client, headArr, bodyArr, method, data));
                         } else {
-                            console.log("invalid method: [%s], no handler", method);
+                            console.log("[ArpcClient] onMessage: invalid method: [%s], no handler", method);
                             return
                         }
                         break;
@@ -241,7 +240,7 @@ function ArpcClient(url, codec) {
                             var err = ret[1];
                             session.resolve({ data: data, err: err });
                         } else {
-                            console.log("session [%d] missing:", seq);
+                            console.log("[ArpcClient] onMessage: session [%d] missing", seq);
                             return;
                         }
                         break;
@@ -251,7 +250,7 @@ function ArpcClient(url, codec) {
                 offset += 16 + bodyLen;
             }
         } catch (e) {
-            console.log("Websocket onMessage panic:", e);
+            console.log("[ArpcClient] onMessage: panic:", e);
         }
     }
 
@@ -271,11 +270,13 @@ function ArpcClient(url, codec) {
 
         client.ws.onopen = function (event) {
             client.state = SOCK_STATE_CONNECTED;
+            console.log("[ArpcClient] websocket onopen");
             if (client.onOpen) {
                 client.onOpen(client);
             }
         };
         client.ws.onclose = function (event) {
+            console.log("[ArpcClient] websocket onclose");
             if (client.onClose) {
                 client.onClose(client);
             }
@@ -289,6 +290,7 @@ function ArpcClient(url, codec) {
             client.init();
         };
         client.ws.onerror = function (event) {
+            console.log("[ArpcClient] websocket onerror");
             if (client.onError) {
                 client.onError(client);
             }
@@ -299,7 +301,7 @@ function ArpcClient(url, codec) {
     try {
         this.init();
     } catch (e) {
-        console.log("ArpcClient init() failed:", e);
+        console.log("[ArpcClient] init() failed:", e);
     }
 }
 

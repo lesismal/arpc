@@ -297,7 +297,10 @@ handler.Handle("/echo", func(ctx *arpc.Context) {
 	err := ctx.Bind(req)
 	if err == nil {
 		// async response
-		go ctx.Write(data)
+		go func() {
+			ctx.Write(data)
+			ctx.Dump()
+		}()
 	}
 })
 ```

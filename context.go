@@ -14,7 +14,7 @@ import (
 // Context definition
 type Context struct {
 	Client  *Client
-	Message Message
+	Message *Message
 
 	err      interface{}
 	response []interface{}
@@ -106,7 +106,7 @@ func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) er
 func (ctx *Context) Dump() error {
 	cli := ctx.Client
 	req := ctx.Message
-	var rsp Message
+	var rsp *Message
 	if ctx.err != nil {
 		rsp = newMessage(CmdResponse, req.method(), ctx.err, true, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec)
 	} else {
@@ -120,6 +120,6 @@ func (ctx *Context) Dump() error {
 	return ctx.Client.PushMsg(rsp, ctx.timeout)
 }
 
-func newContext(c *Client, msg Message, handlers []HandlerFunc) *Context {
+func newContext(c *Client, msg *Message, handlers []HandlerFunc) *Context {
 	return &Context{Client: c, Message: msg, done: false, index: -1, handlers: handlers}
 }
