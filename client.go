@@ -367,8 +367,10 @@ func (c *Client) clearSession() {
 func (c *Client) dropMessage(msg *Message) {
 	if !msg.IsAsync() {
 		close(c.deleteSession(msg.Seq()).done)
+		c.Handler.OnMessageDropped(c, msg)
 	} else {
 		c.deleteAsyncHandler(msg.Seq())
+		c.Handler.OnMessageDropped(c, msg)
 	}
 }
 

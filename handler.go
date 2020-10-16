@@ -45,10 +45,15 @@ type Handler interface {
 	// OnDisconnected would be called when Client disconnected
 	OnDisconnected(c *Client)
 
-	// HandleOverstock registers callback on Client chSend overstockll
+	// HandleOverstock registers callback on Client chSend overstock
 	HandleOverstock(onOverstock func(c *Client, m *Message))
 	// OnOverstock would be called when Client chSend is full
 	OnOverstock(c *Client, m *Message)
+
+	// HandleMessageDropped registers callback on message dropped
+	HandleMessageDropped(onOverstock func(c *Client, m *Message))
+	// OnOverstock would be called when message is dropped
+	OnMessageDropped(c *Client, m *Message)
 
 	// HandleSessionMiss registers callback on async message seq not found
 	HandleSessionMiss(onSessionMiss func(c *Client, m *Message))
@@ -120,10 +125,11 @@ type handler struct {
 	recvBufferSize int
 	sendQueueSize  int
 
-	onConnected    func(*Client)
-	onDisConnected func(*Client)
-	onOverstock    func(c *Client, m *Message)
-	onSessionMiss  func(c *Client, m *Message)
+	onConnected      func(*Client)
+	onDisConnected   func(*Client)
+	onOverstock      func(c *Client, m *Message)
+	onMessageDropped func(c *Client, m *Message)
+	onSessionMiss    func(c *Client, m *Message)
 
 	beforeRecv    func(net.Conn) error
 	beforeSend    func(net.Conn) error
@@ -193,6 +199,16 @@ func (h *handler) HandleOverstock(onOverstock func(c *Client, m *Message)) {
 func (h *handler) OnOverstock(c *Client, m *Message) {
 	if h.onOverstock != nil {
 		h.onOverstock(c, m)
+	}
+}
+
+func (h *handler) HandleMessageDropped(onMessageDropped func(c *Client, m *Message)) {
+	h.onMessageDropped = onMessageDropped
+}
+
+func (h *handler) OnMessageDropped(c *Client, m *Message) {
+	if h.onMessageDropped != nil {
+		h.onMessageDropped(c, m)
 	}
 }
 
