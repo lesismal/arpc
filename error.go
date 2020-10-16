@@ -22,12 +22,18 @@ var (
 var (
 	// ErrInvalidRspMessage
 	ErrInvalidRspMessage = errors.New("invalid response message cmd")
+
+	// ErrMethodNotFound .
+	ErrMethodNotFound = errors.New("method not found")
 )
 
 // context error
 var (
-	// ErrMethodNotFound
-	ErrMethodNotFound = errors.New("method not found")
+	// ErrContextErrWritten .
+	ErrContextErrWritten = errors.New("context erorr written")
+
+	// ErrContextResponseToNotify .
+	ErrContextResponseToNotify = errors.New("should not response to context with notify message")
 )
 
 // general errors

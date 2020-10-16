@@ -16,6 +16,10 @@ type Context struct {
 	Client  *Client
 	Message Message
 
+	err      interface{}
+	response []interface{}
+	timeout  time.Duration
+
 	done     bool
 	index    int
 	handlers []HandlerFunc
@@ -81,13 +85,39 @@ func (ctx *Context) Done() {
 }
 
 func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
+	if ctx.err != nil {
+		return ErrContextErrWritten
+	}
+	if ctx.Message.Cmd() != CmdRequest {
+		return ErrContextResponseToNotify
+	}
 	if _, ok := v.(error); ok {
 		isError = true
 	}
+	if isError {
+		ctx.err = v
+	} else {
+		ctx.response = append(ctx.response, v)
+	}
+	ctx.timeout = timeout
+	return nil
+}
+
+func (ctx *Context) Dump() error {
 	cli := ctx.Client
 	req := ctx.Message
-	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec)
-	return ctx.Client.PushMsg(rsp, timeout)
+	var rsp Message
+	if ctx.err != nil {
+		rsp = newMessage(CmdResponse, req.method(), ctx.err, true, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec)
+	} else {
+		var data []byte
+		for _, v := range ctx.response {
+			data = append(data, util.ValueToBytes(cli.Codec, v)...)
+		}
+		rsp = newMessage(CmdResponse, req.method(), data, false, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec)
+	}
+
+	return ctx.Client.PushMsg(rsp, ctx.timeout)
 }
 
 func newContext(c *Client, msg Message, handlers []HandlerFunc) *Context {

@@ -401,23 +401,38 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		log.Warn("%v OnMessage: invalid request method length %v, dropped", h.LogTag(), ml)
 		return
 	}
-	switch msg.Cmd() {
+	cmd := msg.Cmd()
+	switch cmd {
 	case CmdRequest, CmdNotify:
 		method := util.BytesToStr(msg[HeadLen : HeadLen+ml])
 		if rh, ok := h.routes[method]; ok {
 			ctx := newContext(c, msg, rh.Handlers)
 			if !rh.Async {
 				ctx.Next()
+				if cmd == CmdRequest {
+					ctx.Dump()
+				}
 			} else {
-				go ctx.Next()
+				go func() {
+					ctx.Next()
+					if cmd == CmdRequest {
+						ctx.Dump()
+					}
+				}()
 			}
 		} else {
 			if rh, ok = h.routes[""]; ok {
 				ctx := newContext(c, msg, rh.Handlers)
 				ctx.Next()
+				if cmd == CmdRequest {
+					ctx.Dump()
+				}
 			} else {
 				ctx := newContext(c, msg, nil)
 				ctx.Error(ErrMethodNotFound)
+				if cmd == CmdRequest {
+					ctx.Dump()
+				}
 			}
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
