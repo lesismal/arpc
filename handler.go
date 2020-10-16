@@ -389,8 +389,8 @@ func (h *handler) SendN(conn net.Conn, messages []*Message, buffers net.Buffers)
 	for i := 0; i < len(messages); i++ {
 		for j := 0; j < len(h.msgCoders); j++ {
 			messages[i] = h.msgCoders[j].Encode(messages[i])
-			buffers = append(buffers, messages[i].Buffer)
 		}
+		buffers = append(buffers, messages[i].Buffer)
 	}
 
 	n64, err := buffers.WriteTo(conn)
