@@ -8,30 +8,52 @@ import "errors"
 
 // client error
 var (
-	// ErrClientTimeout
+	// ErrClientTimeout .
 	ErrClientTimeout = errors.New("timeout")
-	// ErrClientOverstock
+
+	// ErrClientInvalidTimeoutZero .
+	ErrClientInvalidTimeoutZero = errors.New("invalid timeout, should > 0")
+
+	// ErrClientInvalidTimeoutLessThanZero .
+	ErrClientInvalidTimeoutLessThanZero = errors.New("invalid timeout, should >= 0")
+
+	// ErrClientInvalidTimeoutZeroWithNonNilHandler .
+	ErrClientInvalidTimeoutZeroWithNonNilHandler = errors.New("invalid timeout 0 with non-nil async handler")
+
+	// ErrClientOverstock .
 	ErrClientOverstock = errors.New("timeout: rpc client's send queue is full")
-	// ErrClientReconnecting
+	// ErrClientReconnecting .
 	ErrClientReconnecting = errors.New("client reconnecting")
-	// ErrClientStopped
+	// ErrClientStopped .
 	ErrClientStopped = errors.New("client stopped")
+
+	// ErrClientInvalidPoolDialers .
+	ErrClientInvalidPoolDialers = errors.New("invalid dialers array")
 )
 
 // message error
 var (
-	// ErrInvalidRspMessage
+	// ErrInvalidRspMessage .
 	ErrInvalidRspMessage = errors.New("invalid response message cmd")
+
+	// ErrMethodNotFound .
+	ErrMethodNotFound = errors.New("method not found")
+
+	// ErrInvalidFlagBitIndex .
+	ErrInvalidFlagBitIndex = errors.New("invalid index, should use[0~9]")
 )
 
 // context error
 var (
-	// ErrMethodNotFound
-	ErrMethodNotFound = errors.New("method not found")
+	// ErrContextErrWritten .
+	ErrContextErrWritten = errors.New("context erorr written")
+
+	// ErrContextResponseToNotify .
+	ErrContextResponseToNotify = errors.New("should not response to context with notify message")
 )
 
 // general errors
 var (
-	// ErrTimeout
+	// ErrTimeout .
 	ErrTimeout = errors.New("timeout")
 )

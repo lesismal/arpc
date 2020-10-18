@@ -20,7 +20,7 @@ type Client struct {
 
 	Password string
 
-	mux sync.RWMutex
+	psmux sync.RWMutex
 
 	topicHandlerMap map[string]TopicHandler
 
@@ -52,20 +52,20 @@ func (c *Client) Subscribe(topicName string, h TopicHandler, timeout time.Durati
 		return err
 	}
 
-	c.mux.Lock()
+	c.psmux.Lock()
 	// if _, ok := c.topicHandlerMap[topicName]; ok {
 	// 	panic(fmt.Errorf("handler exist for topic [%v]", topicName))
 	// }
 	c.topicHandlerMap[topicName] = h
-	c.mux.Unlock()
+	c.psmux.Unlock()
 
 	err = c.Call(routeSubscribe, bs, nil, timeout)
 	if err == nil {
 		log.Info("%v [Subscribe] [topic: '%v'] success from\t%v", c.Handler.LogTag(), topicName, c.Conn.RemoteAddr())
 	} else {
-		c.mux.Lock()
+		c.psmux.Lock()
 		delete(c.topicHandlerMap, topicName)
-		c.mux.Unlock()
+		c.psmux.Unlock()
 		log.Error("%v [Subscribe] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
 	}
 	return err
@@ -83,9 +83,9 @@ func (c *Client) Unsubscribe(topicName string, timeout time.Duration) error {
 	}
 	err = c.Call(routeUnsubscribe, bs, nil, timeout)
 	if err == nil {
-		c.mux.Lock()
+		c.psmux.Lock()
 		delete(c.topicHandlerMap, topic.Name)
-		c.mux.Unlock()
+		c.psmux.Unlock()
 		log.Info("%v[Unsubscribe] [topic: '%v'] success from\t%v", c.Handler.LogTag(), topicName, c.Conn.RemoteAddr())
 	} else {
 		log.Error("%v[Unsubscribe] [topic: '%v'] failed: %v, from\t%v", c.Handler.LogTag(), topicName, err, c.Conn.RemoteAddr())
@@ -135,15 +135,15 @@ func (c *Client) OnPublish(h TopicHandler) {
 }
 
 // func (c *Client) invalidTopic(topic string) bool {
-// 	c.mux.RLock()
+// 	c.psmux.RLock()
 // 	_, ok := c.topicHandlerMap[topic]
-// 	c.mux.RUnlock()
+// 	c.psmux.RUnlock()
 
 // 	return !ok
 // }
 
 func (c *Client) initTopics() {
-	c.mux.RLock()
+	c.psmux.RLock()
 	for name := range c.topicHandlerMap {
 		topicName := name
 		go util.Safe(func() {
@@ -161,7 +161,7 @@ func (c *Client) initTopics() {
 			}
 		})
 	}
-	c.mux.RUnlock()
+	c.psmux.RUnlock()
 }
 
 func (c *Client) onPublish(ctx *arpc.Context) {
@@ -170,22 +170,22 @@ func (c *Client) onPublish(ctx *arpc.Context) {
 	topic := &Topic{}
 	msg := ctx.Message
 	if msg.IsError() {
-		log.Warn("%v [Publish IN] failed [%v], to\t%v", c.Handler.LogTag(), msg.Error(), ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Publish IN] failed [%v], to\t%v", c.Handler.LogTag(), msg.Error(), ctx.Client.Conn.RemoteAddr())
 		return
 	}
 	err := topic.fromBytes(ctx.Body())
 	if err != nil {
-		log.Warn("%v [Publish IN] failed [%v], to\t%v", c.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
+		log.Error("%v [Publish IN] failed [%v], to\t%v", c.Handler.LogTag(), err, ctx.Client.Conn.RemoteAddr())
 		return
 	}
 
 	if c.onPublishHandler == nil {
-		c.mux.RLock()
+		c.psmux.RLock()
 		if h, ok := c.topicHandlerMap[topic.Name]; ok {
 			h(topic)
-			c.mux.RUnlock()
+			c.psmux.RUnlock()
 		} else {
-			c.mux.RUnlock()
+			c.psmux.RUnlock()
 		}
 	} else {
 		c.onPublishHandler(topic)

@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"io"
 	"net"
 	"testing"
 )
@@ -46,7 +47,7 @@ func Test_handler_OnDisconnected(t *testing.T) {
 }
 
 func Test_handler_HandleOverstock(t *testing.T) {
-	DefaultHandler.HandleOverstock(func(c *Client, m Message) {})
+	DefaultHandler.HandleOverstock(func(c *Client, m *Message) {})
 }
 
 func Test_handler_OnOverstock(t *testing.T) {
@@ -54,7 +55,7 @@ func Test_handler_OnOverstock(t *testing.T) {
 }
 
 func Test_handler_HandleSessionMiss(t *testing.T) {
-	DefaultHandler.HandleSessionMiss(func(c *Client, m Message) {})
+	DefaultHandler.HandleSessionMiss(func(c *Client, m *Message) {})
 }
 
 func Test_handler_OnSessionMiss(t *testing.T) {
@@ -107,8 +108,8 @@ func Test_handler_SetReaderWrapper(t *testing.T) {
 }
 
 func Test_handler_RecvBufferSize(t *testing.T) {
-	if got := DefaultHandler.RecvBufferSize(); got != 4096 {
-		t.Errorf("handler.RecvBufferSize() = %v, want %v", got, 4096)
+	if got := DefaultHandler.RecvBufferSize(); got != 8192 {
+		t.Errorf("handler.RecvBufferSize() = %v, want %v", got, 8192)
 	}
 }
 
@@ -145,6 +146,29 @@ func TestNewHandler(t *testing.T) {
 }
 
 func TestSetHandler(t *testing.T) {
+	d := DefaultHandler
 	h := NewHandler()
 	SetHandler(h)
+	SetLogTag("nothing")
+	HandleConnected(func(*Client) {})
+	HandleConnected(nil)
+	HandleDisconnected(func(*Client) {})
+	HandleDisconnected(nil)
+	HandleOverstock(func(c *Client, m *Message) {})
+	HandleMessageDropped(func(c *Client, m *Message) {})
+	HandleSessionMiss(func(c *Client, m *Message) {})
+	BeforeRecv(func(net.Conn) error { return nil })
+	BeforeSend(func(net.Conn) error { return nil })
+	SetBatchRecv(true)
+	SetBatchSend(true)
+	SetAsyncResponse(true)
+	SetReaderWrapper(func(c net.Conn) io.Reader { return c })
+	SetRecvBufferSize(4096)
+	SetSendQueueSize(4096)
+	Use(func(*Context) {})
+	UseCoder(nil)
+	Handle("nothing", func(*Context) {}, true)
+	HandleNotFound(func(*Context) {})
+	SetBufferFactory(func(int) []byte { return nil })
+	SetHandler(d)
 }

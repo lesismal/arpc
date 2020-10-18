@@ -46,20 +46,25 @@ type Handler interface {
 	// OnDisconnected would be called when Client disconnected
 	OnDisconnected(c *Client)
 
-	// HandleOverstock registers callback on Client chSend overstockll
-	HandleOverstock(onOverstock func(c *Client, m Message))
+	// HandleOverstock registers callback on Client chSend overstock
+	HandleOverstock(onOverstock func(c *Client, m *Message))
 	// OnOverstock would be called when Client chSend is full
-	OnOverstock(c *Client, m Message)
+	OnOverstock(c *Client, m *Message)
+
+	// HandleMessageDropped registers callback on message dropped
+	HandleMessageDropped(onOverstock func(c *Client, m *Message))
+	// OnOverstock would be called when message is dropped
+	OnMessageDropped(c *Client, m *Message)
 
 	// HandleSessionMiss registers callback on async message seq not found
-	HandleSessionMiss(onSessionMiss func(c *Client, m Message))
+	HandleSessionMiss(onSessionMiss func(c *Client, m *Message))
 	// OnSessionMiss would be called when Client async message seq not found
-	OnSessionMiss(c *Client, m Message)
+	OnSessionMiss(c *Client, m *Message)
 
 	// BeforeRecv registers callback before Recv
-	BeforeRecv(bh func(net.Conn) error)
+	BeforeRecv(h func(net.Conn) error)
 	// BeforeSend registers callback before Send
-	BeforeSend(bh func(net.Conn) error)
+	BeforeSend(h func(net.Conn) error)
 
 	// BatchRecv flag
 	BatchRecv() bool
@@ -70,15 +75,20 @@ type Handler interface {
 	// SetBatchSend flag
 	SetBatchSend(batch bool)
 
+	// AsyncResponse flag
+	AsyncResponse() bool
+	// SetAsyncResponse flag
+	SetAsyncResponse(async bool)
+
 	// WrapReader wraps net.Conn to Read data with io.Reader, buffer e.g.
 	WrapReader(conn net.Conn) io.Reader
 	// SetReaderWrapper sets reader wrapper
 	SetReaderWrapper(wrapper func(conn net.Conn) io.Reader)
 
 	// Recv reads and returns a message from a client
-	Recv(c *Client) (Message, error)
+	Recv(c *Client) (*Message, error)
 	// Send writes a message to a connection
-	Send(c net.Conn, m Message) (int, error)
+	Send(c net.Conn, buf []byte) (int, error)
 	// SendN writes batch messages to a connection
 	SendN(conn net.Conn, buffers net.Buffers) (int, error)
 
@@ -92,11 +102,14 @@ type Handler interface {
 	// SetSendQueueSize sets Client.chSend capacity
 	SetSendQueueSize(size int)
 
-	// Handle sets middleware
+	// Use sets middleware
 	Use(h HandlerFunc)
 
 	// UseCoder sets middleware for message encoding/decoding
 	UseCoder(coder MessageCoder)
+
+	// Coders returns encoding/decoding middlewares
+	Coders() []MessageCoder
 
 	// Handle registers method handler
 	Handle(m string, h HandlerFunc, args ...interface{})
@@ -105,7 +118,7 @@ type Handler interface {
 	HandleNotFound(h HandlerFunc)
 
 	// OnMessage dispatches messages
-	OnMessage(c *Client, m Message)
+	OnMessage(c *Client, m *Message)
 
 	// GetBuffer factory
 	GetBuffer(size int) []byte
@@ -118,13 +131,15 @@ type handler struct {
 	logtag         string
 	batchRecv      bool
 	batchSend      bool
+	asyncResponse  bool
 	recvBufferSize int
 	sendQueueSize  int
 
-	onConnected    func(*Client)
-	onDisConnected func(*Client)
-	onOverstock    func(c *Client, m Message)
-	onSessionMiss  func(c *Client, m Message)
+	onConnected      func(*Client)
+	onDisConnected   func(*Client)
+	onOverstock      func(c *Client, m *Message)
+	onMessageDropped func(c *Client, m *Message)
+	onSessionMiss    func(c *Client, m *Message)
 
 	beforeRecv    func(net.Conn) error
 	beforeSend    func(net.Conn) error
@@ -168,7 +183,16 @@ func (h *handler) SetLogTag(tag string) {
 }
 
 func (h *handler) HandleConnected(onConnected func(*Client)) {
-	h.onConnected = onConnected
+	if onConnected == nil {
+		return
+	}
+	pre := h.onConnected
+	h.onConnected = func(c *Client) {
+		if pre != nil {
+			pre(c)
+		}
+		onConnected(c)
+	}
 }
 
 func (h *handler) OnConnected(c *Client) {
@@ -178,7 +202,16 @@ func (h *handler) OnConnected(c *Client) {
 }
 
 func (h *handler) HandleDisconnected(onDisConnected func(*Client)) {
-	h.onDisConnected = onDisConnected
+	if onDisConnected == nil {
+		return
+	}
+	pre := h.onDisConnected
+	h.onDisConnected = func(c *Client) {
+		if pre != nil {
+			pre(c)
+		}
+		onDisConnected(c)
+	}
 }
 
 func (h *handler) OnDisconnected(c *Client) {
@@ -187,32 +220,42 @@ func (h *handler) OnDisconnected(c *Client) {
 	}
 }
 
-func (h *handler) HandleOverstock(onOverstock func(c *Client, m Message)) {
+func (h *handler) HandleOverstock(onOverstock func(c *Client, m *Message)) {
 	h.onOverstock = onOverstock
 }
 
-func (h *handler) OnOverstock(c *Client, m Message) {
+func (h *handler) OnOverstock(c *Client, m *Message) {
 	if h.onOverstock != nil {
 		h.onOverstock(c, m)
 	}
 }
 
-func (h *handler) HandleSessionMiss(onSessionMiss func(c *Client, m Message)) {
+func (h *handler) HandleMessageDropped(onMessageDropped func(c *Client, m *Message)) {
+	h.onMessageDropped = onMessageDropped
+}
+
+func (h *handler) OnMessageDropped(c *Client, m *Message) {
+	if h.onMessageDropped != nil {
+		h.onMessageDropped(c, m)
+	}
+}
+
+func (h *handler) HandleSessionMiss(onSessionMiss func(c *Client, m *Message)) {
 	h.onSessionMiss = onSessionMiss
 }
 
-func (h *handler) OnSessionMiss(c *Client, m Message) {
+func (h *handler) OnSessionMiss(c *Client, m *Message) {
 	if h.onSessionMiss != nil {
 		h.onSessionMiss(c, m)
 	}
 }
 
-func (h *handler) BeforeRecv(bh func(net.Conn) error) {
-	h.beforeRecv = bh
+func (h *handler) BeforeRecv(hb func(net.Conn) error) {
+	h.beforeRecv = hb
 }
 
-func (h *handler) BeforeSend(bh func(net.Conn) error) {
-	h.beforeSend = bh
+func (h *handler) BeforeSend(hs func(net.Conn) error) {
+	h.beforeSend = hs
 }
 
 func (h *handler) BatchRecv() bool {
@@ -229,6 +272,14 @@ func (h *handler) BatchSend() bool {
 
 func (h *handler) SetBatchSend(batch bool) {
 	h.batchSend = batch
+}
+
+func (h *handler) AsyncResponse() bool {
+	return h.asyncResponse
+}
+
+func (h *handler) SetAsyncResponse(async bool) {
+	h.asyncResponse = async
 }
 
 func (h *handler) WrapReader(conn net.Conn) io.Reader {
@@ -259,6 +310,9 @@ func (h *handler) SetSendQueueSize(size int) {
 }
 
 func (h *handler) Use(cb HandlerFunc) {
+	if cb == nil {
+		return
+	}
 	cbWithNext := func(ctx *Context) {
 		cb(ctx)
 		ctx.Next()
@@ -276,7 +330,13 @@ func (h *handler) Use(cb HandlerFunc) {
 }
 
 func (h *handler) UseCoder(coder MessageCoder) {
-	h.msgCoders = append(h.msgCoders, coder)
+	if coder != nil {
+		h.msgCoders = append(h.msgCoders, coder)
+	}
+}
+
+func (h *handler) Coders() []MessageCoder {
+	return h.msgCoders
 }
 
 func (h *handler) Handle(method string, cb HandlerFunc, args ...interface{}) {
@@ -315,7 +375,7 @@ func (h *handler) handle(method string, cb HandlerFunc, args ...interface{}) {
 		panic(fmt.Errorf("handler exist for method %v ", method))
 	}
 
-	async := false
+	async := h.AsyncResponse()
 	if len(args) > 0 {
 		if bv, ok := args[0].(bool); ok {
 			async = bv
@@ -333,10 +393,10 @@ func (h *handler) handle(method string, cb HandlerFunc, args ...interface{}) {
 	h.routes[method] = rh
 }
 
-func (h *handler) Recv(c *Client) (Message, error) {
+func (h *handler) Recv(c *Client) (*Message, error) {
 	var (
 		err     error
-		message Message
+		message *Message
 	)
 
 	if h.beforeRecv != nil {
@@ -351,29 +411,25 @@ func (h *handler) Recv(c *Client) (Message, error) {
 	}
 
 	message, err = c.Head.message(h)
-	if err == nil && len(message) > HeadLen {
-		_, err = io.ReadFull(c.Reader, message[HeaderIndexBodyLenEnd:])
+	if err != nil {
+		return nil, err
 	}
 
-	for i := len(h.msgCoders) - 1; i >= 0; i-- {
-		message = h.msgCoders[i].Decode(message)
+	if message.Len() > HeadLen {
+		_, err = io.ReadFull(c.Reader, message.Buffer[HeaderIndexBodyLenEnd:])
 	}
 
 	return message, err
 }
 
-func (h *handler) Send(conn net.Conn, m Message) (int, error) {
+func (h *handler) Send(conn net.Conn, buffer []byte) (int, error) {
 	if h.beforeSend != nil {
 		if err := h.beforeSend(conn); err != nil {
 			return -1, err
 		}
 	}
 
-	for i := 0; i < len(h.msgCoders); i++ {
-		m = h.msgCoders[i].Encode(m)
-	}
-
-	return conn.Write(m)
+	return conn.Write(buffer)
 }
 
 func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
@@ -382,24 +438,28 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 			return -1, err
 		}
 	}
-	for i := 0; i < len(buffers); i++ {
-		for j := 0; j < len(h.msgCoders); j++ {
-			buffers[i] = h.msgCoders[j].Encode(buffers[i])
-		}
-	}
+
 	n64, err := buffers.WriteTo(conn)
 	return int(n64), err
 }
 
-func (h *handler) OnMessage(c *Client, msg Message) {
+func (h *handler) OnMessage(c *Client, msg *Message) {
+	defer util.Recover()
+
+	for i := len(h.msgCoders) - 1; i >= 0; i-- {
+		msg = h.msgCoders[i].Decode(c, msg)
+	}
+
 	ml := msg.MethodLen()
-	if ml <= 0 || ml > MaxMethodLen || ml > (len(msg)-HeadLen) {
-		log.Warn("%v OnMessage: invalid request method length %v, dropped", h.LogTag())
+	if ml <= 0 || ml > MaxMethodLen || ml > (msg.Len()-HeadLen) {
+		log.Warn("%v OnMessage: invalid request method length %v, dropped", h.LogTag(), ml)
 		return
 	}
-	switch msg.Cmd() {
+
+	cmd := msg.Cmd()
+	switch cmd {
 	case CmdRequest, CmdNotify:
-		method := util.BytesToStr(msg[HeadLen : HeadLen+ml])
+		method := msg.method()
 		if rh, ok := h.routes[method]; ok {
 			ctx := newContext(c, msg, rh.Handlers)
 			if !rh.Async {
@@ -408,12 +468,14 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 				go ctx.Next()
 			}
 		} else {
-			if rh, ok = h.routes[""]; ok {
-				ctx := newContext(c, msg, rh.Handlers)
-				ctx.Next()
-			} else {
-				ctx := newContext(c, msg, nil)
-				ctx.Error(ErrMethodNotFound)
+			if cmd == CmdRequest {
+				if rh, ok = h.routes[""]; ok {
+					ctx := newContext(c, msg, rh.Handlers)
+					ctx.Next()
+				} else {
+					ctx := newContext(c, msg, rh.Handlers)
+					ctx.Error(ErrMethodNotFound)
+				}
 			}
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
@@ -431,7 +493,8 @@ func (h *handler) OnMessage(c *Client, msg Message) {
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
 			if ok {
-				handler(newContext(c, msg, nil))
+				ctx := newContext(c, msg, nil)
+				handler(ctx)
 			} else {
 				h.OnSessionMiss(c, msg)
 				log.Warn("%v OnMessage: async handler not exist or expired", h.LogTag())
@@ -461,8 +524,9 @@ func NewHandler() Handler {
 		logtag:         "[ARPC CLI]",
 		batchRecv:      true,
 		batchSend:      true,
-		recvBufferSize: 4096,
-		sendQueueSize:  1024,
+		asyncResponse:  true,
+		recvBufferSize: 8192,
+		sendQueueSize:  4096,
 	}
 	h.wrapReader = func(conn net.Conn) io.Reader {
 		return bufio.NewReaderSize(conn, h.recvBufferSize)
@@ -473,4 +537,124 @@ func NewHandler() Handler {
 // SetHandler sets default handler
 func SetHandler(h Handler) {
 	DefaultHandler = h
+}
+
+// SetLogTag value for DefaultHandler
+func SetLogTag(tag string) {
+	DefaultHandler.SetLogTag(tag)
+}
+
+// HandleConnected registers callback on connected for DefaultHandler
+func HandleConnected(onConnected func(*Client)) {
+	DefaultHandler.HandleConnected(onConnected)
+}
+
+// HandleDisconnected registers callback on disconnected for DefaultHandler
+func HandleDisconnected(onDisConnected func(*Client)) {
+	DefaultHandler.HandleDisconnected(onDisConnected)
+}
+
+// HandleOverstock registers callback on Client chSend overstock for DefaultHandler
+func HandleOverstock(onOverstock func(c *Client, m *Message)) {
+	DefaultHandler.HandleOverstock(onOverstock)
+}
+
+// HandleMessageDropped registers callback on message dropped for DefaultHandler
+func HandleMessageDropped(onOverstock func(c *Client, m *Message)) {
+	DefaultHandler.HandleMessageDropped(onOverstock)
+}
+
+// HandleSessionMiss registers callback on async message seq not found for DefaultHandler
+func HandleSessionMiss(onSessionMiss func(c *Client, m *Message)) {
+	DefaultHandler.HandleSessionMiss(onSessionMiss)
+}
+
+// BeforeRecv registers callback before Recv for DefaultHandler
+func BeforeRecv(h func(net.Conn) error) {
+	DefaultHandler.BeforeRecv(h)
+}
+
+// BeforeSend registers callback before Send for DefaultHandler
+func BeforeSend(h func(net.Conn) error) {
+	DefaultHandler.BeforeSend(h)
+}
+
+// BatchRecv flag
+func BatchRecv() bool {
+	return DefaultHandler.BatchRecv()
+}
+
+// SetBatchRecv flag for DefaultHandler
+func SetBatchRecv(batch bool) {
+	DefaultHandler.SetBatchRecv(batch)
+}
+
+// BatchSend flag
+func BatchSend() bool {
+	return DefaultHandler.BatchSend()
+}
+
+// SetBatchSend flag for DefaultHandler
+func SetBatchSend(batch bool) {
+	DefaultHandler.SetBatchSend(batch)
+}
+
+// AsyncResponse flag
+func AsyncResponse() bool {
+	return DefaultHandler.AsyncResponse()
+}
+
+// SetAsyncResponse flag for DefaultHandler
+func SetAsyncResponse(async bool) {
+	DefaultHandler.SetAsyncResponse(async)
+}
+
+// SetReaderWrapper sets reader wrapper for DefaultHandler
+func SetReaderWrapper(wrapper func(conn net.Conn) io.Reader) {
+	DefaultHandler.SetReaderWrapper(wrapper)
+}
+
+// RecvBufferSize returns Client.Reader size
+func RecvBufferSize() int {
+	return DefaultHandler.RecvBufferSize()
+}
+
+// SetRecvBufferSize sets Client.Reader size for DefaultHandler
+func SetRecvBufferSize(size int) {
+	DefaultHandler.SetRecvBufferSize(size)
+}
+
+// SendQueueSize returns Client.chSend capacity
+func SendQueueSize() int {
+	return DefaultHandler.SendQueueSize()
+}
+
+// SetSendQueueSize sets Client.chSend capacity for DefaultHandler
+func SetSendQueueSize(size int) {
+	DefaultHandler.SetSendQueueSize(size)
+}
+
+// Use sets middleware for DefaultHandler
+func Use(h HandlerFunc) {
+	DefaultHandler.Use(h)
+}
+
+// UseCoder sets middleware for message encoding/decoding for DefaultHandler
+func UseCoder(coder MessageCoder) {
+	DefaultHandler.UseCoder(coder)
+}
+
+// Handle registers method handler for DefaultHandler
+func Handle(m string, h HandlerFunc, args ...interface{}) {
+	DefaultHandler.Handle(m, h, args...)
+}
+
+// HandleNotFound registers "" method handler for DefaultHandler
+func HandleNotFound(h HandlerFunc) {
+	DefaultHandler.HandleNotFound(h)
+}
+
+// SetBufferFactory registers buffer factory handler for DefaultHandler
+func SetBufferFactory(f func(int) []byte) {
+	DefaultHandler.SetBufferFactory(f)
 }

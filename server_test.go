@@ -6,42 +6,14 @@ package arpc
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"testing"
 	"time"
 )
 
-func TestServer_Service(t *testing.T) {
-	addr := ":15678"
-
-	s := NewServer()
-	go s.Run(addr)
-
-	time.Sleep(time.Second)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	err := s.Shutdown(ctx)
-	if err != nil {
-		t.Fatalf("Shutdown failed: %v", err)
-	}
-
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatalf("Listen failed: %v", err)
-	}
-	s = NewServer()
-	go s.Serve(ln)
-	time.Sleep(time.Second)
-
-	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	err = s.Shutdown(ctx)
-	if err != nil {
-		t.Fatalf("Shutdown failed: %v", err)
-	}
-}
+var testServerAddr = "localhost:12000"
 
 func TestServer_addLoad(t *testing.T) {
 	var (
@@ -87,50 +59,66 @@ func TestServer_subLoad(t *testing.T) {
 	}
 }
 
+func TestServer_NewMessage(t *testing.T) {
+	s := &Server{}
+	for cmd := byte(1); cmd <= 3; cmd++ {
+		method := fmt.Sprintf("method_%v", cmd)
+		message := fmt.Sprintf("message_%v", cmd)
+		msg := s.NewMessage(cmd, method, message)
+		if msg == nil {
+			t.Fatalf("Server.NewMessage() = nil")
+		}
+		if msg.Cmd() != cmd {
+			t.Fatalf("Server.NewMessage() error, cmd is: %v, want: %v", msg.Cmd(), cmd)
+		}
+		if msg.Method() != method {
+			t.Fatalf("Server.NewMessage() error, cmd is: %v, want: %v", msg.Method(), method)
+		}
+		if msg.Method() != method {
+			t.Fatalf("Server.NewMessage() error, cmd is: %v, want: %v", string(msg.Data()), message)
+		}
+	}
+}
+
 func TestServer_Serve(t *testing.T) {
-	ln, err := net.Listen("tcp", ":8888")
+	ln, err := net.Listen("tcp", testServerAddr)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
 	svr := NewServer()
-	tm := time.AfterFunc(time.Second, func() {
-		t.Errorf("listener.Close timeout")
-	})
-	time.AfterFunc(time.Second/5, func() {
-		ln.Close()
-	})
 	svr.MaxLoad = 3
-	go func() {
-		for i := 0; i < 5; i++ {
-			net.Dial("tcp", "localhost:8888")
+	go svr.Serve(ln)
+	time.Sleep(time.Second / 100)
+	for i := 0; i < 3; i++ {
+		if _, err := net.Dial("tcp", testServerAddr); err != nil {
+			log.Fatalf("failed to Dial: %v", err)
 		}
-	}()
-	svr.Serve(ln)
-	tm.Stop()
+	}
+	for i := 0; i < 3; i++ {
+		if conn, err := net.Dial("tcp", testServerAddr); err != nil {
+			log.Fatalf("failed to Dial: %v", err)
+		} else {
+			conn.SetReadDeadline(time.Now().Add(time.Second / 10))
+			if _, err = conn.Read([]byte{1}); err == nil {
+				log.Fatalf("conn.Read success, should be closed by server(limited by MaxLoad)")
+			}
+		}
+	}
+	svr.Stop()
 }
 
 func TestServer_Run(t *testing.T) {
 	svr := NewServer()
-	tm := time.AfterFunc(time.Second, func() {
-		t.Errorf("Server.Stop timeout")
-	})
-	time.AfterFunc(time.Second/10, func() {
-		svr.Stop()
-	})
-	go svr.Run(":8889")
-	svr.Run(":8889")
-	tm.Stop()
+	go svr.Run(testServerAddr)
+	go svr.Run(testServerAddr)
+	time.Sleep(time.Second / 100)
+	svr.Stop()
 }
 
 func TestServer_Shutdown(t *testing.T) {
 	svr := NewServer()
-	tm := time.AfterFunc(time.Second, func() {
-		t.Errorf("Server.Stop timeout")
-	})
-	time.AfterFunc(time.Second/10, func() {
-		svr.Shutdown(context.Background())
-	})
-	svr.Run(":8899")
-	tm.Stop()
+	go svr.Run(":8899")
+	time.Sleep(time.Second / 100)
+	svr.Shutdown(context.Background())
 }

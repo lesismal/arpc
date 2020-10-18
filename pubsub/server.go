@@ -27,7 +27,7 @@ type Server struct {
 
 	Password string
 
-	mux sync.RWMutex
+	psmux sync.RWMutex
 
 	topics map[string]*TopicAgent
 
@@ -213,24 +213,24 @@ func (s *Server) onPublishToOne(ctx *arpc.Context) {
 }
 
 func (s *Server) getTopic(topic string) (*TopicAgent, bool) {
-	s.mux.RLock()
+	s.psmux.RLock()
 	tp, ok := s.topics[topic]
-	s.mux.RUnlock()
+	s.psmux.RUnlock()
 	return tp, ok
 }
 
 func (s *Server) getOrMakeTopic(topic string) *TopicAgent {
-	s.mux.RLock()
+	s.psmux.RLock()
 	tp, ok := s.topics[topic]
-	s.mux.RUnlock()
+	s.psmux.RUnlock()
 	if !ok {
-		s.mux.Lock()
+		s.psmux.Lock()
 		tp, ok = s.topics[topic]
 		if !ok {
 			tp = newTopicAgent(topic)
 			s.topics[topic] = tp
 		}
-		s.mux.Unlock()
+		s.psmux.Unlock()
 	}
 	return tp
 }

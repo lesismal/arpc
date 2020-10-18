@@ -12,125 +12,192 @@ import (
 )
 
 func TestHeader_BodyLen(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if msg.BodyLen() != 10 {
-		t.Errorf("Header.BodyLen() = %v, want %v", msg.BodyLen(), 10)
+		t.Fatalf("Header.BodyLen() = %v, want %v", msg.BodyLen(), 10)
 	}
 }
 
 func TestHeader_message(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if msg.BodyLen() != 10 {
-		t.Errorf("Header.BodyLen() = %v, want %v", msg.BodyLen(), 10)
+		t.Fatalf("Header.BodyLen() = %v, want %v", msg.BodyLen(), 10)
 	}
-	head := Header(msg[:HeadLen])
+	head := Header(msg.Buffer[:HeadLen])
 	msg2, err := head.message(DefaultHandler)
 	if err != nil {
-		t.Errorf("Header.message() error = %v", err)
+		t.Fatalf("Header.message() error = %v", err)
 	}
-	if len(msg) != len(msg2) {
-		t.Errorf("len(Header.message()) = %v, want %v", len(msg2), len(msg))
+	if len(msg.Buffer) != len(msg2.Buffer) {
+		t.Fatalf("len(Header.message()) = %v, want %v", len(msg2.Buffer), len(msg.Buffer))
 	}
 
 	head[0], head[1], head[2], head[3] = 0xFF, 0xFF, 0xFF, 0xFF
 	_, err = head.message(DefaultHandler)
 	if err == nil {
-		t.Errorf("Header.message() error = nil")
+		t.Fatalf("Header.message() error = nil")
 	}
 }
 
 func TestMessage_Cmd(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.Cmd(); got != CmdRequest {
-		t.Errorf("Message.Cmd() = %v, want %v", got, CmdRequest)
+		t.Fatalf("Message.Cmd() = %v, want %v", got, CmdRequest)
 	}
 
-	msg = newMessage(CmdResponse, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg = newMessage(CmdResponse, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.Cmd(); got != CmdResponse {
-		t.Errorf("Message.Cmd() = %v, want %v", got, CmdResponse)
+		t.Fatalf("Message.Cmd() = %v, want %v", got, CmdResponse)
 	}
 
-	msg = newMessage(CmdNotify, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg = newMessage(CmdNotify, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.Cmd(); got != CmdNotify {
-		t.Errorf("Message.Cmd() = %v, want %v", got, CmdNotify)
+		t.Fatalf("Message.Cmd() = %v, want %v", got, CmdNotify)
 	}
 }
 
 func TestMessage_Async(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.IsAsync(); got != false {
-		t.Errorf("Message.Async() = %v, want %v", got, 0)
+		t.Fatalf("Message.Async() = %v, want %v", got, 0)
 	}
 	msg.SetAsync(true)
 	if got := msg.IsAsync(); got != true {
-		t.Errorf("Message.Async() = %v, want %v", got, 1)
+		t.Fatalf("Message.Async() = %v, want %v", got, 1)
 	}
 }
 
 func TestMessage_IsAsync(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.IsAsync(); got != false {
-		t.Errorf("Message.IsAsync() = %v, want %v", got, false)
+		t.Fatalf("Message.IsAsync() = %v, want %v", got, false)
 	}
 	msg.SetAsync(true)
 	if got := msg.IsAsync(); got != true {
-		t.Errorf("Message.IsAsync() = %v, want %v", got, true)
+		t.Fatalf("Message.IsAsync() = %v, want %v", got, true)
 	}
 }
 
 func TestMessage_IsError(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.IsError(); got != false {
-		t.Errorf("Message.IsError() = %v, want %v", got, false)
+		t.Fatalf("Message.IsError() = %v, want %v", got, false)
 	}
 	msg.SetError(true)
 	if got := msg.IsError(); got != true {
-		t.Errorf("Message.IsError() = %v, want %v", got, true)
+		t.Fatalf("Message.IsError() = %v, want %v", got, true)
 	}
 }
 
 func TestMessage_Error(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.Error(); got != nil {
-		t.Errorf("Message.Error() = %v, want %v", got, nil)
+		t.Fatalf("Message.Error() = %v, want %v", got, nil)
+	}
+}
+
+func TestMessage_SetFlagBit(t *testing.T) {
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
+	for i := 0; i <= 9; i++ {
+		if err := msg.SetFlagBit(i, true); err != nil {
+			t.Fatalf("Message.SetFlagBit() error: %v, want nil", err)
+		}
+	}
+	for i := 10; i < 16; i++ {
+		if err := msg.SetFlagBit(i, true); err == nil {
+			t.Fatalf("Message.SetFlagBit() failed, return nil error, want %v", ErrInvalidFlagBitIndex)
+		}
+	}
+}
+
+func TestMessage_IsFlagBitSet(t *testing.T) {
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
+	for i := 0; i <= 9; i++ {
+		if err := msg.SetFlagBit(i, true); err != nil {
+			t.Fatalf("Message.SetFlagBit() error: %v, want nil", err)
+		}
+		if !msg.IsFlagBitSet(i) {
+			t.Fatalf("Message.GetFlagBit() returns false, want true")
+		}
+
+		if err := msg.SetFlagBit(i, false); err != nil {
+			t.Fatalf("Message.SetFlagBit() error: %v, want nil", err)
+		}
+		if msg.IsFlagBitSet(i) {
+			t.Fatalf("Message.GetFlagBit() returns true, want false")
+		}
+	}
+	for i := 10; i < 16; i++ {
+		if err := msg.SetFlagBit(i, true); err == nil {
+			t.Fatalf("Message.SetFlagBit() returns nil error, want %v", ErrInvalidFlagBitIndex)
+		}
+		if msg.IsFlagBitSet(i) {
+			t.Fatalf("Message.GetFlagBit() returns true, want false")
+		}
+
+		if err := msg.SetFlagBit(i, false); err == nil {
+			t.Fatalf("Message.SetFlagBit() returns nil error, want %v", ErrInvalidFlagBitIndex)
+		}
+		if msg.IsFlagBitSet(i) {
+			t.Fatalf("Message.GetFlagBit() returns true, want false")
+		}
 	}
 }
 
 func TestMessage_MethodLen(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.MethodLen(); got != 5 {
-		t.Errorf("Message.MethodLen() = %v, want %v", got, 5)
+		t.Fatalf("Message.MethodLen() = %v, want %v", got, 5)
 	}
 }
 
 func TestMessage_Method(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.Method(); got != "hello" {
-		t.Errorf("Message.Method() = %v, want %v", got, "hello")
+		t.Fatalf("Message.Method() = %v, want %v", got, "hello")
 	}
 }
 
 func TestMessage_BodyLen(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.BodyLen(); got != 10 {
-		t.Errorf("Message.BodyLen() = %v, want %v", got, 10)
+		t.Fatalf("Message.BodyLen() = %v, want %v", got, 10)
 	}
 	msg.SetBodyLen(100)
 	if got := msg.BodyLen(); got != 100 {
-		t.Errorf("Message.BodyLen() = %v, want %v", got, 100)
+		t.Fatalf("Message.BodyLen() = %v, want %v", got, 100)
 	}
 }
 
 func TestMessage_Seq(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.Seq(); got != 0 {
-		t.Errorf("Message.Seq() = %v, want %v", got, 0)
+		t.Fatalf("Message.Seq() = %v, want %v", got, 0)
 	}
 }
 
 func TestMessage_Data(t *testing.T) {
-	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec)
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	if got := msg.Data(); !reflect.DeepEqual(got, []byte("hello")) {
-		t.Errorf("Message.Data() = %v, want %v", got, []byte("hello"))
+		t.Fatalf("Message.Data() = %v, want %v", got, []byte("hello"))
+	}
+}
+
+func TestMessage_Get(t *testing.T) {
+	msg := &Message{}
+	if v, ok := msg.Get("key"); ok {
+		t.Fatalf("Message.Get() error, returns %v, want nil", v)
+	}
+}
+
+func TestMessage_Set(t *testing.T) {
+	msg := &Message{}
+	msg.Set("key", nil)
+	if v, ok := msg.Get("key"); ok {
+		t.Fatalf("Message.Get() error, returns %v, want nil", v)
+	}
+	msg.Set("key", "value")
+	if v, ok := msg.Get("key"); !ok || v != "value" {
+		t.Fatalf("Message.Get() error, returns '%v', want 'value'", v)
 	}
 }

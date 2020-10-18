@@ -15,13 +15,14 @@ import (
 )
 
 const (
-	// MAX_TOPIC_NAME_LEN .
-	MAX_TOPIC_NAME_LEN = 1024
+	// MaxTopicNameLen .
+	MaxTopicNameLen = 1024
 )
 
 // TopicHandler .
 type TopicHandler func(tp *Topic)
 
+// Topic .
 type Topic struct {
 	Name      string
 	Data      []byte
@@ -47,7 +48,7 @@ func (tp *Topic) fromBytes(data []byte) error {
 		return ErrInvalidTopicBytes
 	}
 	nameLen := int(binary.LittleEndian.Uint16(data[len(data)-10:]))
-	if nameLen == 0 || nameLen > MAX_TOPIC_NAME_LEN {
+	if nameLen == 0 || nameLen > MaxTopicNameLen {
 		return ErrInvalidTopicNameLength
 	}
 	tp.Timestamp = int64(binary.LittleEndian.Uint64(data[len(data)-8:]))
@@ -61,7 +62,7 @@ func newTopic(topicName string, data []byte) (*Topic, error) {
 	if topicName == "" {
 		return nil, ErrInvalidTopicEmpty
 	}
-	if len(topicName) > MAX_TOPIC_NAME_LEN {
+	if len(topicName) > MaxTopicNameLen {
 		return nil, ErrInvalidTopicNameLength
 	}
 	return &Topic{Name: topicName, Data: data, Timestamp: time.Now().UnixNano()}, nil

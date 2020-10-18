@@ -292,14 +292,14 @@ handler = server.Handler
 // client
 handler = client.Handler
 
+asyncResponse := true // default is true, or set false
 handler.Handle("/echo", func(ctx *arpc.Context) {
 	req := ...
 	err := ctx.Bind(req)
 	if err == nil {
-		// async response
-		go ctx.Write(data)
+		ctx.Write(data)
 	}
-})
+}, asyncResponse)
 ```
 
 

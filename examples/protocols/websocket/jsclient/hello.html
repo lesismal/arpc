@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+    <p>Test Arpc Client</p>
+    <p id="notify"></p>
+    <p id="response"></p>
+
+    <script src="./websocket.js" type="text/javascript"></script>
+    <script type="text/javascript">
+        var client = new ArpcClient("ws://localhost:8888/ws");
+        client.onOpen = function () {
+            console.log("ArpcClient onOpen")
+        }
+        client.onClose = function () {
+            console.log("ArpcClient onClose")
+        }
+        client.Handle("/server/notify", function (ctx) {
+            console.log("[/server/notify]:", ctx.data)
+            document.getElementById("notify").innerHTML = ctx.data;
+        });
+        var count = 0;
+        var timeout = 1000;
+        setInterval(function () {
+            count++;
+            // promise
+            client.Call("/call/echo", `call ${count}`, timeout).then(function (reply) {
+                console.log("[/call/echo]:", reply.data, reply.err);
+                document.getElementById("response").innerHTML = `[/call/echo] reply: '${reply.data}', error: '${reply.err}'`;
+            });
+            // callback
+            // client.Call("/call/echo", `call ${count}`, timeout, function (reply) {
+            //     console.log("[/call/echo]:", reply.data, reply.err);
+            //     document.getElementById("response").innerHTML = `[/call/echo] reply: '${reply.data}', error: '${reply.err}'`;
+            // });
+            client.Notify("/notify", `notify ${count}`);
+        }, 1000);
+    </script>
+</body>
+
+</html>

@@ -5,29 +5,56 @@
 package arpc
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/lesismal/arpc/codec"
 )
 
+func TestContext_Get(t *testing.T) {
+	ctx := &Context{}
+	if v, ok := ctx.Get("key"); ok {
+		t.Fatalf("Context.Get() error, returns %v, want nil", v)
+	}
+}
+
+func TestContext_Set(t *testing.T) {
+	key := "key"
+	value := "value"
+
+	ctx := &Context{}
+	ctx.Set(key, nil)
+	cv, ok := ctx.Get(key)
+	if ok {
+		t.Fatalf("Context.Get() failed: Get '%v', want nil", value)
+	}
+
+	ctx.Set(key, value)
+	cv, ok = ctx.Get(key)
+	if !ok {
+		t.Fatalf("Context.Get() failed: Get nil, want '%v'", value)
+	}
+	if cv != value {
+		t.Fatalf("Context.Get() failed: Get '%v', want '%v'", cv, value)
+	}
+}
+
 func TestContext_Body(t *testing.T) {
+	bodyValue := "body"
 	ctx := &Context{
 		Client:  &Client{Codec: codec.DefaultCodec},
-		Message: newMessage(CmdRequest, "method", "data", false, false, 0, DefaultHandler, codec.DefaultCodec),
+		Message: newMessage(CmdRequest, "method", bodyValue, false, false, 0, DefaultHandler, codec.DefaultCodec, nil),
 	}
-	if got := ctx.Body(); !reflect.DeepEqual(got, []byte("data")) {
-		t.Errorf("Context.Body() = %v, want %v", got, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+	if string(ctx.Body()) != bodyValue {
+		t.Fatalf("Context.Body() = %v, want %v", string(ctx.Body()), bodyValue)
 	}
 }
 
 func TestContext_Bind(t *testing.T) {
 	ctx := &Context{
 		Client:  &Client{Codec: codec.DefaultCodec},
-		Message: newMessage(CmdRequest, "method", "data", false, false, 0, DefaultHandler, codec.DefaultCodec),
+		Message: newMessage(CmdRequest, "method", "data", true, false, 0, DefaultHandler, codec.DefaultCodec, nil),
 	}
-	ctx.Message.SetError(true)
 	if err := ctx.Bind(nil); err == nil {
-		t.Errorf("Context.Bind() error = nil, want %v", err)
+		t.Fatalf("Context.Bind() error = nil, want %v", err)
 	}
 }

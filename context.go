@@ -5,20 +5,43 @@
 package arpc
 
 import (
-	"errors"
 	"time"
-
-	"github.com/lesismal/arpc/util"
+	// "github.com/lesismal/arpc/util"
 )
 
 // Context definition
 type Context struct {
 	Client  *Client
-	Message Message
+	Message *Message
+	Values  map[string]interface{}
+
+	err      interface{}
+	response []interface{}
+	timeout  time.Duration
 
 	done     bool
 	index    int
 	handlers []HandlerFunc
+}
+
+// Get returns value for key
+func (ctx *Context) Get(key string) (interface{}, bool) {
+	if len(ctx.Values) == 0 {
+		return nil, false
+	}
+	value, ok := ctx.Values[key]
+	return value, ok
+}
+
+// Set sets key-value pair
+func (ctx *Context) Set(key string, value interface{}) {
+	if value == nil {
+		return
+	}
+	if ctx.Values == nil {
+		ctx.Values = map[string]interface{}{}
+	}
+	ctx.Values[key] = value
 }
 
 // Body returns body
@@ -39,8 +62,8 @@ func (ctx *Context) Bind(v interface{}) error {
 			*vt = data
 		case *string:
 			*vt = string(data)
-		case *error:
-			*vt = errors.New(util.BytesToStr(data))
+		// case *error:
+		// 	*vt = errors.New(util.BytesToStr(data))
 		default:
 			return ctx.Client.Codec.Unmarshal(data, v)
 		}
@@ -81,15 +104,18 @@ func (ctx *Context) Done() {
 }
 
 func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
+	cli := ctx.Client
+	req := ctx.Message
+	if req.Cmd() != CmdRequest {
+		return ErrContextResponseToNotify
+	}
 	if _, ok := v.(error); ok {
 		isError = true
 	}
-	cli := ctx.Client
-	req := ctx.Message
-	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec)
-	return ctx.Client.PushMsg(rsp, timeout)
+	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.Values)
+	return cli.PushMsg(rsp, ctx.timeout)
 }
 
-func newContext(c *Client, msg Message, handlers []HandlerFunc) *Context {
-	return &Context{Client: c, Message: msg, done: false, index: -1, handlers: handlers}
+func newContext(cli *Client, msg *Message, handlers []HandlerFunc) *Context {
+	return &Context{Client: cli, Message: msg, done: false, index: -1, handlers: handlers}
 }

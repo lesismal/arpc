@@ -8,6 +8,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/lesismal/arpc/codec"
 )
 
 func Test_StrToBytes(t *testing.T) {
@@ -23,31 +25,31 @@ func Test_BytesToStr(t *testing.T) {
 }
 
 func Test_ValueToBytes(t *testing.T) {
-	if got := ValueToBytes(Defaultcodec.Codec, nil); got != nil {
+	if got := ValueToBytes(codec.DefaultCodec, nil); got != nil {
 		t.Errorf("ValueToBytes() = %v, want %v", got, nil)
 	}
-	if got := ValueToBytes(Defaultcodec.Codec, "test"); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(codec.DefaultCodec, "test"); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
 	str := "test"
-	if got := ValueToBytes(Defaultcodec.Codec, &str); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(codec.DefaultCodec, &str); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
-	if got := ValueToBytes(Defaultcodec.Codec, []byte("test")); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(codec.DefaultCodec, []byte("test")); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
 	bts := []byte("test")
-	if got := ValueToBytes(Defaultcodec.Codec, &bts); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(codec.DefaultCodec, &bts); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
-	if got := ValueToBytes(Defaultcodec.Codec, errors.New("test")); !reflect.DeepEqual(got, []byte("test")) {
+	if got := ValueToBytes(codec.DefaultCodec, errors.New("test")); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
 	err := errors.New("test")
 	if got := ValueToBytes(nil, &err); !reflect.DeepEqual(got, []byte("test")) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte("test"))
 	}
-	if got := ValueToBytes(&JSONcodec.Codec{}, &struct{ I int }{I: 3}); !reflect.DeepEqual(got, []byte(`{"I":3}`)) {
+	if got := ValueToBytes(&codec.JSONCodec{}, &struct{ I int }{I: 3}); !reflect.DeepEqual(got, []byte(`{"I":3}`)) {
 		t.Errorf("ValueToBytes() = %v, want %v", got, []byte(`{"I":3}`))
 	}
 	if got := ValueToBytes(nil, 0); len(got) < 0 {
