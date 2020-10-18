@@ -25,7 +25,7 @@ func TestContext_Set(t *testing.T) {
 	ctx.Set(key, nil)
 	cv, ok := ctx.Get(key)
 	if ok {
-		t.Fatalf("Context.Get() failed: Get '%v', want nil", value)
+		t.Fatalf("Context.Get() failed: Get '%v', want nil", cv)
 	}
 
 	ctx.Set(key, value)

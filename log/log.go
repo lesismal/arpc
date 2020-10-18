@@ -67,52 +67,56 @@ func (l *logger) SetLogLevel(lvl int) {
 	}
 }
 
-// Debug simply printf
+// Debug .
 func (l *logger) Debug(format string, v ...interface{}) {
 	if LogLevelDebug >= l.level {
 		log.Printf("[DBG] "+format, v...)
 	}
 }
 
-// Info simply printf
+// Info .
 func (l *logger) Info(format string, v ...interface{}) {
 	if LogLevelInfo >= l.level {
 		log.Printf("[INF] "+format, v...)
 	}
 }
 
-// Warn simply printf
+// Warn .
 func (l *logger) Warn(format string, v ...interface{}) {
 	if LogLevelWarn >= l.level {
 		log.Printf("[WRN] "+format, v...)
 	}
 }
 
-// Error simply printf
+// Error .
 func (l *logger) Error(format string, v ...interface{}) {
 	if LogLevelError >= l.level {
 		log.Printf("[Err] "+format, v...)
 	}
 }
 
+// Debug .
 func Debug(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Debug(format, v...)
 	}
 }
 
+// Info .
 func Info(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Info(format, v...)
 	}
 }
 
+// Warn .
 func Warn(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Warn(format, v...)
 	}
 }
 
+// Error .
 func Error(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Error(format, v...)

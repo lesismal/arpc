@@ -22,42 +22,18 @@ const (
 // Empty struct
 type Empty struct{}
 
-// Recover() recover panic and log stacks's info
+// Recover recover panic and log stacks's info
 func Recover() {
 	if err := recover(); err != nil {
 		log.Error("%sruntime error: %v\ntraceback:\n%v\n\v", separator, err, string(debug.Stack()), separator)
-
-		// errstr := fmt.Sprintf("%sruntime error: %v\ntraceback:\n", separator, err)
-		// i := 2
-		// for {
-		// 	pc, file, line, ok := runtime.Caller(i)
-		// 	if !ok || i > maxStack {
-		// 		break
-		// 	}
-		// 	errstr += fmt.Sprintf("    stack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
-		// 	i++
-		// }
-		// errstr += separator
-
-		// log.Error(errstr)
 	}
 }
 
-// Safe wrap a closure with panic handler
+// Safe wrap a func with panic recover
 func Safe(call func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Error("%sruntime error: %v\ntraceback:\n%v\n\v", separator, err, string(debug.Stack()), separator)
-
-			// errstr := fmt.Sprintf("%sruntime error: %v\ntraceback:\n", separator, err)
-			// for i := 2; i <= maxStack; i++ {
-			// 	pc, file, line, ok := runtime.Caller(i)
-			// 	if !ok {
-			// 		break
-			// 	}
-			// 	errstr += fmt.Sprintf("    stack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
-			// }
-			// log.Error(errstr + separator)
 		}
 	}()
 	call()

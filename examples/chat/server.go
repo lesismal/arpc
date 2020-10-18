@@ -13,12 +13,14 @@ import (
 	"github.com/lesismal/arpcext/websocket"
 )
 
+// Message .
 type Message struct {
 	User      uint64 `json:"user"`
 	Message   string `json:"message"`
 	Timestamp int64  `json:"timestamp"`
 }
 
+// NewMessage .
 func NewMessage(user uint64, msg string) *Message {
 	return &Message{
 		User:      user,
@@ -27,6 +29,7 @@ func NewMessage(user uint64, msg string) *Message {
 	}
 }
 
+// Room .
 type Room struct {
 	users       map[*arpc.Client]uint64
 	chEnterRoom chan *arpc.Client
@@ -35,18 +38,22 @@ type Room struct {
 	chStop      chan struct{}
 }
 
+// Enter .
 func (room *Room) Enter(cli *arpc.Client) {
 	room.chEnterRoom <- cli
 }
 
+// Leave .
 func (room *Room) Leave(cli *arpc.Client) {
 	room.chLeaveRoom <- cli
 }
 
+// Broadcast .
 func (room *Room) Broadcast(msg *Message) {
 	room.chBroadcast <- msg
 }
 
+// Run .
 func (room *Room) Run() *Room {
 	go func() {
 		for userCnt := uint64(10000); true; userCnt++ {
@@ -56,26 +63,18 @@ func (room *Room) Run() *Room {
 				cli.UserData = userCnt
 				userid := fmt.Sprintf("%v", userCnt)
 				cli.Notify("/chat/server/userid", userid, 0)
-				for cli, _ := range room.users {
-					cli.Notify("/chat/server/userenter", NewMessage(userCnt, ""), 0)
-				}
+				room.broadcastMsg("/chat/server/userenter", NewMessage(userCnt, ""))
 				userCnt++
 				log.Info("[user_%v] enter room", userid)
 			case cli := <-room.chLeaveRoom:
 				delete(room.users, cli)
 				userid, _ := cli.UserData.(uint64)
-				for cli, _ := range room.users {
-					cli.Notify("/chat/server/userleave", NewMessage(userid, ""), 0)
-				}
+				room.broadcastMsg("/chat/server/userleave", NewMessage(userid, ""))
 				log.Info("[user_%v] leave room", userid)
 			case msg := <-room.chBroadcast:
-				for cli, _ := range room.users {
-					cli.Notify("/chat/server/broadcast", msg, 0)
-				}
+				room.broadcastMsg("/chat/server/broadcast", msg)
 			case <-room.chStop:
-				for cli, _ := range room.users {
-					cli.Notify("/chat/server/shutdown", nil, 0)
-				}
+				room.broadcastMsg("/chat/server/shutdown", nil)
 				return
 			}
 		}
@@ -83,11 +82,19 @@ func (room *Room) Run() *Room {
 	return room
 }
 
+// Stop .
 func (room *Room) Stop() *Room {
 	close(room.chStop)
 	return room
 }
 
+func (room *Room) broadcastMsg(method string, msg *Message) {
+	for cli := range room.users {
+		cli.Notify(method, msg, 0)
+	}
+}
+
+// NewRoom .
 func NewRoom() *Room {
 	return &Room{
 		users:       map[*arpc.Client]uint64{},
@@ -98,6 +105,7 @@ func NewRoom() *Room {
 	}
 }
 
+// NewServer .
 func NewServer(room *Room) *arpc.Server {
 	ln, _ := websocket.Listen(":8888", nil)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

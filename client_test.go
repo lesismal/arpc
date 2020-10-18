@@ -157,7 +157,7 @@ func TestClient_Set(t *testing.T) {
 	c.Set(key, nil)
 	cv, ok := c.Get(key)
 	if ok {
-		t.Fatalf("Client.Get() failed: Get '%v', want nil", value)
+		t.Fatalf("Client.Get() failed: Get '%v', want nil", cv)
 	}
 
 	c.Set(key, value)
@@ -216,111 +216,125 @@ func TestClient_Call(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	{
-		req := "hello"
-		rsp := ""
-		if err = c.Call(methodCallString, req, &rsp, time.Second); err != nil {
-			t.Fatalf("Client.Call() error = %v", err)
-		} else if rsp != req {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.Call(methodCallString, &req, &rsp, -1); err != nil {
-			t.Fatalf("Client.Call() error = %v", err)
-		} else if rsp != req {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.Call(methodCallString, &req, nil, -1); err != nil {
-			t.Fatalf("Client.Call() error = %v", err)
-		}
-	}
-	{
-		req := []byte{1}
-		rsp := []byte{}
-		if err = c.Call(methodCallBytes, req, &rsp, time.Second); err != nil {
-			t.Fatalf("Client.Call() error = %v", err)
-		} else if string(rsp) != string(req) {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.Call(methodCallBytes, &req, &rsp, -1); err != nil {
-			t.Fatalf("Client.Call() error = %v", err)
-		} else if string(rsp) != string(req) {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.Call(methodCallBytes, &req, nil, -1); err != nil {
-			t.Fatalf("Client.Call() error = %v", err)
-		}
-	}
-
-	{
-		req := MessageTest{A: 3, B: "4"}
-		rsp := MessageTest{}
-		if err = c.Call(methodCallStruct, &req, &rsp, time.Second); err != nil {
-			t.Fatalf("Client.Call() error = %v", err)
-		} else if rsp.A != req.A || rsp.B != req.B {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.Call(methodCallStruct, &req, nil, time.Second); err != nil {
-			t.Fatalf("Client.Call() error = %v", err)
-		}
-	}
-
-	{
-		req := "my error"
-		rsp := ""
-		if err = c.Call(methodCallError, req, &rsp, time.Second); err == nil {
-			t.Fatalf("Client.Call() error = nil, want '%v'", req)
-		} else if err.Error() != req {
-			t.Fatalf("Client.Call() error = '%v', want '%v'", err, req)
-		}
-		if rsp != "" {
-			t.Fatalf("Client.Call() rsp = '%v', want ''", rsp)
-		}
-	}
-
-	{
-		if err = c.Call(methodCallString, "", nil, 0); err == nil {
-			t.Fatalf("Client.Call() error is nil, want %v", ErrClientInvalidTimeoutZero)
-		} else if err.Error() != ErrClientInvalidTimeoutZero.Error() {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZero.Error())
-		}
-	}
-	{
-		if err = c.Call(methodCallNotFound, "", nil, -1); err == nil {
-			t.Fatalf("Client.Call() error is nil, want %v", ErrMethodNotFound)
-		} else if err.Error() != ErrMethodNotFound.Error() {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrMethodNotFound.Error())
-		}
-	}
-	{
-		if err = c.Call(methodInvalidLong, "", nil, -1); err == nil {
-			t.Fatalf("Client.Call() error is nil, want %v", invalidMethodErrString)
-		} else if err.Error() != invalidMethodErrString {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
-		}
-	}
-
-	{
-		c.Stop()
-		if err = c.Call(methodCallString, "", nil, -1); err == nil {
-			t.Fatalf("Client.Call() error is nil, want %v", ErrClientStopped)
-		} else if err.Error() != ErrClientStopped.Error() {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
-		}
-	}
-
-	{
-		c.Restart()
-		testServer.Stop()
-		time.Sleep(time.Second / 10)
-		if err = c.Call(methodCallString, "", nil, -1); err == nil {
-			t.Fatalf("Client.Call() error is nil, want %v", ErrClientReconnecting)
-		} else if err.Error() != ErrClientReconnecting.Error() {
-			t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
-		}
-	}
+	testClientCallMethodString(c, t)
+	testClientCallMethodBytes(c, t)
+	testClientCallMethodStruct(c, t)
+	testClientCallError(c, t)
+	testClientCallDisconnected(c, t)
 
 	SetBatchRecv(true)
 	SetBatchSend(true)
+}
+
+func testClientCallMethodString(c *Client, t *testing.T) {
+	var (
+		err error
+		req = "hello"
+		rsp = ""
+	)
+	if err = c.Call(methodCallString, req, &rsp, time.Second); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	} else if rsp != req {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.Call(methodCallString, &req, &rsp, -1); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	} else if rsp != req {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.Call(methodCallString, &req, nil, -1); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	}
+}
+
+func testClientCallMethodBytes(c *Client, t *testing.T) {
+	var (
+		err error
+		req = []byte{1}
+		rsp = []byte{}
+	)
+	if err = c.Call(methodCallBytes, req, &rsp, time.Second); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	} else if string(rsp) != string(req) {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.Call(methodCallBytes, &req, &rsp, -1); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	} else if string(rsp) != string(req) {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.Call(methodCallBytes, &req, nil, -1); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	}
+}
+
+func testClientCallMethodStruct(c *Client, t *testing.T) {
+	var (
+		err error
+		req = MessageTest{A: 3, B: "4"}
+		rsp = MessageTest{}
+	)
+	if err = c.Call(methodCallStruct, &req, &rsp, time.Second); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	} else if rsp.A != req.A || rsp.B != req.B {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.Call(methodCallStruct, &req, nil, time.Second); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	}
+}
+
+func testClientCallError(c *Client, t *testing.T) {
+	var (
+		err error
+		req = "my error"
+		rsp = ""
+	)
+	if err = c.Call(methodCallError, req, &rsp, time.Second); err == nil {
+		t.Fatalf("Client.Call() error = nil, want '%v'", req)
+	} else if err.Error() != req {
+		t.Fatalf("Client.Call() error = '%v', want '%v'", err, req)
+	}
+	if rsp != "" {
+		t.Fatalf("Client.Call() rsp = '%v', want ''", rsp)
+	}
+
+	if err = c.Call(methodCallString, "", nil, 0); err == nil {
+		t.Fatalf("Client.Call() error is nil, want %v", ErrClientInvalidTimeoutZero)
+	} else if err.Error() != ErrClientInvalidTimeoutZero.Error() {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZero.Error())
+	}
+
+	if err = c.Call(methodCallNotFound, "", nil, -1); err == nil {
+		t.Fatalf("Client.Call() error is nil, want %v", ErrMethodNotFound)
+	} else if err.Error() != ErrMethodNotFound.Error() {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrMethodNotFound.Error())
+	}
+
+	if err = c.Call(methodInvalidLong, "", nil, -1); err == nil {
+		t.Fatalf("Client.Call() error is nil, want %v", invalidMethodErrString)
+	} else if err.Error() != invalidMethodErrString {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
+	}
+}
+
+func testClientCallDisconnected(c *Client, t *testing.T) {
+	var err error
+	c.Stop()
+	if err = c.Call(methodCallString, "", nil, -1); err == nil {
+		t.Fatalf("Client.Call() error is nil, want %v", ErrClientStopped)
+	} else if err.Error() != ErrClientStopped.Error() {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
+	}
+
+	c.Restart()
+	testServer.Stop()
+	time.Sleep(time.Second / 10)
+	if err = c.Call(methodCallString, "", nil, -1); err == nil {
+		t.Fatalf("Client.Call() error is nil, want %v", ErrClientReconnecting)
+	} else if err.Error() != ErrClientReconnecting.Error() {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
+	}
 }
 
 func TestClient_CallWith(t *testing.T) {
@@ -330,192 +344,221 @@ func TestClient_CallWith(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	{
-		req := "hello"
-		rsp := ""
-		if err = c.CallWith(context.Background(), methodCallWith, req, &rsp); err != nil {
-			t.Fatalf("Client.CallWith() error = %v", err)
-		} else if rsp != req {
-			t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.CallWith(context.Background(), methodCallWith, &req, &rsp); err != nil {
-			t.Fatalf("Client.CallWith() error = %v", err)
-		} else if rsp != req {
-			t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.CallWith(context.Background(), methodCallWith, &req, nil); err != nil {
-			t.Fatalf("Client.CallWith() error = %v", err)
-		}
+
+	testClientCallWithMethodString(c, t)
+	testClientCallWithMethodBytes(c, t)
+	testClientCallWithMethodStruct(c, t)
+	testClientCallWithError(c, t)
+	testClientCallWithDisconnected(c, t)
+}
+
+func testClientCallWithMethodString(c *Client, t *testing.T) {
+	var (
+		err error
+		req = "hello"
+		rsp = ""
+	)
+	if err = c.CallWith(context.Background(), methodCallWith, req, &rsp); err != nil {
+		t.Fatalf("Client.CallWith() error = %v", err)
+	} else if rsp != req {
+		t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
 	}
-	{
-		req := []byte{1}
-		rsp := []byte{}
-		if err = c.CallWith(context.Background(), methodCallWith, req, &rsp); err != nil {
-			t.Fatalf("Client.CallWith() error = %v", err)
-		} else if string(rsp) != string(req) {
-			t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.CallWith(context.Background(), methodCallWith, &req, &rsp); err != nil {
-			t.Fatalf("Client.CallWith() error = %v", err)
-		} else if string(rsp) != string(req) {
-			t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.CallWith(context.Background(), methodCallWith, &req, nil); err != nil {
-			t.Fatalf("Client.CallWith() error = %v", err)
-		}
+	if err = c.CallWith(context.Background(), methodCallWith, &req, &rsp); err != nil {
+		t.Fatalf("Client.CallWith() error = %v", err)
+	} else if rsp != req {
+		t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.CallWith(context.Background(), methodCallWith, &req, nil); err != nil {
+		t.Fatalf("Client.CallWith() error = %v", err)
+	}
+}
+
+func testClientCallWithMethodBytes(c *Client, t *testing.T) {
+	var (
+		err error
+		req = []byte{1}
+		rsp = []byte{}
+	)
+	if err = c.CallWith(context.Background(), methodCallWith, req, &rsp); err != nil {
+		t.Fatalf("Client.CallWith() error = %v", err)
+	} else if string(rsp) != string(req) {
+		t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.CallWith(context.Background(), methodCallWith, &req, &rsp); err != nil {
+		t.Fatalf("Client.CallWith() error = %v", err)
+	} else if string(rsp) != string(req) {
+		t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.CallWith(context.Background(), methodCallWith, &req, nil); err != nil {
+		t.Fatalf("Client.CallWith() error = %v", err)
+	}
+}
+
+func testClientCallWithMethodStruct(c *Client, t *testing.T) {
+	var (
+		err error
+		req = MessageTest{A: 3, B: "4"}
+		rsp = MessageTest{}
+	)
+	if err = c.CallWith(context.Background(), methodCallWith, &req, &rsp); err != nil {
+		t.Fatalf("Client.CallWith() error = %v", err)
+	} else if rsp.A != req.A || rsp.B != req.B {
+		t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
+	}
+	if err = c.CallWith(context.Background(), methodCallWith, &req, nil); err != nil {
+		t.Fatalf("Client.CallWith() error = %v", err)
+	}
+}
+
+func testClientCallWithError(c *Client, t *testing.T) {
+	if err := c.CallWith(context.Background(), methodInvalidLong, "", nil); err == nil {
+		t.Fatalf("Client.CallWith() error is nil, want %v", invalidMethodErrString)
+	} else if err.Error() != invalidMethodErrString {
+		t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
+	}
+}
+
+func testClientCallWithDisconnected(c *Client, t *testing.T) {
+	var err error
+	c.Stop()
+	if err = c.CallWith(context.Background(), methodCallWith, "", nil); err == nil {
+		t.Fatalf("Client.CallWith() error is nil, want %v", ErrClientStopped)
+	} else if err.Error() != ErrClientStopped.Error() {
+		t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
 	}
 
-	{
-		req := MessageTest{A: 3, B: "4"}
-		rsp := MessageTest{}
-		if err = c.CallWith(context.Background(), methodCallWith, &req, &rsp); err != nil {
-			t.Fatalf("Client.CallWith() error = %v", err)
-		} else if rsp.A != req.A || rsp.B != req.B {
-			t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", rsp, req)
-		}
-		if err = c.CallWith(context.Background(), methodCallWith, &req, nil); err != nil {
-			t.Fatalf("Client.CallWith() error = %v", err)
-		}
-	}
-
-	{
-		if err = c.CallWith(context.Background(), methodInvalidLong, "", nil); err == nil {
-			t.Fatalf("Client.CallWith() error is nil, want %v", invalidMethodErrString)
-		} else if err.Error() != invalidMethodErrString {
-			t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
-		}
-	}
-
-	{
-		c.Stop()
-		if err = c.CallWith(context.Background(), methodCallWith, "", nil); err == nil {
-			t.Fatalf("Client.CallWith() error is nil, want %v", ErrClientStopped)
-		} else if err.Error() != ErrClientStopped.Error() {
-			t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
-		}
-	}
-
-	{
-		c.Restart()
-		testServer.Stop()
-		time.Sleep(time.Second / 10)
-		if err = c.CallWith(context.Background(), methodCallWith, "", nil); err == nil {
-			t.Fatalf("Client.CallWith() error is nil, want %v", ErrClientReconnecting)
-		} else if err.Error() != ErrClientReconnecting.Error() {
-			t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
-		}
+	c.Restart()
+	testServer.Stop()
+	time.Sleep(time.Second / 10)
+	if err = c.CallWith(context.Background(), methodCallWith, "", nil); err == nil {
+		t.Fatalf("Client.CallWith() error is nil, want %v", ErrClientReconnecting)
+	} else if err.Error() != ErrClientReconnecting.Error() {
+		t.Fatalf("Client.CallWith() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
 	}
 }
 
 func TestClient_CallAsync(t *testing.T) {
 	initServer()
 
-	getAsyncHandler := func() (func(*Context), chan struct{}) {
-		done := make(chan struct{}, 1)
-		asyncHandler := func(*Context) {
-			done <- struct{}{}
-		}
-		return asyncHandler, done
-	}
-
 	c, err := NewClient(dialer)
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	{
-		req := "hello"
-		asyncHandler, done := getAsyncHandler()
-		if err = c.CallAsync(methodCallAsync, req, asyncHandler, time.Second); err != nil {
-			t.Fatalf("Client.CallAsync() error = %v", err)
-		}
-		<-done
-		if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
-			t.Fatalf("Client.CallAsync() error = %v", err)
-		}
-		<-done
-		if err = c.CallAsync(methodCallAsync, &req, nil, time.Second); err != nil {
-			t.Fatalf("Client.CallAsync() error = %v", err)
-		}
+
+	testClientCallAsyncMethodString(c, t)
+	testClientCallAsyncMethodBytes(c, t)
+	testClientCallAsyncMethodStruct(c, t)
+	testClientCallAsyncError(c, t)
+	testClientCallAsyncDisconnected(c, t)
+}
+
+func getAsyncHandler() (func(*Context), chan struct{}) {
+	done := make(chan struct{}, 1)
+	asyncHandler := func(*Context) {
+		done <- struct{}{}
 	}
-	{
-		req := []byte{1}
-		asyncHandler, done := getAsyncHandler()
-		if err = c.CallAsync(methodCallAsync, req, asyncHandler, time.Second); err != nil {
-			t.Fatalf("Client.CallAsync() error = %v", err)
-		}
-		<-done
-		if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
-			t.Fatalf("Client.CallAsync() error = %v", err)
-		}
-		<-done
-		if err = c.CallAsync(methodCallAsync, &req, nil, time.Second); err != nil {
-			t.Fatalf("Client.CallAsync() error = %v", err)
-		}
+	return asyncHandler, done
+}
+
+func testClientCallAsyncMethodString(c *Client, t *testing.T) {
+	var (
+		err error
+		req = "hello"
+	)
+	asyncHandler, done := getAsyncHandler()
+	if err = c.CallAsync(methodCallAsync, req, asyncHandler, time.Second); err != nil {
+		t.Fatalf("Client.CallAsync() error = %v", err)
+	}
+	<-done
+	if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
+		t.Fatalf("Client.CallAsync() error = %v", err)
+	}
+	<-done
+	if err = c.CallAsync(methodCallAsync, &req, nil, time.Second); err != nil {
+		t.Fatalf("Client.CallAsync() error = %v", err)
+	}
+}
+
+func testClientCallAsyncMethodBytes(c *Client, t *testing.T) {
+	var (
+		err error
+		req = []byte{1}
+	)
+	asyncHandler, done := getAsyncHandler()
+	if err = c.CallAsync(methodCallAsync, req, asyncHandler, time.Second); err != nil {
+		t.Fatalf("Client.CallAsync() error = %v", err)
+	}
+	<-done
+	if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
+		t.Fatalf("Client.CallAsync() error = %v", err)
+	}
+	<-done
+	if err = c.CallAsync(methodCallAsync, &req, nil, time.Second); err != nil {
+		t.Fatalf("Client.CallAsync() error = %v", err)
+	}
+}
+
+func testClientCallAsyncMethodStruct(c *Client, t *testing.T) {
+	var (
+		err error
+		req = MessageTest{A: 3, B: "4"}
+	)
+	asyncHandler, done := getAsyncHandler()
+	if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
+		t.Fatalf("Client.CallAsync() error = %v", err)
+	}
+	<-done
+	if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
+		t.Fatalf("Client.CallAsync() error = %v", err)
+	}
+	<-done
+}
+
+func testClientCallAsyncError(c *Client, t *testing.T) {
+	var err error
+	asyncHandler, _ := getAsyncHandler()
+	if err = c.CallAsync(methodCallAsync, "", asyncHandler, -1); err == nil {
+		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
+	} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
+		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
+	}
+	if err = c.CallAsync(methodCallAsync, "", nil, -1); err == nil {
+		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
+	} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
+		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
 	}
 
-	{
-		req := MessageTest{A: 3, B: "4"}
-		asyncHandler, done := getAsyncHandler()
-		if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
-			t.Fatalf("Client.CallAsync() error = %v", err)
-		}
-		<-done
-		if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
-			t.Fatalf("Client.CallAsync() error = %v", err)
-		}
-		<-done
+	asyncHandler, _ = getAsyncHandler()
+	if err = c.CallAsync(methodCallAsync, "", asyncHandler, 0); err == nil {
+		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutZeroWithNonNilHandler.Error())
+	} else if err.Error() != ErrClientInvalidTimeoutZeroWithNonNilHandler.Error() {
+		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZeroWithNonNilHandler.Error())
 	}
 
-	{
-		asyncHandler, _ := getAsyncHandler()
-		if err = c.CallAsync(methodCallAsync, "", asyncHandler, -1); err == nil {
-			t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
-		} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
-			t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
-		}
-		if err = c.CallAsync(methodCallAsync, "", nil, -1); err == nil {
-			t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
-		} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
-			t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
-		}
+	invalidMethodErrString := fmt.Sprintf("invalid method length: %v, should <= %v", len(methodInvalidLong), MaxMethodLen)
+	if err = c.CallAsync(methodInvalidLong, "", nil, time.Second); err == nil {
+		t.Fatalf("Client.CallAsync() error is nil, want %v", invalidMethodErrString)
+	} else if err.Error() != invalidMethodErrString {
+		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
+	}
+}
+
+func testClientCallAsyncDisconnected(c *Client, t *testing.T) {
+	var err error
+	c.Stop()
+	if err = c.CallAsync(methodCallAsync, "", nil, time.Second); err == nil {
+		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientStopped)
+	} else if err.Error() != ErrClientStopped.Error() {
+		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
 	}
 
-	{
-		asyncHandler, _ := getAsyncHandler()
-		if err = c.CallAsync(methodCallAsync, "", asyncHandler, 0); err == nil {
-			t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutZeroWithNonNilHandler.Error())
-		} else if err.Error() != ErrClientInvalidTimeoutZeroWithNonNilHandler.Error() {
-			t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZeroWithNonNilHandler.Error())
-		}
-	}
-
-	{
-		invalidMethodErrString := fmt.Sprintf("invalid method length: %v, should <= %v", len(methodInvalidLong), MaxMethodLen)
-		if err = c.CallAsync(methodInvalidLong, "", nil, time.Second); err == nil {
-			t.Fatalf("Client.CallAsync() error is nil, want %v", invalidMethodErrString)
-		} else if err.Error() != invalidMethodErrString {
-			t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
-		}
-	}
-
-	{
-		c.Stop()
-		if err = c.CallAsync(methodCallAsync, "", nil, time.Second); err == nil {
-			t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientStopped)
-		} else if err.Error() != ErrClientStopped.Error() {
-			t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
-		}
-	}
-
-	{
-		c.Restart()
-		testServer.Stop()
-		time.Sleep(time.Second / 10)
-		if err = c.CallAsync(methodCallAsync, "", nil, time.Second); err == nil {
-			t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientReconnecting)
-		} else if err.Error() != ErrClientReconnecting.Error() {
-			t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
-		}
+	c.Restart()
+	testServer.Stop()
+	time.Sleep(time.Second / 10)
+	if err = c.CallAsync(methodCallAsync, "", nil, time.Second); err == nil {
+		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientReconnecting)
+	} else if err.Error() != ErrClientReconnecting.Error() {
+		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
 	}
 }
 
@@ -526,81 +569,96 @@ func TestClient_Notify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	{
-		req := "hello"
-		if err = c.Notify(methodNotify, req, time.Second); err != nil {
-			t.Fatalf("Client.Notify() error = %v", err)
-		}
-		if err = c.Notify(methodNotify, &req, time.Second); err != nil {
-			t.Fatalf("Client.Notify() error = %v", err)
-		}
-		if err = c.Notify(methodNotify, &req, time.Second); err != nil {
-			t.Fatalf("Client.Notify() error = %v", err)
-		}
+
+	testClientNotifyMethodString(c, t)
+	testClientNotifyMethodBytes(c, t)
+	testClientNotifyMethodStruct(c, t)
+	testClientNotifyError(c, t)
+	testClientNotifyDisconnected(c, t)
+}
+
+func testClientNotifyMethodString(c *Client, t *testing.T) {
+	var (
+		err error
+		req = "hello"
+	)
+	if err = c.Notify(methodNotify, req, time.Second); err != nil {
+		t.Fatalf("Client.Notify() error = %v", err)
 	}
-	{
-		req := []byte{1}
-		if err = c.Notify(methodNotify, req, time.Second); err != nil {
-			t.Fatalf("Client.Notify() error = %v", err)
-		}
-		if err = c.Notify(methodNotify, &req, time.Second); err != nil {
-			t.Fatalf("Client.Notify() error = %v", err)
-		}
-		if err = c.Notify(methodNotify, &req, time.Second); err != nil {
-			t.Fatalf("Client.Notify() error = %v", err)
-		}
+	if err = c.Notify(methodNotify, &req, time.Second); err != nil {
+		t.Fatalf("Client.Notify() error = %v", err)
+	}
+	if err = c.Notify(methodNotify, &req, time.Second); err != nil {
+		t.Fatalf("Client.Notify() error = %v", err)
+	}
+}
+
+func testClientNotifyMethodBytes(c *Client, t *testing.T) {
+	var (
+		err error
+		req = []byte{1}
+	)
+	if err = c.Notify(methodNotify, req, time.Second); err != nil {
+		t.Fatalf("Client.Notify() error = %v", err)
+	}
+	if err = c.Notify(methodNotify, &req, time.Second); err != nil {
+		t.Fatalf("Client.Notify() error = %v", err)
+	}
+	if err = c.Notify(methodNotify, &req, time.Second); err != nil {
+		t.Fatalf("Client.Notify() error = %v", err)
+	}
+}
+
+func testClientNotifyMethodStruct(c *Client, t *testing.T) {
+	var (
+		err error
+		req = MessageTest{A: 3, B: "4"}
+	)
+	if err = c.Notify(methodNotify, &req, time.Second); err != nil {
+		t.Fatalf("Client.Notify() error = %v", err)
+	}
+	if err = c.Notify(methodNotify, &req, time.Second); err != nil {
+		t.Fatalf("Client.Notify() error = %v", err)
+	}
+}
+
+func testClientNotifyError(c *Client, t *testing.T) {
+	var err error
+	if err = c.Notify(methodNotify, "", -1); err == nil {
+		t.Fatalf("Client.Notify() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
+	} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
+		t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
+	}
+	if err = c.Notify(methodNotify, "", -1); err == nil {
+		t.Fatalf("Client.Notify() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
+	} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
+		t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
 	}
 
-	{
-		req := MessageTest{A: 3, B: "4"}
-		if err = c.Notify(methodNotify, &req, time.Second); err != nil {
-			t.Fatalf("Client.Notify() error = %v", err)
-		}
-		if err = c.Notify(methodNotify, &req, time.Second); err != nil {
-			t.Fatalf("Client.Notify() error = %v", err)
-		}
+	invalidMethodErrString := fmt.Sprintf("invalid method length: %v, should <= %v", len(methodInvalidLong), MaxMethodLen)
+	if err = c.Notify(methodInvalidLong, "", time.Second); err == nil {
+		t.Fatalf("Client.Notify() error is nil, want %v", invalidMethodErrString)
+	} else if err.Error() != invalidMethodErrString {
+		t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
+	}
+}
+
+func testClientNotifyDisconnected(c *Client, t *testing.T) {
+	var err error
+	c.Stop()
+	if err = c.Notify(methodNotify, "", time.Second); err == nil {
+		t.Fatalf("Client.Notify() error is nil, want %v", ErrClientStopped)
+	} else if err.Error() != ErrClientStopped.Error() {
+		t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
 	}
 
-	{
-		if err = c.Notify(methodNotify, "", -1); err == nil {
-			t.Fatalf("Client.Notify() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
-		} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
-			t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
-		}
-		if err = c.Notify(methodNotify, "", -1); err == nil {
-			t.Fatalf("Client.Notify() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
-		} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
-			t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
-		}
-	}
-
-	{
-		invalidMethodErrString := fmt.Sprintf("invalid method length: %v, should <= %v", len(methodInvalidLong), MaxMethodLen)
-		if err = c.Notify(methodInvalidLong, "", time.Second); err == nil {
-			t.Fatalf("Client.Notify() error is nil, want %v", invalidMethodErrString)
-		} else if err.Error() != invalidMethodErrString {
-			t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
-		}
-	}
-
-	{
-		c.Stop()
-		if err = c.Notify(methodNotify, "", time.Second); err == nil {
-			t.Fatalf("Client.Notify() error is nil, want %v", ErrClientStopped)
-		} else if err.Error() != ErrClientStopped.Error() {
-			t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
-		}
-	}
-
-	{
-		c.Restart()
-		testServer.Stop()
-		time.Sleep(time.Second / 10)
-		if err = c.Notify(methodNotify, "", time.Second); err == nil {
-			t.Fatalf("Client.Notify() error is nil, want %v", ErrClientReconnecting)
-		} else if err.Error() != ErrClientReconnecting.Error() {
-			t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
-		}
+	c.Restart()
+	testServer.Stop()
+	time.Sleep(time.Second / 10)
+	if err = c.Notify(methodNotify, "", time.Second); err == nil {
+		t.Fatalf("Client.Notify() error is nil, want %v", ErrClientReconnecting)
+	} else if err.Error() != ErrClientReconnecting.Error() {
+		t.Fatalf("Client.Notify() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
 	}
 }
 
@@ -611,68 +669,85 @@ func TestClient_NotifyWith(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
-	{
-		req := "hello"
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, req); err != nil {
-			t.Fatalf("Client.NotifyWith() error = %v", err)
-		}
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
-			t.Fatalf("Client.NotifyWith() error = %v", err)
-		}
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
-			t.Fatalf("Client.NotifyWith() error = %v", err)
-		}
+
+	testClientNotifyWithMethodString(c, t)
+	testClientNotifyWithMethodBytes(c, t)
+	testClientNotifyWithMethodStruct(c, t)
+	testClientNotifyWithError(c, t)
+	testClientNotifyWithDisconnected(c, t)
+}
+
+func testClientNotifyWithMethodString(c *Client, t *testing.T) {
+	var (
+		err error
+		req = "hello"
+	)
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, req); err != nil {
+		t.Fatalf("Client.NotifyWith() error = %v", err)
 	}
-	{
-		req := []byte{1}
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, req); err != nil {
-			t.Fatalf("Client.NotifyWith() error = %v", err)
-		}
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
-			t.Fatalf("Client.NotifyWith() error = %v", err)
-		}
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
-			t.Fatalf("Client.NotifyWith() error = %v", err)
-		}
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
+		t.Fatalf("Client.NotifyWith() error = %v", err)
+	}
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
+		t.Fatalf("Client.NotifyWith() error = %v", err)
+	}
+}
+
+func testClientNotifyWithMethodBytes(c *Client, t *testing.T) {
+	var (
+		err error
+		req = []byte{1}
+	)
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, req); err != nil {
+		t.Fatalf("Client.NotifyWith() error = %v", err)
+	}
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
+		t.Fatalf("Client.NotifyWith() error = %v", err)
+	}
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
+		t.Fatalf("Client.NotifyWith() error = %v", err)
+	}
+}
+
+func testClientNotifyWithMethodStruct(c *Client, t *testing.T) {
+	var (
+		err error
+		req = MessageTest{A: 3, B: "4"}
+	)
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
+		t.Fatalf("Client.NotifyWith() error = %v", err)
+	}
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
+		t.Fatalf("Client.NotifyWith() error = %v", err)
+	}
+}
+
+func testClientNotifyWithError(c *Client, t *testing.T) {
+	var err error
+	invalidMethodErrString := fmt.Sprintf("invalid method length: %v, should <= %v", len(methodInvalidLong), MaxMethodLen)
+	if err = c.NotifyWith(context.Background(), methodInvalidLong, ""); err == nil {
+		t.Fatalf("Client.NotifyWith() error is nil, want %v", invalidMethodErrString)
+	} else if err.Error() != invalidMethodErrString {
+		t.Fatalf("Client.NotifyWith() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
+	}
+}
+
+func testClientNotifyWithDisconnected(c *Client, t *testing.T) {
+	var err error
+	c.Stop()
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, ""); err == nil {
+		t.Fatalf("Client.NotifyWith() error is nil, want %v", ErrClientStopped)
+	} else if err.Error() != ErrClientStopped.Error() {
+		t.Fatalf("Client.NotifyWith() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
 	}
 
-	{
-		req := MessageTest{A: 3, B: "4"}
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
-			t.Fatalf("Client.NotifyWith() error = %v", err)
-		}
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, &req); err != nil {
-			t.Fatalf("Client.NotifyWith() error = %v", err)
-		}
-	}
-
-	{
-		invalidMethodErrString := fmt.Sprintf("invalid method length: %v, should <= %v", len(methodInvalidLong), MaxMethodLen)
-		if err = c.NotifyWith(context.Background(), methodInvalidLong, ""); err == nil {
-			t.Fatalf("Client.NotifyWith() error is nil, want %v", invalidMethodErrString)
-		} else if err.Error() != invalidMethodErrString {
-			t.Fatalf("Client.NotifyWith() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
-		}
-	}
-
-	{
-		c.Stop()
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, ""); err == nil {
-			t.Fatalf("Client.NotifyWith() error is nil, want %v", ErrClientStopped)
-		} else if err.Error() != ErrClientStopped.Error() {
-			t.Fatalf("Client.NotifyWith() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
-		}
-	}
-
-	{
-		c.Restart()
-		testServer.Stop()
-		time.Sleep(time.Second / 10)
-		if err = c.NotifyWith(context.Background(), methodNotifyWith, ""); err == nil {
-			t.Fatalf("Client.NotifyWith() error is nil, want %v", ErrClientReconnecting)
-		} else if err.Error() != ErrClientReconnecting.Error() {
-			t.Fatalf("Client.NotifyWith() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
-		}
+	c.Restart()
+	testServer.Stop()
+	time.Sleep(time.Second / 10)
+	if err = c.NotifyWith(context.Background(), methodNotifyWith, ""); err == nil {
+		t.Fatalf("Client.NotifyWith() error is nil, want %v", ErrClientReconnecting)
+	} else if err.Error() != ErrClientReconnecting.Error() {
+		t.Fatalf("Client.NotifyWith() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
 	}
 }
 
@@ -686,119 +761,110 @@ func TestClient_PushMsg(t *testing.T) {
 
 	msg := c.NewMessage(CmdRequest, methodCallString, "hello")
 
-	{
-		if err = c.PushMsg(msg, -1); err != nil {
-			t.Fatalf("Client.PushMsg() error = %v", err)
-		}
-		if err = c.PushMsg(msg, 0); err != nil {
-			t.Fatalf("Client.PushMsg() error = %v", err)
-		}
-		if err = c.PushMsg(msg, time.Second); err != nil {
-			t.Fatalf("Client.PushMsg() error = %v", err)
-		}
+	if err = c.PushMsg(msg, -1); err != nil {
+		t.Fatalf("Client.PushMsg() error = %v", err)
+	}
+	if err = c.PushMsg(msg, 0); err != nil {
+		t.Fatalf("Client.PushMsg() error = %v", err)
+	}
+	if err = c.PushMsg(msg, time.Second); err != nil {
+		t.Fatalf("Client.PushMsg() error = %v", err)
 	}
 
-	{
-		c.Stop()
-		if err = c.PushMsg(msg, 0); err == nil {
-			t.Fatalf("Client.PushMsg() error is nil, want %v", ErrClientStopped)
-		} else if err.Error() != ErrClientStopped.Error() {
-			t.Fatalf("Client.PushMsg() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
-		}
+	c.Stop()
+	if err = c.PushMsg(msg, 0); err == nil {
+		t.Fatalf("Client.PushMsg() error is nil, want %v", ErrClientStopped)
+	} else if err.Error() != ErrClientStopped.Error() {
+		t.Fatalf("Client.PushMsg() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
 	}
 
-	{
-		c.Restart()
-		testServer.Stop()
-		time.Sleep(time.Second / 10)
-		if err = c.PushMsg(msg, 0); err == nil {
-			t.Fatalf("Client.PushMsg() error is nil, want %v", ErrClientReconnecting)
-		} else if err.Error() != ErrClientReconnecting.Error() {
-			t.Fatalf("Client.PushMsg() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
-		}
+	c.Restart()
+	testServer.Stop()
+	time.Sleep(time.Second / 10)
+	if err = c.PushMsg(msg, 0); err == nil {
+		t.Fatalf("Client.PushMsg() error is nil, want %v", ErrClientReconnecting)
+	} else if err.Error() != ErrClientReconnecting.Error() {
+		t.Fatalf("Client.PushMsg() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())
 	}
 }
 
 func TestClientPool(t *testing.T) {
 	initServer()
+	testNewClientPool(t)
+	testNewClientPoolFromDialers(t)
+}
 
+func testNewClientPool(t *testing.T) {
 	poolSize := 5
+	pool, err := NewClientPool(dialer, poolSize)
+	if err != nil {
+		t.Fatalf("NewClientPool failed: %v", err)
+	}
+	defer pool.Stop()
 
-	{
-		pool, err := NewClientPool(dialer, poolSize)
-		if err != nil {
-			t.Fatalf("NewClientPool failed: %v", err)
-		}
-		defer pool.Stop()
-
-		if pool.Size() != poolSize {
-			t.Fatalf("ClientPool.Size() returns %v, want:: %v", pool.Size(), poolSize)
-		}
-
-		for i := 0; i < poolSize; i++ {
-			if pool.Handler() != pool.Get(0).Handler {
-				t.Fatalf("ClientPool.Handler() != server.Handler")
-			}
-		}
-
-		for i := 0; i < poolSize; i++ {
-			req := "hello"
-			rsp := ""
-			if err = pool.Get(i).Call(methodCallString, req, &rsp, time.Second); err != nil {
-				t.Fatalf("ClientPool.Get(%v).Call() error = '%v'", i, err)
-			} else if rsp != req {
-				t.Fatalf("ClientPool.Get(%v).Call() error, returns '%v', want '%v'", i, rsp, req)
-			}
-		}
-		for i := 0; i < poolSize*2; i++ {
-			req := "hello"
-			rsp := ""
-			if err = pool.Next().Call(methodCallString, req, &rsp, time.Second); err != nil {
-				t.Fatalf("ClientPool.Next().Call() error = '%v'", err)
-			} else if rsp != req {
-				t.Fatalf("ClientPool.Next().Call() error, returns '%v', want '%v'", rsp, req)
-			}
+	if pool.Size() != poolSize {
+		t.Fatalf("ClientPool.Size() returns %v, want:: %v", pool.Size(), poolSize)
+	}
+	for i := 0; i < poolSize; i++ {
+		if pool.Handler() != pool.Get(0).Handler {
+			t.Fatalf("ClientPool.Handler() != server.Handler")
 		}
 	}
+	for i := 0; i < poolSize; i++ {
+		req := "hello"
+		rsp := ""
+		if err = pool.Get(i).Call(methodCallString, req, &rsp, time.Second); err != nil {
+			t.Fatalf("ClientPool.Get(%v).Call() error = '%v'", i, err)
+		} else if rsp != req {
+			t.Fatalf("ClientPool.Get(%v).Call() error, returns '%v', want '%v'", i, rsp, req)
+		}
+	}
+	for i := 0; i < poolSize*2; i++ {
+		req := "hello"
+		rsp := ""
+		if err = pool.Next().Call(methodCallString, req, &rsp, time.Second); err != nil {
+			t.Fatalf("ClientPool.Next().Call() error = '%v'", err)
+		} else if rsp != req {
+			t.Fatalf("ClientPool.Next().Call() error, returns '%v', want '%v'", rsp, req)
+		}
+	}
+}
 
-	{
-		dialers := make([]DialerFunc, poolSize)
-		for i := 0; i < poolSize; i++ {
-			dialers[i] = dialer
+func testNewClientPoolFromDialers(t *testing.T) {
+	poolSize := 5
+	dialers := make([]DialerFunc, poolSize)
+	for i := 0; i < poolSize; i++ {
+		dialers[i] = dialer
+	}
+	pool, err := NewClientPoolFromDialers(dialers)
+	if err != nil {
+		t.Fatalf("NewClientPoolFromDialers failed: %v", err)
+	}
+	defer pool.Stop()
+	if pool.Size() != poolSize {
+		t.Fatalf("ClientPool.Size() returns %v, want:: %v", pool.Size(), poolSize)
+	}
+	for i := 0; i < poolSize; i++ {
+		if pool.Handler() != pool.Get(0).Handler {
+			t.Fatalf("ClientPool.Handler() != server.Handler")
 		}
-		pool, err := NewClientPoolFromDialers(dialers)
-		if err != nil {
-			t.Fatalf("NewClientPoolFromDialers failed: %v", err)
+	}
+	for i := 0; i < poolSize; i++ {
+		req := "hello"
+		rsp := ""
+		if err = pool.Get(i).Call(methodCallString, req, &rsp, time.Second); err != nil {
+			t.Fatalf("ClientPool.Get(%v).Call() error = '%v'", i, err)
+		} else if rsp != req {
+			t.Fatalf("ClientPool.Get(%v).Call() error, returns '%v', want '%v'", i, rsp, req)
 		}
-		defer pool.Stop()
-
-		if pool.Size() != poolSize {
-			t.Fatalf("ClientPool.Size() returns %v, want:: %v", pool.Size(), poolSize)
-		}
-
-		for i := 0; i < poolSize; i++ {
-			if pool.Handler() != pool.Get(0).Handler {
-				t.Fatalf("ClientPool.Handler() != server.Handler")
-			}
-		}
-
-		for i := 0; i < poolSize; i++ {
-			req := "hello"
-			rsp := ""
-			if err = pool.Get(i).Call(methodCallString, req, &rsp, time.Second); err != nil {
-				t.Fatalf("ClientPool.Get(%v).Call() error = '%v'", i, err)
-			} else if rsp != req {
-				t.Fatalf("ClientPool.Get(%v).Call() error, returns '%v', want '%v'", i, rsp, req)
-			}
-		}
-		for i := 0; i < poolSize*2; i++ {
-			req := "hello"
-			rsp := ""
-			if err = pool.Next().Call(methodCallString, req, &rsp, time.Second); err != nil {
-				t.Fatalf("ClientPool.Next().Call() error = '%v'", err)
-			} else if rsp != req {
-				t.Fatalf("ClientPool.Next().Call() error, returns '%v', want '%v'", rsp, req)
-			}
+	}
+	for i := 0; i < poolSize*2; i++ {
+		req := "hello"
+		rsp := ""
+		if err = pool.Next().Call(methodCallString, req, &rsp, time.Second); err != nil {
+			t.Fatalf("ClientPool.Next().Call() error = '%v'", err)
+		} else if rsp != req {
+			t.Fatalf("ClientPool.Next().Call() error, returns '%v', want '%v'", rsp, req)
 		}
 	}
 
