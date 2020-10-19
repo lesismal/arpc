@@ -524,7 +524,7 @@ func NewHandler() Handler {
 		logtag:         "[ARPC CLI]",
 		batchRecv:      true,
 		batchSend:      true,
-		asyncResponse:  true,
+		asyncResponse:  false,
 		recvBufferSize: 8192,
 		sendQueueSize:  4096,
 	}
