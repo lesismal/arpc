@@ -439,7 +439,7 @@ arpc.DefaultHandler.SetSendQueueSize(4096)
 
 ## JS Client 
 
-- See [arpc.js](https://github.com/lesismal/arpc/blob/master/examples/chat/arpc.js)
+- See [arpc.js](https://github.com/lesismal/arpc/blob/master/examples/webchat/arpc.js)
 
 ## Web Chat Examples
 
