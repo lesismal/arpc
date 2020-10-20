@@ -41,6 +41,8 @@
 		- [Custom operations before conn's recv and send](#custom-operations-before-conns-recv-and-send)
 		- [Custom arpc.Client's Reader by wrapping net.Conn](#custom-arpcclients-reader-by-wrapping-netconn)
 		- [Custom arpc.Client's send queue capacity](#custom-arpcclients-send-queue-capacity)
+	- [JS Client](#js-client)
+	- [Web Chat Examples](#web-chat-examples)
 	- [Pub/Sub Examples](#pubsub-examples)
 	- [More Examples](#more-examples)
 
@@ -434,6 +436,20 @@ arpc.DefaultHandler.SetReaderWrapper(func(conn net.Conn) io.Reader) {
 ```golang
 arpc.DefaultHandler.SetSendQueueSize(4096)
 ```
+
+## JS Client 
+
+- See [arpc.js](https://github.com/lesismal/arpc/blob/master/examples/chat/arpc.js)
+
+## Web Chat Examples
+
+- See [webchat](https://github.com/lesismal/arpc/tree/master/examples/webchat)
+
+```sh
+cd $GOPATH/src/github.com/lesismal/arpc/examples/chat
+go run server.go
+```
+- visit [http://localhost:8888](http://localhost:8888)
 
 ## Pub/Sub Examples
 

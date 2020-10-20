@@ -112,8 +112,8 @@ func NewServer(room *Room) *arpc.Server {
 		log.Info("url: %v", r.URL.String())
 		if r.URL.Path == "/" {
 			http.ServeFile(w, r, "chat.html")
-		} else if r.URL.Path == "/websocket.js" {
-			http.ServeFile(w, r, "websocket.js")
+		} else if r.URL.Path == "/arpc.js" {
+			http.ServeFile(w, r, "arpc.js")
 		} else {
 			http.NotFound(w, r)
 		}

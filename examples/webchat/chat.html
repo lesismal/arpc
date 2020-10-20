@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Arpc Chat Example</title>
+    <script src="arpc.js" type="text/javascript"></script>
+    <script type="text/javascript">
+        window.onload = function () {
+            var myId = '';
+            var log = document.getElementById("log");
+            var msgInput = document.getElementById("msgInput");
+
+            function appendLog(item) {
+                var doScroll = log.scrollTop > log.scrollHeight - log.clientHeight - 1;
+                log.appendChild(item);
+                // var v = log.overflowY === 'visible'
+                // var h = log.overflowY !== 'hidden'
+                if (doScroll) {
+                    log.scrollTop = log.scrollHeight - log.clientHeight;
+                }
+            }
+
+            var client = new ArpcClient("ws://localhost:8888/ws");
+
+            client.onOpen = function () {
+                var item = document.createElement("div");
+                item.innerHTML = "<b>Connection connected.</b>";
+                appendLog(item);
+            }
+
+            client.onClose = function () {
+                var item = document.createElement("div");
+                item.innerHTML = "<b>Connection closed.</b>";
+                appendLog(item);
+            }
+
+            client.Handle("/chat/server/userid", function (ctx) {
+                myId = ctx.data;
+                var item = document.createElement("div");
+                item.innerText = `[my id: ${myId}]`;
+                appendLog(item);
+            });
+
+            client.Handle("/chat/server/userenter", function (ctx) {
+                var item = document.createElement("div");
+                item.innerText = `[user_${ctx.data.user}] enter room, welcome!~~~`;
+                appendLog(item);
+            });
+
+            client.Handle("/chat/server/userleave", function (ctx) {
+                var item = document.createElement("div");
+                item.innerText = `[user_${ctx.data.user}] leave room.`;
+                appendLog(item);
+            });
+
+            client.Handle("/chat/server/broadcast", function (ctx) {
+                var item = document.createElement("div");
+                if (ctx.data.user == myId) {
+                    item.innerText = `[myself]: ${ctx.data.message}`;
+                } else {
+                    item.innerText = `[user_${ctx.data.user}]: ${ctx.data.message}`;
+                }
+                appendLog(item);
+            });
+
+            client.Handle("/chat/server/shutdown", function (ctx) {
+                var item = document.createElement("div");
+                item.innerText = "server shutdown";
+                appendLog(item);
+                client.Shutdown()
+            });
+
+            document.getElementById("form").onsubmit = function () {
+                if (!myId) {
+                    return false;
+                }
+                if (!msgInput.value) {
+                    return false;
+                }
+                client.Notify("/chat/user/say", msgInput.value)
+                msgInput.value = "";
+                return false;
+            };
+        };
+    </script>
+    <style type="text/css">
+        html {
+            overflow: hidden;
+        }
+
+        body {
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            background: gray;
+        }
+
+        #log {
+            background: white;
+            margin: 0;
+            padding: 0.5em 0.5em 0.5em 0.5em;
+            position: absolute;
+            top: 0.5em;
+            left: 0.5em;
+            right: 0.5em;
+            bottom: 3em;
+            overflow: auto;
+        }
+
+        #form {
+            padding: 0 0.5em 0 0.5em;
+            margin: 0;
+            position: absolute;
+            bottom: 1em;
+            left: 0px;
+            width: 100%;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="log"></div>
+    <form id="form">
+        <input type="submit" value="Send" />
+        <input type="text" id="msgInput" size="64" autofocus />
+    </form>
+</body>
+
+</html>
