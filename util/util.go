@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	maxStack  = 20
 	separator = "---------------------------------------\n"
 )
 
@@ -25,17 +24,13 @@ type Empty struct{}
 // Recover recover panic and log stacks's info
 func Recover() {
 	if err := recover(); err != nil {
-		log.Error("%sruntime error: %v\ntraceback:\n%v\n\v", separator, err, string(debug.Stack()), separator)
+		log.Error("%sruntime error: %v\ntraceback:\n%v\n%v", separator, err, string(debug.Stack()), separator)
 	}
 }
 
 // Safe wrap a func with panic recover
 func Safe(call func()) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Error("%sruntime error: %v\ntraceback:\n%v\n\v", separator, err, string(debug.Stack()), separator)
-		}
-	}()
+	defer Recover()
 	call()
 }
 
