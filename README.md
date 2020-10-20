@@ -445,11 +445,6 @@ arpc.DefaultHandler.SetSendQueueSize(4096)
 
 - See [webchat](https://github.com/lesismal/arpc/tree/master/examples/webchat)
 
-```sh
-cd $GOPATH/src/github.com/lesismal/arpc/examples/chat
-go run server.go
-```
-- visit [http://localhost:8888](http://localhost:8888)
 
 ## Pub/Sub Examples
 
