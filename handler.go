@@ -120,11 +120,17 @@ type Handler interface {
 	// OnMessage dispatches messages
 	OnMessage(c *Client, m *Message)
 
-	// GetBuffer factory
-	GetBuffer(size int) []byte
+	// GetMessage factory
+	GetMessage(size int) *Message
 
-	// SetBufferFactory registers buffer factory handler
-	SetBufferFactory(f func(int) []byte)
+	// PutMessage factory
+	PutMessage(m *Message)
+
+	// HandleGetMessage registers buffer factory handler
+	HandleGetMessage(f func(int) *Message)
+
+	// HandlePutMessage registers buffer factory handler
+	HandlePutMessage(f func(*Message))
 }
 
 type handler struct {
@@ -141,9 +147,10 @@ type handler struct {
 	onMessageDropped func(c *Client, m *Message)
 	onSessionMiss    func(c *Client, m *Message)
 
-	beforeRecv    func(net.Conn) error
-	beforeSend    func(net.Conn) error
-	bufferFactory func(int) []byte
+	beforeRecv func(net.Conn) error
+	beforeSend func(net.Conn) error
+	getMessage func(int) *Message
+	putMessage func(*Message)
 
 	wrapReader func(conn net.Conn) io.Reader
 
@@ -464,17 +471,27 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 			ctx := newContext(c, msg, rh.Handlers)
 			if !rh.Async {
 				ctx.Next()
+				msg.Free(h)
+				ctxPut(ctx)
 			} else {
-				go ctx.Next()
+				go func() {
+					ctx.Next()
+					msg.Free(h)
+					ctxPut(ctx)
+				}()
 			}
 		} else {
 			if cmd == CmdRequest {
 				if rh, ok = h.routes[""]; ok {
 					ctx := newContext(c, msg, rh.Handlers)
 					ctx.Next()
+					msg.Free(h)
+					ctxPut(ctx)
 				} else {
 					ctx := newContext(c, msg, rh.Handlers)
 					ctx.Error(ErrMethodNotFound)
+					msg.Free(h)
+					ctxPut(ctx)
 				}
 			}
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
@@ -495,6 +512,8 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 			if ok {
 				ctx := newContext(c, msg, nil)
 				handler(ctx)
+				msg.Free(h)
+				ctxPut(ctx)
 			} else {
 				h.OnSessionMiss(c, msg)
 				log.Warn("%v OnMessage: async handler not exist or expired", h.LogTag())
@@ -507,15 +526,28 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 	}
 }
 
-func (h *handler) GetBuffer(size int) []byte {
-	if h.bufferFactory != nil {
-		return h.bufferFactory(size)
+func (h *handler) GetMessage(size int) *Message {
+	if h.getMessage != nil {
+		return h.getMessage(size)
 	}
-	return make([]byte, size)
+	// return &Message{Buffer: make([]byte, size)}
+	return msgGet(size)
 }
 
-func (h *handler) SetBufferFactory(f func(int) []byte) {
-	h.bufferFactory = f
+func (h *handler) PutMessage(m *Message) {
+	if h.putMessage != nil {
+		h.putMessage(m)
+		return
+	}
+	msgPut(m)
+}
+
+func (h *handler) HandleGetMessage(f func(int) *Message) {
+	h.getMessage = f
+}
+
+func (h *handler) HandlePutMessage(f func(*Message)) {
+	h.putMessage = f
 }
 
 // NewHandler factory
@@ -654,7 +686,12 @@ func HandleNotFound(h HandlerFunc) {
 	DefaultHandler.HandleNotFound(h)
 }
 
-// SetBufferFactory registers buffer factory handler for DefaultHandler
-func SetBufferFactory(f func(int) []byte) {
-	DefaultHandler.SetBufferFactory(f)
+// HandleGetMessage registers buffer factory handler for DefaultHandler
+func HandleGetMessage(f func(int) *Message) {
+	DefaultHandler.HandleGetMessage(f)
+}
+
+// HandlePutMessage registers buffer factory handler for DefaultHandler
+func HandlePutMessage(f func(*Message)) {
+	DefaultHandler.HandlePutMessage(f)
 }

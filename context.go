@@ -117,5 +117,11 @@ func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) er
 }
 
 func newContext(cli *Client, msg *Message, handlers []HandlerFunc) *Context {
-	return &Context{Client: cli, Message: msg, done: false, index: -1, handlers: handlers}
+	ctx := ctxGet()
+	ctx.Client = cli
+	ctx.Message = msg
+	ctx.done = false
+	ctx.index = -1
+	ctx.handlers = handlers
+	return ctx
 }

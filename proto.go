@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/lesismal/arpc/codec"
 	"github.com/lesismal/arpc/util"
@@ -76,7 +77,7 @@ func (h Header) message(handler Handler) (*Message, error) {
 		return nil, fmt.Errorf("invalid body length: %v", bodyLen)
 	}
 
-	m := &Message{Buffer: handler.GetBuffer(HeadLen + bodyLen)}
+	m := handler.GetMessage(HeadLen + bodyLen) // &Message{Buffer: handler.GetMessage(HeadLen + bodyLen)}
 	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
 	return m, nil
 }
@@ -84,7 +85,29 @@ func (h Header) message(handler Handler) (*Message, error) {
 // Message defines rpc packet
 type Message struct {
 	Buffer []byte
-	Values map[string]interface{}
+
+	isBroadcast bool
+	ref         int32
+	values      map[string]interface{}
+}
+
+// Keep retain message
+func (m *Message) Keep() *Message {
+	if m.isBroadcast {
+		atomic.AddInt32(&m.ref, 1)
+	}
+	return m
+}
+
+// Free release message
+func (m *Message) Free(h Handler) {
+	if m.isBroadcast {
+		if atomic.AddInt32(&m.ref, -1) == 0 {
+			h.PutMessage(m)
+		}
+	} else {
+		h.PutMessage(m)
+	}
 }
 
 // Len returns total length of buffer
@@ -221,10 +244,10 @@ func (m *Message) Data() []byte {
 
 // Get returns value for key
 func (m *Message) Get(key string) (interface{}, bool) {
-	if len(m.Values) == 0 {
+	if len(m.values) == 0 {
 		return nil, false
 	}
-	value, ok := m.Values[key]
+	value, ok := m.values[key]
 	return value, ok
 }
 
@@ -233,10 +256,10 @@ func (m *Message) Set(key string, value interface{}) {
 	if value == nil {
 		return
 	}
-	if m.Values == nil {
-		m.Values = map[string]interface{}{}
+	if m.values == nil {
+		m.values = map[string]interface{}{}
 	}
-	m.Values[key] = value
+	m.values[key] = value
 }
 
 // newMessage factory
@@ -254,7 +277,8 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 		h = DefaultHandler
 	}
 
-	msg = &Message{Buffer: h.GetBuffer(HeadLen + bodyLen), Values: values}
+	msg = h.GetMessage(HeadLen + bodyLen) // Message{Buffer: h.GetMessage(HeadLen + bodyLen), values: values}
+	msg.values = nil
 	msg.SetCmd(cmd)
 	msg.SetError(isError)
 	msg.SetAsync(isAsync)

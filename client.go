@@ -117,9 +117,11 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	select {
 	case c.chSend <- msg:
 	case <-timer.C:
+		msg.Free(c.Handler)
 		c.Handler.OnOverstock(c, msg)
 		return ErrClientTimeout
 	case <-c.chClose:
+		msg.Free(c.Handler)
 		c.Handler.OnOverstock(c, msg)
 		return ErrClientStopped
 	}
@@ -160,9 +162,11 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 	select {
 	case c.chSend <- msg:
 	case <-ctx.Done():
+		msg.Free(c.Handler)
 		c.Handler.OnOverstock(c, msg)
 		return ErrClientTimeout
 	case <-c.chClose:
+		msg.Free(c.Handler)
 		c.Handler.OnOverstock(c, msg)
 		return ErrClientStopped
 	}
@@ -267,9 +271,11 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 	select {
 	case c.chSend <- msg:
 	case <-ctx.Done():
+		msg.Free(c.Handler)
 		c.Handler.OnOverstock(c, msg)
 		return ErrClientTimeout
 	case <-c.chClose:
+		msg.Free(c.Handler)
 		c.Handler.OnOverstock(c, msg)
 		return ErrClientStopped
 	}
@@ -293,6 +299,7 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 		select {
 		case c.chSend <- msg:
 		default:
+			msg.Free(c.Handler)
 			c.Handler.OnOverstock(c, msg)
 			return ErrClientOverstock
 		}
@@ -300,6 +307,7 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 		select {
 		case c.chSend <- msg:
 		case <-c.chClose:
+			msg.Free(c.Handler)
 			c.Handler.OnOverstock(c, msg)
 			return ErrClientStopped
 		}
@@ -317,9 +325,11 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 		select {
 		case c.chSend <- msg:
 		case <-c.chClose:
+			msg.Free(c.Handler)
 			c.Handler.OnOverstock(c, msg)
 			return ErrClientStopped
 		default:
+			msg.Free(c.Handler)
 			c.Handler.OnOverstock(c, msg)
 			return ErrClientOverstock
 		}
@@ -327,9 +337,11 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 		select {
 		case c.chSend <- msg:
 		case <-timer.C:
+			msg.Free(c.Handler)
 			c.Handler.OnOverstock(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
+			msg.Free(c.Handler)
 			c.Handler.OnOverstock(c, msg)
 			return ErrClientStopped
 		}
@@ -381,6 +393,8 @@ func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
 	if msg == nil {
 		return ErrClientReconnecting
 	}
+
+	defer msg.Free(c.Handler)
 
 	switch msg.Cmd() {
 	case CmdResponse:
@@ -629,11 +643,21 @@ func (c *Client) normalSendLoop() {
 				if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
 					c.Conn.Close()
 				}
+				msg.Free(c.Handler)
 			} else {
 				c.dropMessage(msg)
+				msg.Free(c.Handler)
 			}
 		case <-c.chClose:
-			return
+			for {
+				select {
+				case msg = <-c.chSend:
+					c.dropMessage(msg)
+					msg.Free(c.Handler)
+				default:
+					return
+				}
+			}
 		}
 	}
 }
@@ -647,7 +671,15 @@ func (c *Client) batchSendLoop() {
 		select {
 		case msg = <-c.chSend:
 		case <-c.chClose:
-			return
+			for {
+				select {
+				case msg = <-c.chSend:
+					c.dropMessage(msg)
+					msg.Free(c.Handler)
+				default:
+					return
+				}
+			}
 		}
 		messages = append(messages, msg)
 		for i := 1; i < len(c.chSend) && i < 10; i++ {
@@ -662,6 +694,7 @@ func (c *Client) batchSendLoop() {
 				if _, err := c.Handler.Send(c.Conn, messages[0].Buffer); err != nil {
 					c.Conn.Close()
 				}
+				messages[0].Free(c.Handler)
 			} else {
 				for i := 0; i < len(messages); i++ {
 					for j := 0; j < len(coders); j++ {
@@ -672,11 +705,15 @@ func (c *Client) batchSendLoop() {
 				if _, err := c.Handler.SendN(c.Conn, buffers); err != nil {
 					c.Conn.Close()
 				}
+				for _, msg := range messages {
+					msg.Free(c.Handler)
+				}
 				buffers = buffers[0:0]
 			}
 		} else {
 			for _, m := range messages {
 				c.dropMessage(m)
+				m.Free(c.Handler)
 			}
 		}
 		messages = messages[0:0]
