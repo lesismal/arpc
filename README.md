@@ -1,5 +1,8 @@
 # ARPC - More Effective Network Communication 
 
+[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go#distributed-systems
+)
+
 [![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][9]][10]
 
 [1]: https://godoc.org/github.com/lesismal/arpc?status.svg
