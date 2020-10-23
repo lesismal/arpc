@@ -98,7 +98,7 @@ func TestMessage_Error(t *testing.T) {
 
 func TestMessage_SetFlagBit(t *testing.T) {
 	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
-	for i := 0; i <= 9; i++ {
+	for i := 0; i < 8; i++ {
 		if err := msg.SetFlagBit(i, true); err != nil {
 			t.Fatalf("Message.SetFlagBit() error: %v, want nil", err)
 		}
@@ -112,7 +112,7 @@ func TestMessage_SetFlagBit(t *testing.T) {
 
 func TestMessage_IsFlagBitSet(t *testing.T) {
 	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
-	for i := 0; i <= 9; i++ {
+	for i := 0; i < 8; i++ {
 		if err := msg.SetFlagBit(i, true); err != nil {
 			t.Fatalf("Message.SetFlagBit() error: %v, want nil", err)
 		}
@@ -127,7 +127,7 @@ func TestMessage_IsFlagBitSet(t *testing.T) {
 			t.Fatalf("Message.GetFlagBit() returns true, want false")
 		}
 	}
-	for i := 10; i < 16; i++ {
+	for i := 8; i < 16; i++ {
 		if err := msg.SetFlagBit(i, true); err == nil {
 			t.Fatalf("Message.SetFlagBit() returns nil error, want %v", ErrInvalidFlagBitIndex)
 		}

@@ -30,7 +30,8 @@
 	- [Quick start](#quick-start)
 	- [API Examples](#api-examples)
 		- [Register Routers](#register-routers)
-		- [Use Middleware](#use-middleware)
+		- [Router Middleware](#router-middleware)
+		- [Coder Middleware](#coder-middleware)
 		- [Client Call, CallAsync, Notify](#client-call-callasync-notify)
 		- [Server Call, CallAsync, Notify](#server-call-callasync-notify)
 		- [Broadcast - Notify](#broadcast---notify)
@@ -182,9 +183,13 @@ async := true
 handler.Handle("/asyncResponse", func(ctx *arpc.Context) { ... }, async)
 ```
 
-### Use Middleware
+### Router Middleware
+
+See [router middleware](https://github.com/lesismal/arpc/tree/master/middleware/router), it's easy to implement middlewares yourself
 
 ```golang
+import "github.com/lesismal/arpc/middleware/router"
+
 var handler arpc.Handler
 
 // package
@@ -194,10 +199,35 @@ handler = server.Handler
 // client
 handler = client.Handler
 
+handler.Use(router.Recover)
+handler.Use(router.Logger)
 handler.Use(func(ctx *arpc.Context) { ... })
 handler.Handle("/echo", func(ctx *arpc.Context) { ... })
 handler.Use(func(ctx *arpc.Context) { ... })
 ```
+
+
+### Coder Middleware
+
+- Coder Middleware is used for converting a message data to your designed format, e.g encrypt/decrypt and compress/uncompress
+
+```golang
+import "github.com/lesismal/arpc/middleware/coder"
+
+var handler arpc.Handler
+
+// package
+handler = arpc.DefaultHandler
+// server
+handler = server.Handler
+// client
+handler = client.Handler
+
+handler.UseCoder(&coder.Gzip{})
+handler.Handle("/echo", func(ctx *arpc.Context) { ... })
+```
+
+
 
 ### Client Call, CallAsync, Notify
 

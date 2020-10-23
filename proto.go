@@ -148,13 +148,13 @@ func (m *Message) SetFlagBit(index int, value bool) error {
 			m.Buffer[HeaderIndexReserved] &= (^(0x1 << index))
 		}
 		return nil
-	case 8, 9:
-		if value {
-			m.Buffer[HeaderIndexFlag] |= (0x1 << (index - 2))
-		} else {
-			m.Buffer[HeaderIndexFlag] &= (^(0x1 << (index - 2)))
-		}
-		return nil
+	// case 8, 9:
+	// 	if value {
+	// 		m.Buffer[HeaderIndexFlag] |= (0x1 << (index - 2))
+	// 	} else {
+	// 		m.Buffer[HeaderIndexFlag] &= (^(0x1 << (index - 2)))
+	// 	}
+	// 	return nil
 	default:
 		break
 	}
@@ -166,8 +166,8 @@ func (m *Message) IsFlagBitSet(index int) bool {
 	switch index {
 	case 0, 1, 2, 3, 4, 5, 6, 7:
 		return (m.Buffer[HeaderIndexReserved] & (0x1 << index)) != 0
-	case 8, 9:
-		return (m.Buffer[HeaderIndexFlag] & (0x1 << (index - 2))) != 0
+	// case 8, 9:
+	// 	return (m.Buffer[HeaderIndexFlag] & (0x1 << (index - 2))) != 0
 	default:
 		break
 	}
