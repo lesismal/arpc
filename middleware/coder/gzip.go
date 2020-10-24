@@ -64,5 +64,5 @@ func (c *Gzip) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 }
 
 func NewGzip() *Gzip {
-	return &Gzip{critical: 256, flagMask: 0x1}
+	return &Gzip{critical: 1024, flagMask: 0x1}
 }
