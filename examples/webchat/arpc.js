@@ -19,6 +19,7 @@ var HeaderFlagMaskError = 0x01;
 var HeaderFlagMaskAsync = 0x02;
 
 var ErrClosed = "[client stopped]";
+var ErrDisconnected = "[error disconnected]";
 var ErrReconnecting = "[error reconnecting]";
 
 function Codec() {
@@ -94,8 +95,7 @@ function ArpcClient(url, codec) {
 
         if (timeout > 0) {
             session.timer = setTimeout(function () {
-                var isErr = 1;
-                delete (this.sessionMap[seq]);
+                delete (client.sessionMap[seq]);
                 session.resolve({ data: null, err: "timeout" });
             }, timeout);
         }
@@ -220,7 +220,9 @@ function ArpcClient(url, codec) {
                     case CmdResponse:
                         var session = client.sessionMap[seq];
                         if (session) {
-                            clearTimeout(session.timer);
+                            if (session.timer) {
+                                clearTimeout(session.timer);
+                            }
                             delete (client.sessionMap[seq]);
                             var data = client.codec.Unmarshal(bodyArr);
                             if (isError) {
@@ -272,6 +274,15 @@ function ArpcClient(url, codec) {
             }
             client.ws.close();
 
+            for (var k in client.sessionMap) {
+                var session = client.sessionMap[k];
+                if (session) {
+                    if (session.timer) {
+                        clearTimeout(session.timer);
+                    }
+                    session.resolve({ data: null, err: ErrDisconnected });
+                } 
+            }
             // shutdown
             if (client.state == SOCK_STATE_CLOSED) {
                 return;
