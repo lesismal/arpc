@@ -82,10 +82,12 @@ func (c *Client) Set(key string, value interface{}) {
 	}
 	c.kvmux.Lock()
 	defer c.kvmux.Unlock()
-	if c.values == nil {
-		c.values = map[string]interface{}{}
+	if c.running {
+		if c.values == nil {
+			c.values = map[string]interface{}{}
+		}
+		c.values[key] = value
 	}
-	c.values[key] = value
 }
 
 // NewMessage factory
@@ -407,7 +409,9 @@ func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
 
 func (c *Client) addSession(seq uint64, session *rpcSession) {
 	c.mux.Lock()
-	c.sessionMap[seq] = session
+	if c.running {
+		c.sessionMap[seq] = session
+	}
 	c.mux.Unlock()
 }
 
@@ -450,7 +454,9 @@ func (c *Client) dropMessage(msg *Message) {
 
 func (c *Client) addAsyncHandler(seq uint64, h HandlerFunc) {
 	c.mux.Lock()
-	c.asyncHandlerMap[seq] = h
+	if c.running {
+		c.asyncHandlerMap[seq] = h
+	}
 	c.mux.Unlock()
 }
 
@@ -498,6 +504,7 @@ func (c *Client) Restart() error {
 		c.chClose = make(chan util.Empty)
 		c.sessionMap = make(map[uint64]*rpcSession)
 		c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+		c.values = map[string]interface{}{}
 
 		c.initReader()
 		go util.Safe(c.sendLoop)

@@ -162,12 +162,20 @@ func TestClient_Set(t *testing.T) {
 
 	c.Set(key, value)
 	cv, ok = c.Get(key)
+	if ok {
+		t.Fatalf("Client.Get() failed: Get '%v', want nil", value)
+	}
+
+	c.running = true
+	c.Set(key, value)
+	cv, ok = c.Get(key)
 	if !ok {
 		t.Fatalf("Client.Get() failed: Get nil, want '%v'", value)
 	}
 	if cv != value {
 		t.Fatalf("Client.Get() failed: Get '%v', want '%v'", cv, value)
 	}
+
 }
 
 func TestClient_NewMessage(t *testing.T) {
