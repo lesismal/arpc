@@ -67,7 +67,7 @@
                 var item = document.createElement("div");
                 item.innerText = "server shutdown";
                 appendLog(item);
-                client.Shutdown()
+                client.Shutdown();
             });
 
             document.getElementById("form").onsubmit = function () {
@@ -77,7 +77,7 @@
                 if (!msgInput.value) {
                     return false;
                 }
-                client.Notify("/chat/user/say", msgInput.value)
+                client.Notify("/chat/user/say", msgInput.value);
                 msgInput.value = "";
                 return false;
             };

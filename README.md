@@ -199,8 +199,8 @@ handler = server.Handler
 // client
 handler = client.Handler
 
-handler.Use(router.Recover)
-handler.Use(router.Logger)
+handler.Use(router.Recover())
+handler.Use(router.Logger())
 handler.Use(func(ctx *arpc.Context) { ... })
 handler.Handle("/echo", func(ctx *arpc.Context) { ... })
 handler.Use(func(ctx *arpc.Context) { ... })
