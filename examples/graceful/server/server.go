@@ -9,14 +9,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/json-iterator/go"
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/middleware/router"
 )
 
 func main() {
 	server := arpc.NewServer()
-	server.Codec = jsoniter.ConfigCompatibleWithStandardLibrary
 
 	graceful := &router.Graceful{}
 

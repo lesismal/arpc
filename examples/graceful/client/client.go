@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/json-iterator/go"
 	"github.com/lesismal/arpc"
 )
 
@@ -17,7 +16,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	client.Codec = jsoniter.ConfigCompatibleWithStandardLibrary
 	defer client.Stop()
 
 	wg := sync.WaitGroup{}
