@@ -60,14 +60,13 @@ type Client struct {
 
 	onStop func(*Client)
 
-	kvmux  sync.RWMutex
 	values map[string]interface{}
 }
 
 // Get returns value for key
 func (c *Client) Get(key string) (interface{}, bool) {
-	c.kvmux.RLock()
-	defer c.kvmux.RUnlock()
+	c.mux.RLock()
+	defer c.mux.RUnlock()
 	if len(c.values) == 0 {
 		return nil, false
 	}
@@ -80,8 +79,8 @@ func (c *Client) Set(key string, value interface{}) {
 	if value == nil {
 		return
 	}
-	c.kvmux.Lock()
-	defer c.kvmux.Unlock()
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	if c.running {
 		if c.values == nil {
 			c.values = map[string]interface{}{}
