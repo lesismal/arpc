@@ -61,6 +61,8 @@ const (
 	MaxBodyLen int = 1024*1024*64 - 16
 )
 
+type M map[string]interface{}
+
 // Header defines rpc head
 type Header []byte
 

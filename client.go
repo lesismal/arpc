@@ -95,7 +95,7 @@ func (c *Client) NewMessage(cmd byte, method string, v interface{}) *Message {
 }
 
 // Call make rpc call with timeout
-func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout time.Duration) error {
+func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout time.Duration, args ...interface{}) error {
 	if err := c.checkCallArgs(method, timeout); err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 
 	timer := time.NewTimer(timeout)
 
-	msg := c.newRequestMessage(CmdRequest, method, req, false, false)
+	msg := c.newRequestMessage(CmdRequest, method, req, false, false, args...)
 	seq := msg.Seq()
 	sess := newSession(seq)
 	c.addSession(seq, sess)
@@ -147,12 +147,12 @@ func (c *Client) checkCallArgs(method string, timeout time.Duration) error {
 }
 
 // CallWith make rpc call with context
-func (c *Client) CallWith(ctx context.Context, method string, req interface{}, rsp interface{}) error {
+func (c *Client) CallWith(ctx context.Context, method string, req interface{}, rsp interface{}, args ...interface{}) error {
 	if err := c.checkStateAndMethod(method); err != nil {
 		return err
 	}
 
-	msg := c.newRequestMessage(CmdRequest, method, req, false, false)
+	msg := c.newRequestMessage(CmdRequest, method, req, false, false, args...)
 	seq := msg.Seq()
 	sess := newSession(seq)
 	c.addSession(seq, sess)
@@ -180,7 +180,7 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 }
 
 // CallAsync make async rpc call with timeout
-func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, timeout time.Duration) error {
+func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, timeout time.Duration, args ...interface{}) error {
 	err := c.checkCallAsyncArgs(method, handler, timeout)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 
 	var timer *time.Timer
 
-	msg := c.newRequestMessage(CmdRequest, method, req, false, true)
+	msg := c.newRequestMessage(CmdRequest, method, req, false, true, args...)
 	seq := msg.Seq()
 	if handler != nil {
 		c.addAsyncHandler(seq, handler)
@@ -228,13 +228,13 @@ func (c *Client) checkCallAsyncArgs(method string, handler HandlerFunc, timeout 
 }
 
 // Notify make rpc notify with timeout
-func (c *Client) Notify(method string, data interface{}, timeout time.Duration) error {
+func (c *Client) Notify(method string, data interface{}, timeout time.Duration, args ...interface{}) error {
 	err := c.checkNotifyArgs(method, timeout)
 	if err != nil {
 		return err
 	}
 
-	msg := c.newRequestMessage(CmdNotify, method, data, false, true)
+	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
 	switch timeout {
 	case TimeZero:
 		err = c.pushMessage(msg, nil)
@@ -258,12 +258,12 @@ func (c *Client) checkNotifyArgs(method string, timeout time.Duration) error {
 }
 
 // NotifyWith make rpc notify with context
-func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}) error {
+func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}, args ...interface{}) error {
 	if err := c.checkStateAndMethod(method); err != nil {
 		return err
 	}
 
-	msg := c.newRequestMessage(CmdNotify, method, data, false, true)
+	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
 
 	select {
 	case c.chSend <- msg:
@@ -374,8 +374,15 @@ func (c *Client) Stop() {
 	}
 }
 
-func (c *Client) newRequestMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool) *Message {
-	return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, nil)
+func (c *Client) newRequestMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, args ...interface{}) *Message {
+	if len(args) == 0 {
+		return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, nil)
+	}
+	values, ok := args[0].(M)
+	if ok {
+		return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, values)
+	}
+	return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, args[0].(map[string]interface{}))
 }
 
 func (c *Client) parseResponse(msg *Message, rsp interface{}) error {

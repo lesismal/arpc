@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"time"
@@ -20,10 +21,22 @@ func main() {
 
 	client.Handler.UseCoder(coder.NewTracer("trace_app_test", "span_test", uint64(time.Now().UnixNano())))
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 5; i++ {
 		req := "hello"
 		rsp := ""
 		err = client.Call("/echo", &req, &rsp, time.Second*5)
+		if err != nil {
+			log.Fatalf("Call /echo failed: %v", err)
+		} else {
+			log.Printf("Call /echo Response: \"%v\"", rsp)
+		}
+	}
+
+	for i := 0; i < 5; i++ {
+		req := "hello"
+		rsp := ""
+		// err = client.Call("/echo", &req, &rsp, time.Second*5, map[string]interface{}{coder.TraceIdKey: "call_with_traceid", coder.SpanIdKey: fmt.Sprintf("call_with_spanid_%v", i)})
+		err = client.Call("/echo", &req, &rsp, time.Second*5, arpc.M{coder.TraceIdKey: "call_with_traceid", coder.SpanIdKey: fmt.Sprintf("call_with_spanid_%v", i)})
 		if err != nil {
 			log.Fatalf("Call /echo failed: %v", err)
 		} else {

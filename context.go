@@ -6,7 +6,6 @@ package arpc
 
 import (
 	"time"
-	// "github.com/lesismal/arpc/util"
 )
 
 // Context definition
