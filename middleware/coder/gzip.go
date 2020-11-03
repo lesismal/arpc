@@ -8,8 +8,6 @@ import (
 	"github.com/lesismal/arpc"
 )
 
-const GZipFlagBit = 0
-
 func gzipCompress(data []byte) []byte {
 	var in bytes.Buffer
 	w := gzip.NewWriter(&in)
@@ -34,35 +32,34 @@ func gzipUnCompress(data []byte) ([]byte, error) {
 
 type Gzip struct {
 	critical int
-	flagMask byte
 }
 
 func (c *Gzip) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
-	if len(msg.Buffer) > c.critical && !msg.IsFlagBitSet(GZipFlagBit) {
+	if len(msg.Buffer) > c.critical && !msg.IsFlagBitSet(FlagBitGZip) {
 		buf := gzipCompress(msg.Buffer[arpc.HeaderIndexReserved+1:])
 		total := len(buf) + arpc.HeaderIndexReserved + 1
 		if total < len(msg.Buffer) {
 			copy(msg.Buffer[arpc.HeaderIndexReserved+1:], buf)
-			msg.Buffer[arpc.HeaderIndexReserved] |= c.flagMask
 			msg.Buffer = msg.Buffer[:total]
 			msg.SetBodyLen(total - 16)
-			msg.SetFlagBit(GZipFlagBit, true)
+			msg.SetFlagBit(FlagBitGZip, true)
 		}
 	}
 	return msg
 }
 
 func (c *Gzip) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
-	if msg.IsFlagBitSet(GZipFlagBit) {
+	if msg.IsFlagBitSet(FlagBitGZip) {
 		buf, err := gzipUnCompress(msg.Buffer[arpc.HeaderIndexReserved+1:])
 		if err == nil {
 			msg.Buffer = append(msg.Buffer[:arpc.HeaderIndexReserved+1], buf...)
-			msg.SetFlagBit(GZipFlagBit, false)
+			msg.SetFlagBit(FlagBitGZip, false)
+			msg.SetBodyLen(len(msg.Buffer) - 16)
 		}
 	}
 	return msg
 }
 
 func NewGzip() *Gzip {
-	return &Gzip{critical: 1024, flagMask: 0x1}
+	return &Gzip{critical: 1024}
 }

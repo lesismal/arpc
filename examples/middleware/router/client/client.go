@@ -32,5 +32,4 @@ func main() {
 	} else {
 		log.Printf("Call /logger Response: \"%v\"", rsp)
 	}
-
 }

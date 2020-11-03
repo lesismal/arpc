@@ -624,11 +624,12 @@ func (c *Client) sendLoop() {
 
 func (c *Client) normalSendLoop() {
 	var msg *Message
-	var coders = c.Handler.Coders()
+	var coders []MessageCoder
 	for {
 		select {
 		case msg = <-c.chSend:
 			if !c.reconnecting {
+				coders = c.Handler.Coders()
 				for j := 0; j < len(coders); j++ {
 					msg = coders[j].Encode(c, msg)
 				}
@@ -646,7 +647,7 @@ func (c *Client) normalSendLoop() {
 
 func (c *Client) batchSendLoop() {
 	var msg *Message
-	var coders = c.Handler.Coders()
+	var coders []MessageCoder
 	var messages []*Message = make([]*Message, 10)[0:0]
 	var buffers net.Buffers = make([][]byte, 10)[0:0]
 	for {
@@ -661,6 +662,7 @@ func (c *Client) batchSendLoop() {
 			messages = append(messages, msg)
 		}
 		if !c.reconnecting {
+			coders = c.Handler.Coders()
 			if len(messages) == 1 {
 				for j := 0; j < len(coders); j++ {
 					messages[0] = coders[j].Encode(c, messages[0])
