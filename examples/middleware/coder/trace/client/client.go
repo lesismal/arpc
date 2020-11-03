@@ -18,7 +18,7 @@ func main() {
 	}
 	defer client.Stop()
 
-	client.Handler.UseCoder(coder.NewTracer("trade_app_test", uint64(time.Now().UnixNano())))
+	client.Handler.UseCoder(coder.NewTracer("trace_app_test", "span_test", uint64(time.Now().UnixNano())))
 
 	for i := 0; i < 10; i++ {
 		req := "hello"

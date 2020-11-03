@@ -1,7 +1,7 @@
 package coder
 
 import (
-	"strconv"
+	"fmt"
 	"strings"
 	"sync/atomic"
 
@@ -12,11 +12,14 @@ import (
 const (
 	TraceIdKey = "traceid"
 	SpanIdKey  = "spanid"
+
+	TraceIdSep = ":|:"
 )
 
 type Tracer struct {
-	traceId string
-	spanId  uint64
+	traceId      string
+	spanIdPrefix string
+	spanId       uint64
 }
 
 func (tracer *Tracer) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
@@ -32,9 +35,9 @@ func (tracer *Tracer) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Messa
 	if iSpanId != nil {
 		spanId = iSpanId.(string)
 	} else {
-		spanId = strconv.FormatUint(atomic.AddUint64(&tracer.spanId, 1), 10)
+		spanId = fmt.Sprintf("%v%v", tracer.spanIdPrefix, atomic.AddUint64(&tracer.spanId, 1))
 	}
-	tracerInfo := (traceId + ":" + spanId)
+	tracerInfo := (traceId + TraceIdSep + spanId)
 	msg.Buffer = append(msg.Buffer, tracerInfo...)
 	traceInfoLen := uint16(len(tracerInfo))
 	msg.Buffer = append(msg.Buffer, byte(traceInfoLen>>8), byte(traceInfoLen&0xFF))
@@ -52,7 +55,7 @@ func (tracer *Tracer) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Messa
 			traceInfoLen := int((msg.Buffer[bufLen-2] << 8) | msg.Buffer[bufLen-1])
 			if bufLen >= 2+traceInfoLen {
 				traceInfo := util.BytesToStr(msg.Buffer[bufLen-2-traceInfoLen : bufLen-2])
-				traceInfoArr := strings.Split(traceInfo, ":")
+				traceInfoArr := strings.Split(traceInfo, TraceIdSep)
 				if len(traceInfoArr) >= 2 {
 					traceId, spanId = traceInfoArr[0], traceInfoArr[1]
 				}
@@ -68,9 +71,10 @@ func (tracer *Tracer) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Messa
 	return msg
 }
 
-func NewTracer(traceId string, initSpanId uint64) *Tracer {
+func NewTracer(traceId string, spanIdPrefix string, initSpanId uint64) *Tracer {
 	return &Tracer{
-		traceId: traceId,
-		spanId:  initSpanId,
+		traceId:      traceId,
+		spanIdPrefix: spanIdPrefix,
+		spanId:       initSpanId,
 	}
 }
