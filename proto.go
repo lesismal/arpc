@@ -61,6 +61,7 @@ const (
 	MaxBodyLen int = 1024*1024*64 - 16
 )
 
+// M is a shortcut for map[string]interface{}
 type M map[string]interface{}
 
 // Header defines rpc head

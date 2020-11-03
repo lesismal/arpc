@@ -1,6 +1,8 @@
 package coder
 
 const (
+	// FlagBitTracer .
 	FlagBitTracer = 0
-	FlagBitGZip   = 1
+	// FlagBitGZip .
+	FlagBitGZip = 7
 )
