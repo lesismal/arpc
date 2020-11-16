@@ -13,23 +13,14 @@ import (
 
 func main() {
 	var (
-		app           = "app"
-		service       = "echo"
-		addr          = "localhost:8888"
-		weight        = 2
-		ttl     int64 = 10
+		appPrefix       = "app"
+		service         = "echo"
+		addr            = "localhost:8888"
+		weight          = 2
+		ttl       int64 = 10
 
 		endpoints = []string{"localhost:2379", "localhost:22379", "localhost:32379"}
 	)
-
-	key := fmt.Sprintf("%v/%v/%v", app, service, addr)
-	value := fmt.Sprintf("%v", weight)
-	register, err := etcd.NewRegister(endpoints, key, value, ttl)
-	if err != nil {
-		log.Error("NewRegister failed: %v", err)
-		panic(err)
-	}
-	defer register.Stop()
 
 	svr := arpc.NewServer()
 	// register router
@@ -41,6 +32,15 @@ func main() {
 		log.Info("/echo: \"%v\", error: %v", ret, err)
 	})
 	go svr.Run(addr)
+
+	key := fmt.Sprintf("%v/%v/%v", appPrefix, service, addr)
+	value := fmt.Sprintf("%v", weight)
+	register, err := etcd.NewRegister(endpoints, key, value, ttl)
+	if err != nil {
+		log.Error("NewRegister failed: %v", err)
+		panic(err)
+	}
+	defer register.Stop()
 
 	quit := make(chan os.Signal)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

@@ -24,6 +24,7 @@ var (
 type ServiceManager interface {
 	AddServiceNodes(path string, value string)
 	DeleteServiceNodes(path string)
+	ClientBy(serviceName string) (*arpc.Client, error)
 }
 
 type serviceNode struct {
@@ -200,17 +201,18 @@ func (s *serviceManager) DeleteServiceNodes(path string) {
 }
 
 // Client returns a reachable client by service's name
-func (s *serviceManager) Client(name string) (*arpc.Client, error) {
+func (s *serviceManager) ClientBy(serviceName string) (*arpc.Client, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
-	list, ok := s.serviceList[name]
+	list, ok := s.serviceList[serviceName]
 	if ok {
 		return list.next()
 	}
 	return nil, ErrServiceNotFound
 }
 
-func NewServiceManager(dialer func(addr string) (net.Conn, error)) *serviceManager {
+// NewServiceManager .
+func NewServiceManager(dialer func(addr string) (net.Conn, error)) ServiceManager {
 	return &serviceManager{
 		dialer:      dialer,
 		serviceList: map[string]*serviceNodeList{},

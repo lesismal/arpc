@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/lesismal/arpc/log"
 	"github.com/lesismal/arpc/util"
 )
 
-//Register
+const RegisterMutexPrefix = "_arpc_micro_reg_mux_pfx"
+
+//Register .
 type Register struct {
 	key         string
 	value       string
@@ -20,10 +23,11 @@ type Register struct {
 
 // listenTTL .
 func (s *Register) listenTTL() {
+	log.Info("Register listenTTL start")
 	for resp := range s.chKeepalive {
 		log.Debug("Register listenTTL: %v", resp)
 	}
-	log.Info("Register listenTTL exit")
+	log.Info("Register listenTTL stop")
 }
 
 // Stop .
@@ -48,22 +52,46 @@ func NewRegister(endpoints []string, key string, value string, ttl int64) (*Regi
 		return nil, err
 	}
 
+	session, err := concurrency.NewSession(client)
+	if err != nil {
+		log.Error("NewRegister [%v, %v] concurrency.NewSession failed: %v", key, value, err)
+		return nil, err
+	}
+
+	mux := concurrency.NewMutex(session, RegisterMutexPrefix)
+	err = mux.Lock(context.TODO())
+	if err != nil {
+		log.Error("NewRegister [%v, %v] Lock failed: %v", key, value, err)
+		return nil, err
+	}
+	defer mux.Unlock(context.TODO())
+
 	// step 2: generate ttl
-	resp, err := client.Grant(context.Background(), ttl)
+	resGrant, err := client.Grant(context.Background(), ttl)
 	if err != nil {
 		log.Error("NewRegister [%v, %v] client.Grant failed: %v", key, value, err)
 		return nil, err
 	}
 
+	resGet, err := client.Get(context.Background(), key)
+	if err != nil {
+		log.Error("NewRegister [%v, %v] client.Get failed: %v", key, value, err)
+		return nil, err
+	}
+	if len(resGet.Kvs) > 0 {
+		log.Error("NewRegister [%v, %v] failed: already exists", key, value)
+		return nil, err
+	}
+
 	// step 3: set kv
-	_, err = client.Put(context.Background(), key, value, clientv3.WithLease(resp.ID))
+	_, err = client.Put(context.Background(), key, value, clientv3.WithLease(resGrant.ID))
 	if err != nil {
 		log.Error("NewRegister [%v, %v] client.Put failed: %v", key, value, err)
 		return nil, err
 	}
 
 	// step 4: set ttl and keepalive
-	chKeepalive, err := client.KeepAlive(context.Background(), resp.ID)
+	chKeepalive, err := client.KeepAlive(context.Background(), resGrant.ID)
 	if err != nil {
 		log.Error("NewRegister [%v, %v] client.KeepAlive failed: %v", key, value, err)
 		return nil, err
@@ -73,7 +101,7 @@ func NewRegister(endpoints []string, key string, value string, ttl int64) (*Regi
 		key:         key,
 		value:       value,
 		client:      client,
-		leaseID:     resp.ID,
+		leaseID:     resGrant.ID,
 		chKeepalive: chKeepalive,
 	}
 

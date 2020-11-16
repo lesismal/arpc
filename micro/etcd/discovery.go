@@ -10,6 +10,7 @@ import (
 	"github.com/lesismal/arpc/util"
 )
 
+// Discovery .
 type Discovery struct {
 	client         *clientv3.Client
 	prefix         string
