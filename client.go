@@ -280,7 +280,7 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 
 // PushMsg push msg to client's send queue
 func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
-	err := c.checkState()
+	err := c.CheckState()
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,8 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 	return nil
 }
 
-func (c *Client) checkState() error {
+// CheckState checks client's state
+func (c *Client) CheckState() error {
 	if !c.running {
 		return ErrClientStopped
 	}
@@ -349,7 +350,7 @@ func (c *Client) checkState() error {
 }
 
 func (c *Client) checkStateAndMethod(method string) error {
-	err := c.checkState()
+	err := c.CheckState()
 	if err != nil {
 		return err
 	}
@@ -569,7 +570,7 @@ func (c *Client) recvLoop() {
 		for c.running {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
-				log.Info("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
+				log.Debug("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
 				c.Stop()
 				return
 			}
@@ -595,7 +596,7 @@ func (c *Client) recvLoop() {
 			c.clearAsyncHandler()
 
 			for c.running {
-				log.Info("%v\t%v\tReconnecting ...", c.Handler.LogTag(), addr)
+				log.Debug("%v\t%v\tReconnecting ...", c.Handler.LogTag(), addr)
 				conn, err := c.Dialer()
 				if err == nil {
 					c.Conn = conn

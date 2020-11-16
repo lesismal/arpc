@@ -3,6 +3,8 @@ package micro
 import (
 	"errors"
 	"net"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,11 +14,20 @@ import (
 )
 
 var (
-	ErrServiceNotFound    = errors.New("service not found")
+	// ErrServiceNotFound .
+	ErrServiceNotFound = errors.New("service not found")
+	// ErrServiceUnreachable .
 	ErrServiceUnreachable = errors.New("service unreachable")
 )
 
+// ServiceManager .
+type ServiceManager interface {
+	AddServiceNodes(path string, value string)
+	DeleteServiceNodes(path string)
+}
+
 type serviceNode struct {
+	name     string
 	addr     string
 	client   *arpc.Client
 	shutdown bool
@@ -29,10 +40,16 @@ type serviceNodeList struct {
 	nodes []*serviceNode
 }
 
-func (list *serviceNodeList) add(node *serviceNode) {
+func (list *serviceNodeList) addByAddr(addr string, nodes []*serviceNode) {
 	list.mux.Lock()
-	list.nodes = append(list.nodes, node)
-	list.mux.Unlock()
+	defer list.mux.Unlock()
+	for _, v := range list.nodes {
+		// addr already added
+		if v.addr == addr {
+			return
+		}
+	}
+	list.nodes = append(list.nodes, nodes...)
 }
 
 func (list *serviceNodeList) update(node *serviceNode) {
@@ -76,7 +93,7 @@ func (list *serviceNodeList) next() (*arpc.Client, error) {
 	for i := 0; i < l; i++ {
 		list.index++
 		node := list.nodes[list.index%uint64(len(list.nodes))]
-		if node.client != nil {
+		if node.client != nil && node.client.CheckState() == nil {
 			return node.client, nil
 		}
 	}
@@ -89,7 +106,7 @@ type serviceManager struct {
 	serviceList map[string]*serviceNodeList
 }
 
-func (s *serviceManager) setServiceNode(name string, node *serviceNode) {
+func (s *serviceManager) setServiceNode(name string, addr string, nodes []*serviceNode) {
 	s.mux.Lock()
 	list, ok := s.serviceList[name]
 	s.mux.Unlock()
@@ -97,7 +114,7 @@ func (s *serviceManager) setServiceNode(name string, node *serviceNode) {
 		list = &serviceNodeList{}
 		s.serviceList[name] = list
 	}
-	list.add(node)
+	list.addByAddr(addr, nodes)
 }
 
 func (s *serviceManager) updateServiceNode(name string, node *serviceNode) {
@@ -111,59 +128,79 @@ func (s *serviceManager) updateServiceNode(name string, node *serviceNode) {
 	}
 }
 
-func (s *serviceManager) deleteServiceNode(name, addr string) {
-	s.mux.Lock()
-	list, ok := s.serviceList[name]
-	s.mux.Unlock()
-	if ok {
-		list.delete(addr)
-	}
-}
-
-func (s *serviceManager) AddServiceNode(name, addr string) {
-	var node = &serviceNode{addr: addr}
-
-	log.Info("AddServiceNode: [%v, %v]", name, addr)
-	client, err := arpc.NewClient(func() (net.Conn, error) {
-		return s.dialer(addr)
-	})
-	if err == nil {
-		node.client = client
-		s.setServiceNode(name, node)
+// AddServiceNodes add nodes by path's addr and weight/value, would be called by a Discovery when service was setted
+func (s *serviceManager) AddServiceNodes(path string, value string) {
+	arr := strings.Split(path, "/")
+	if len(arr) < 3 {
 		return
 	}
 
-	log.Info("AddServiceNode failed: [%v, %v], %v", name, addr, err)
+	app, name, addr := arr[0], arr[1], arr[2]
+	weight := 1
+	n, err := strconv.Atoi(value)
+	if err == nil && n > 0 {
+		weight = n
+	}
 
-	go util.Safe(func() {
-		i := 0
-		for !node.shutdown {
-			i++
-			time.Sleep(time.Second)
-			log.Info("AddServiceNode: [%v, %v] retrying %v...", name, addr, i)
-			client, err := arpc.NewClient(func() (net.Conn, error) {
-				return s.dialer(addr)
-			})
-			if err == nil {
-				node.client = client
-				s.updateServiceNode(name, node)
-				return
-			}
-			log.Info("AddServiceNode [%v, %v] retrying %v failed: %v", name, addr, i, err)
-		}
+	var nodes = make([]*serviceNode, weight)
+	for i := 0; i < weight; i++ {
+		nodes[i] = &serviceNode{name: name, addr: addr}
+	}
+
+	client, err := arpc.NewClient(func() (net.Conn, error) {
+		return s.dialer(addr)
 	})
+	for i := 0; i < weight; i++ {
+		nodes[i].client = client
+		s.setServiceNode(name, addr, nodes)
+	}
+	if err == nil {
+		log.Info("AddServiceNodes: [%v, %v, %v, %v]", app, name, addr, weight)
+	} else {
+		log.Info("AddServiceNodes failed, retrying later: [%v, %v, %v, %v], %v", app, name, addr, weight, err)
+
+		go util.Safe(func() {
+			i := 0
+			for !nodes[0].shutdown {
+				i++
+				time.Sleep(time.Second)
+				log.Info("AddServiceNodes: [%v, %v, %v, %v] retrying %v...", app, name, addr, weight, i)
+				client, err := arpc.NewClient(func() (net.Conn, error) {
+					return s.dialer(addr)
+				})
+				if err == nil {
+					time.Sleep(time.Second / 100)
+					for i := 0; i < weight; i++ {
+						nodes[i].client = client
+						s.updateServiceNode(name, nodes[i])
+					}
+
+					return
+				}
+				log.Info("AddServiceNodes [%v, %v, %v, %v] retrying %v failed: %v", app, name, addr, weight, i, err)
+			}
+		})
+	}
 }
 
-func (s *serviceManager) DeleteServiceNode(name, addr string) {
+// DeleteServiceNodes deletes all nods for path's addr, would be called by a Discovery when service was setted
+func (s *serviceManager) DeleteServiceNodes(path string) {
+	arr := strings.Split(path, "/")
+	if len(arr) < 3 {
+		return
+	}
+	app, name, addr := arr[0], arr[1], arr[2]
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 	list, ok := s.serviceList[name]
 	if ok {
 		list.delete(addr)
+		log.Info("DeleteServiceNodes: [%v, %v, %v]", app, name, addr)
 	}
 }
 
-func (s *serviceManager) GetClient(name string) (*arpc.Client, error) {
+// Client returns a reachable client by service's name
+func (s *serviceManager) Client(name string) (*arpc.Client, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()
 	list, ok := s.serviceList[name]
@@ -173,18 +210,9 @@ func (s *serviceManager) GetClient(name string) (*arpc.Client, error) {
 	return nil, ErrServiceNotFound
 }
 
-// func (s *Service) Discover(serviceName string, info interface{}) error {
-
-// }
-
 func NewServiceManager(dialer func(addr string) (net.Conn, error)) *serviceManager {
 	return &serviceManager{
 		dialer:      dialer,
 		serviceList: map[string]*serviceNodeList{},
 	}
-}
-
-type ServiceManager interface {
-	AddServiceNode(name, addr string)
-	DeleteServiceNode(name, addr string)
 }
