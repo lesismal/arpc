@@ -4,8 +4,20 @@ go run github.com/lesismal/arpc/examples/bench/client
 go run github.com/lesismal/arpc/examples/broadcast/server
 go run github.com/lesismal/arpc/examples/broadcast/client
 
-go run github.com/lesismal/arpc/examples/chat/server
-// visit localhost:8888
+go run github.com/lesismal/arpc/examples/graceful/server
+go run github.com/lesismal/arpc/examples/graceful/client
+
+go run github.com/lesismal/arpc/examples/micro/server
+go run github.com/lesismal/arpc/examples/micro/client
+
+go run github.com/lesismal/arpc/examples/middleware/coder/gzip/server
+go run github.com/lesismal/arpc/examples/middleware/coder/gzip/client
+
+go run github.com/lesismal/arpc/examples/middleware/coder/trace/server
+go run github.com/lesismal/arpc/examples/middleware/coder/trace/client
+
+go run github.com/lesismal/arpc/examples/middleware/router/server
+go run github.com/lesismal/arpc/examples/middleware/router/client
 
 go run github.com/lesismal/arpc/examples/notify/server
 go run github.com/lesismal/arpc/examples/notify/client
@@ -33,3 +45,6 @@ go run github.com/lesismal/arpc/examples/pubsub/client
 
 go run github.com/lesismal/arpc/examples/rpc/server
 go run github.com/lesismal/arpc/examples/rpc/client
+
+go run github.com/lesismal/arpc/examples/webchat
+visit http://localhost:8888

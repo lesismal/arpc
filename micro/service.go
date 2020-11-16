@@ -27,7 +27,7 @@ type ServiceManager interface {
 	ClientBy(serviceName string) (*arpc.Client, error)
 }
 
-type serviceNode struct {
+type ServiceNode struct {
 	name     string
 	addr     string
 	client   *arpc.Client
@@ -38,10 +38,10 @@ type serviceNodeList struct {
 	mux   sync.RWMutex
 	name  string
 	index uint64
-	nodes []*serviceNode
+	nodes []*ServiceNode
 }
 
-func (list *serviceNodeList) addByAddr(addr string, nodes []*serviceNode) {
+func (list *serviceNodeList) addByAddr(addr string, nodes []*ServiceNode) {
 	list.mux.Lock()
 	defer list.mux.Unlock()
 	for _, v := range list.nodes {
@@ -53,7 +53,7 @@ func (list *serviceNodeList) addByAddr(addr string, nodes []*serviceNode) {
 	list.nodes = append(list.nodes, nodes...)
 }
 
-func (list *serviceNodeList) update(node *serviceNode) {
+func (list *serviceNodeList) update(node *ServiceNode) {
 	var found = false
 	list.mux.Lock()
 	defer list.mux.Unlock()
@@ -107,7 +107,7 @@ type serviceManager struct {
 	serviceList map[string]*serviceNodeList
 }
 
-func (s *serviceManager) setServiceNode(name string, addr string, nodes []*serviceNode) {
+func (s *serviceManager) setServiceNode(name string, addr string, nodes []*ServiceNode) {
 	s.mux.Lock()
 	list, ok := s.serviceList[name]
 	s.mux.Unlock()
@@ -118,7 +118,7 @@ func (s *serviceManager) setServiceNode(name string, addr string, nodes []*servi
 	list.addByAddr(addr, nodes)
 }
 
-func (s *serviceManager) updateServiceNode(name string, node *serviceNode) {
+func (s *serviceManager) updateServiceNode(name string, node *ServiceNode) {
 	s.mux.Lock()
 	list, ok := s.serviceList[name]
 	s.mux.Unlock()
@@ -143,9 +143,9 @@ func (s *serviceManager) AddServiceNodes(path string, value string) {
 		weight = n
 	}
 
-	var nodes = make([]*serviceNode, weight)
+	var nodes = make([]*ServiceNode, weight)
 	for i := 0; i < weight; i++ {
-		nodes[i] = &serviceNode{name: name, addr: addr}
+		nodes[i] = &ServiceNode{name: name, addr: addr}
 	}
 
 	client, err := arpc.NewClient(func() (net.Conn, error) {
