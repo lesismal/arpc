@@ -23,7 +23,7 @@ func (ds *Discovery) init() {
 }
 
 func (ds *Discovery) lazyInit() {
-	time.Sleep(time.Second)
+	time.Sleep(time.Second / 100)
 	resp, err := ds.client.Get(context.Background(), ds.prefix, clientv3.WithPrefix())
 	if err != nil {
 		return
