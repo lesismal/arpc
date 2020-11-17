@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/middleware/coder"
+	"github.com/lesismal/arpc/middleware/coder/gzip"
 )
 
 func main() {
@@ -18,7 +18,7 @@ func main() {
 	}
 	defer client.Stop()
 
-	client.Handler.UseCoder(coder.NewGzip())
+	client.Handler.UseCoder(gzip.New())
 
 	req := ""
 	for i := 0; i < 2048; i++ {

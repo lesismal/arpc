@@ -1,13 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/middleware/coder"
+	"github.com/lesismal/arpc/middleware/coder/tracer"
 )
 
 func main() {
@@ -19,28 +18,16 @@ func main() {
 	}
 	defer client.Stop()
 
-	client.Handler.UseCoder(coder.NewTracer("trace_app_test", "span_test", uint64(time.Now().UnixNano())))
+	tracer := tracer.New("appTrace", "span")
+	client.Handler.UseCoder(tracer)
 
-	for i := 0; i < 5; i++ {
-		req := "hello"
-		rsp := ""
-		err = client.Call("/echo", &req, &rsp, time.Second*5)
-		if err != nil {
-			log.Fatalf("Call /echo failed: %v", err)
-		} else {
-			log.Printf("Call /echo Response: \"%v\"", rsp)
-		}
-	}
-
-	for i := 0; i < 5; i++ {
-		req := "hello"
-		rsp := ""
-		// err = client.Call("/echo", &req, &rsp, time.Second*5, map[string]interface{}{coder.TraceIdKey: "call_with_traceid", coder.SpanIdKey: fmt.Sprintf("call_with_spanid_%v", i)})
-		err = client.Call("/echo", &req, &rsp, time.Second*5, arpc.M{coder.TraceIdKey: "call_with_traceid", coder.SpanIdKey: fmt.Sprintf("call_with_spanid_%v", i)})
-		if err != nil {
-			log.Fatalf("Call /echo failed: %v", err)
-		} else {
-			log.Printf("Call /echo Response: \"%v\"", rsp)
-		}
+	sp := tracer.NewSpan()
+	req := "hello"
+	rsp := ""
+	err = client.Call("/step_1", &req, &rsp, time.Second*5, sp.Values())
+	if err != nil {
+		log.Fatalf("Call /step_1 failed: %v", err)
+	} else {
+		log.Printf("Call /step_1 Response: \"%v\"", rsp)
 	}
 }

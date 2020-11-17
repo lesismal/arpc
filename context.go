@@ -12,7 +12,7 @@ import (
 type Context struct {
 	Client  *Client
 	Message *Message
-	Values  map[string]interface{}
+	values  map[string]interface{}
 
 	err      interface{}
 	response []interface{}
@@ -25,10 +25,10 @@ type Context struct {
 
 // Get returns value for key
 func (ctx *Context) Get(key string) (interface{}, bool) {
-	if len(ctx.Values) == 0 {
+	if len(ctx.values) == 0 {
 		return nil, false
 	}
-	value, ok := ctx.Values[key]
+	value, ok := ctx.values[key]
 	return value, ok
 }
 
@@ -37,10 +37,15 @@ func (ctx *Context) Set(key string, value interface{}) {
 	if value == nil {
 		return
 	}
-	if ctx.Values == nil {
-		ctx.Values = map[string]interface{}{}
+	if ctx.values == nil {
+		ctx.values = map[string]interface{}{}
 	}
-	ctx.Values[key] = value
+	ctx.values[key] = value
+}
+
+// Values returns values
+func (ctx *Context) Values() map[string]interface{} {
+	return ctx.values
 }
 
 // Body returns body
@@ -111,10 +116,10 @@ func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) er
 	if _, ok := v.(error); ok {
 		isError = true
 	}
-	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.Values)
+	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.values)
 	return cli.PushMsg(rsp, ctx.timeout)
 }
 
 func newContext(cli *Client, msg *Message, handlers []HandlerFunc) *Context {
-	return &Context{Client: cli, Message: msg, Values: msg.Values, done: false, index: -1, handlers: handlers}
+	return &Context{Client: cli, Message: msg, values: msg.values, done: false, index: -1, handlers: handlers}
 }

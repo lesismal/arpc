@@ -15,6 +15,10 @@ func TestContext_Get(t *testing.T) {
 	if v, ok := ctx.Get("key"); ok {
 		t.Fatalf("Context.Get() error, returns %v, want nil", v)
 	}
+	values := ctx.Values()
+	if len(values) > 0 {
+		t.Fatalf("invalid Context.Values() length, returns %v, want 0", len(values))
+	}
 }
 
 func TestContext_Set(t *testing.T) {

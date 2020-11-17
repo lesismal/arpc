@@ -96,6 +96,14 @@ func TestMessage_Error(t *testing.T) {
 	}
 }
 
+func TestMessage_Values(t *testing.T) {
+	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
+	values := msg.Values()
+	if len(values) > 0 {
+		t.Fatalf("invalid Message.Values() length, returns %v, want 0", len(values))
+	}
+}
+
 func TestMessage_SetFlagBit(t *testing.T) {
 	msg := newMessage(CmdRequest, "hello", "hello", false, false, 0, DefaultHandler, codec.DefaultCodec, nil)
 	for i := 0; i < 8; i++ {
