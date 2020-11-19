@@ -8,22 +8,37 @@ import (
 	"log"
 )
 
-// DefaultLogger instance
-var DefaultLogger Logger = &logger{level: LogLevelInfo}
+// DefaultLogger is the default logger and is used by arpc
+var DefaultLogger Logger = &logger{level: LevelInfo}
 
 const (
-	// LogLevelAll .
-	LogLevelAll = iota
-	// LogLevelDebug .
-	LogLevelDebug
-	// LogLevelInfo .
-	LogLevelInfo
+	// LevelAll enables all logs.
+	LevelAll = iota
+	// LevelDebug logs are usually disabled in production.
+	LevelDebug
+	// LevelInfo is the default logging priority.
+	LevelInfo
+	// LevelWarn .
+	LevelWarn
+	// LevelError .
+	LevelError
+	// LevelNone disables all logs.
+	LevelNone
+)
+
+const (
+	// LogLevelAll enables all logs.
+	LogLevelAll = LevelAll
+	// LogLevelDebug logs are usually disabled in production.
+	LogLevelDebug = LevelDebug
+	// LogLevelInfo is the default logging priority.
+	LogLevelInfo = LevelInfo
 	// LogLevelWarn .
-	LogLevelWarn
+	LogLevelWarn = LevelWarn
 	// LogLevelError .
-	LogLevelError
-	// LogLevelNone .
-	LogLevelNone
+	LogLevelError = LevelError
+	// LogLevelNone disables all logs.
+	LogLevelNone = LevelNone
 )
 
 // Logger defines log interface
@@ -35,13 +50,18 @@ type Logger interface {
 	Error(format string, v ...interface{})
 }
 
-// SetLogger set default logger for arpc
+// SetLogger sets default logger.
 func SetLogger(l Logger) {
 	DefaultLogger = l
 }
 
-// SetLogLevel .
+// SetLogLevel may be deprecated in the future.
 func SetLogLevel(lvl int) {
+	SetLevel(lvl)
+}
+
+// SetLevel sets default logger's priority.
+func SetLevel(lvl int) {
 	switch lvl {
 	case LogLevelAll, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelNone:
 		DefaultLogger.SetLogLevel(lvl)
@@ -51,13 +71,18 @@ func SetLogLevel(lvl int) {
 	}
 }
 
-// logger defines default logger
+// logger implements Logger and is used in arpc by default.
 type logger struct {
 	level int
 }
 
-// SetLogLevel .
+// SetLogLevel may be deprecated in the future.
 func (l *logger) SetLogLevel(lvl int) {
+	l.SetLevel(lvl)
+}
+
+// SetLevel sets logs priority.
+func (l *logger) SetLevel(lvl int) {
 	switch lvl {
 	case LogLevelAll, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelNone:
 		l.level = lvl
@@ -67,56 +92,56 @@ func (l *logger) SetLogLevel(lvl int) {
 	}
 }
 
-// Debug .
+// Debug uses log.Printf to log a message at LevelDebug.
 func (l *logger) Debug(format string, v ...interface{}) {
 	if LogLevelDebug >= l.level {
 		log.Printf("[DBG] "+format, v...)
 	}
 }
 
-// Info .
+// Info uses log.Printf to log a message at LevelInfo.
 func (l *logger) Info(format string, v ...interface{}) {
 	if LogLevelInfo >= l.level {
 		log.Printf("[INF] "+format, v...)
 	}
 }
 
-// Warn .
+// Warn uses log.Printf to log a message at LevelWarn.
 func (l *logger) Warn(format string, v ...interface{}) {
 	if LogLevelWarn >= l.level {
 		log.Printf("[WRN] "+format, v...)
 	}
 }
 
-// Error .
+// Error uses log.Printf to log a message at LevelError.
 func (l *logger) Error(format string, v ...interface{}) {
 	if LogLevelError >= l.level {
 		log.Printf("[Err] "+format, v...)
 	}
 }
 
-// Debug .
+// Debug uses DefaultLogger to log a message at LevelDebug.
 func Debug(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Debug(format, v...)
 	}
 }
 
-// Info .
+// Info uses DefaultLogger to log a message at LevelInfo.
 func Info(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Info(format, v...)
 	}
 }
 
-// Warn .
+// Warn uses DefaultLogger to log a message at LevelWarn.
 func Warn(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Warn(format, v...)
 	}
 }
 
-// Error .
+// Error uses DefaultLogger to log a message at LevelError.
 func Error(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Error(format, v...)

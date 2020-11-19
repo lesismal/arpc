@@ -5,8 +5,6 @@
 package util
 
 import (
-	// "fmt"
-	// "runtime"
 	"runtime/debug"
 	"unsafe"
 
@@ -14,39 +12,35 @@ import (
 	"github.com/lesismal/arpc/log"
 )
 
-const (
-	separator = "---------------------------------------\n"
-)
-
 // Empty struct
 type Empty struct{}
 
-// Recover recover panic and log stacks's info
+// Recover handles panic and logs stack info
 func Recover() {
 	if err := recover(); err != nil {
-		log.Error("%sruntime error: %v\ntraceback:\n%v\n%v", separator, err, string(debug.Stack()), separator)
+		log.Error("runtime error: %v\ntraceback:\n%v\n", err, string(debug.Stack()))
 	}
 }
 
-// Safe wrap a func with panic recover
+// Safe wraps a function-calling with panic recovery
 func Safe(call func()) {
 	defer Recover()
 	call()
 }
 
-// StrToBytes hack string to []byte
+// StrToBytes hacks string to []byte
 func StrToBytes(s string) []byte {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}
 	return *(*[]byte)(unsafe.Pointer(&h))
 }
 
-// BytesToStr hack []byte to string
+// BytesToStr hacks []byte to string
 func BytesToStr(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
-// ValueToBytes convert values to []byte
+// ValueToBytes converts values to []byte
 func ValueToBytes(codec acodec.Codec, v interface{}) []byte {
 	if v == nil {
 		return nil

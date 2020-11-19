@@ -27,16 +27,21 @@ const (
 // DialerFunc .
 type DialerFunc func() (net.Conn, error)
 
+// rpcSession represents an active calling session.
 type rpcSession struct {
 	seq  uint64
 	done chan *Message
 }
 
+// newSession creates rpcSession
 func newSession(seq uint64) *rpcSession {
 	return &rpcSession{seq: seq, done: make(chan *Message, 1)}
 }
 
-// Client defines rpc client struct
+// Client represents an arpc Client.
+// There may be multiple outstanding Calls or Notifys associated
+// with a single Client, and a Client may be used by
+// multiple goroutines simultaneously.
 type Client struct {
 	Conn     net.Conn
 	Reader   io.Reader
@@ -378,10 +383,6 @@ func (c *Client) Stop() {
 func (c *Client) newRequestMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, args ...interface{}) *Message {
 	if len(args) == 0 {
 		return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, nil)
-	}
-	values, ok := args[0].(M)
-	if ok {
-		return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, values)
 	}
 	return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, args[0].(map[string]interface{}))
 }

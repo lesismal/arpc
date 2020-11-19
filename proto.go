@@ -62,7 +62,7 @@ const (
 )
 
 // M is a shortcut for map[string]interface{}
-type M map[string]interface{}
+// type M map[string]interface{}
 
 // Header defines rpc head
 type Header []byte

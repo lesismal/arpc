@@ -240,11 +240,11 @@ func testClientCallMethodString(c *Client, t *testing.T) {
 		req = "hello"
 		rsp = ""
 	)
-	if err = c.Call(methodCallString, req, &rsp, time.Second, M{}); err != nil {
-		t.Fatalf("Client.Call() error = %v", err)
-	} else if rsp != req {
-		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
-	}
+	// if err = c.Call(methodCallString, req, &rsp, time.Second, M{}); err != nil {
+	// 	t.Fatalf("Client.Call() error = %v", err)
+	// } else if rsp != req {
+	// 	t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
+	// }
 	if err = c.Call(methodCallString, &req, &rsp, -1, map[string]interface{}{}); err != nil {
 		t.Fatalf("Client.Call() error = %v", err)
 	} else if rsp != req {

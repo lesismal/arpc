@@ -212,7 +212,7 @@ handler.Use(func(ctx *arpc.Context) { ... })
 - Coder Middleware is used for converting a message data to your designed format, e.g encrypt/decrypt and compress/uncompress
 
 ```golang
-import "github.com/lesismal/arpc/middleware/coder"
+import "github.com/lesismal/arpc/middleware/coder/gzip"
 
 var handler arpc.Handler
 
@@ -223,7 +223,7 @@ handler = server.Handler
 // client
 handler = client.Handler
 
-handler.UseCoder(&coder.Gzip{})
+handler.UseCoder(gzip.New())
 handler.Handle("/echo", func(ctx *arpc.Context) { ... })
 ```
 

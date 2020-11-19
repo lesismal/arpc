@@ -14,16 +14,17 @@ import (
 	"github.com/lesismal/arpc/util"
 )
 
-// DefaultHandler instance
+// DefaultHandler is the default Handler used by arpc
 var DefaultHandler Handler = NewHandler()
 
-// HandlerFunc type define
+// HandlerFunc defines the handler func used by arpc router middleware.
 type HandlerFunc func(*Context)
 
-// RouterHandler handle message
-type RouterHandler struct {
-	Async    bool
-	Handlers []HandlerFunc
+// routerHandler saves all middleware and method-handler funcs for every method by register order,
+// all the func are called one by one for each calling.
+type routerHandler struct {
+	async    bool
+	handlers []HandlerFunc
 }
 
 // Handler defines net message handler
@@ -150,7 +151,7 @@ type handler struct {
 	middles   []HandlerFunc
 	msgCoders []MessageCoder
 
-	routes map[string]*RouterHandler
+	routes map[string]*routerHandler
 }
 
 func (h *handler) Clone() Handler {
@@ -161,13 +162,13 @@ func (h *handler) Clone() Handler {
 	cp.msgCoders = make([]MessageCoder, len(h.msgCoders))
 	copy(cp.msgCoders, h.msgCoders)
 
-	cp.routes = map[string]*RouterHandler{}
+	cp.routes = map[string]*routerHandler{}
 	for k, v := range h.routes {
-		rh := &RouterHandler{
-			Async:    v.Async,
-			Handlers: make([]HandlerFunc, len(v.Handlers)),
+		rh := &routerHandler{
+			async:    v.async,
+			handlers: make([]HandlerFunc, len(v.handlers)),
 		}
-		copy(rh.Handlers, v.Handlers)
+		copy(rh.handlers, v.handlers)
 		cp.routes[k] = rh
 	}
 
@@ -319,12 +320,12 @@ func (h *handler) Use(cb HandlerFunc) {
 	}
 	h.middles = append(h.middles, cbWithNext)
 	for k, v := range h.routes {
-		rh := &RouterHandler{
-			Async:    v.Async,
-			Handlers: make([]HandlerFunc, len(v.Handlers)+1),
+		rh := &routerHandler{
+			async:    v.async,
+			handlers: make([]HandlerFunc, len(v.handlers)+1),
 		}
-		copy(rh.Handlers, v.Handlers)
-		rh.Handlers[len(v.Handlers)] = cbWithNext
+		copy(rh.handlers, v.handlers)
+		rh.handlers[len(v.handlers)] = cbWithNext
 		h.routes[k] = rh
 	}
 }
@@ -352,19 +353,19 @@ func (h *handler) HandleNotFound(cb HandlerFunc) {
 
 func (h *handler) handle(method string, cb HandlerFunc, args ...interface{}) {
 	if h.routes == nil {
-		h.routes = map[string]*RouterHandler{}
+		h.routes = map[string]*routerHandler{}
 	}
 	if len(method) > MaxMethodLen {
 		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
 	}
 
 	if _, ok := h.routes[""]; !ok {
-		rh := &RouterHandler{
-			Async:    false,
-			Handlers: make([]HandlerFunc, len(h.middles)+1),
+		rh := &routerHandler{
+			async:    false,
+			handlers: make([]HandlerFunc, len(h.middles)+1),
 		}
-		copy(rh.Handlers, h.middles)
-		rh.Handlers[len(h.middles)] = func(ctx *Context) {
+		copy(rh.handlers, h.middles)
+		rh.handlers[len(h.middles)] = func(ctx *Context) {
 			ctx.Error(ErrMethodNotFound)
 			ctx.Next()
 		}
@@ -381,12 +382,12 @@ func (h *handler) handle(method string, cb HandlerFunc, args ...interface{}) {
 			async = bv
 		}
 	}
-	rh := &RouterHandler{
-		Async:    async,
-		Handlers: make([]HandlerFunc, len(h.middles)+1),
+	rh := &routerHandler{
+		async:    async,
+		handlers: make([]HandlerFunc, len(h.middles)+1),
 	}
-	copy(rh.Handlers, h.middles)
-	rh.Handlers[len(h.middles)] = func(ctx *Context) {
+	copy(rh.handlers, h.middles)
+	rh.handlers[len(h.middles)] = func(ctx *Context) {
 		cb(ctx)
 		ctx.Next()
 	}
@@ -461,8 +462,8 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 	case CmdRequest, CmdNotify:
 		method := msg.method()
 		if rh, ok := h.routes[method]; ok {
-			ctx := newContext(c, msg, rh.Handlers)
-			if !rh.Async {
+			ctx := newContext(c, msg, rh.handlers)
+			if !rh.async {
 				ctx.Next()
 			} else {
 				go ctx.Next()
@@ -470,10 +471,10 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 		} else {
 			if cmd == CmdRequest {
 				if rh, ok = h.routes[""]; ok {
-					ctx := newContext(c, msg, rh.Handlers)
+					ctx := newContext(c, msg, rh.handlers)
 					ctx.Next()
 				} else {
-					ctx := newContext(c, msg, rh.Handlers)
+					ctx := newContext(c, msg, rh.handlers)
 					ctx.Error(ErrMethodNotFound)
 				}
 			}
