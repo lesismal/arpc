@@ -20,7 +20,7 @@ type Client struct {
 
 	Password string
 
-	psmux sync.RWMutex
+	psmux sync.Mutex
 
 	topicHandlerMap map[string]TopicHandler
 
@@ -135,15 +135,15 @@ func (c *Client) OnPublish(h TopicHandler) {
 }
 
 // func (c *Client) invalidTopic(topic string) bool {
-// 	c.psmux.RLock()
+// 	c.psmux.Lock()
 // 	_, ok := c.topicHandlerMap[topic]
-// 	c.psmux.RUnlock()
+// 	c.psmux.Unlock()
 
 // 	return !ok
 // }
 
 func (c *Client) initTopics() {
-	c.psmux.RLock()
+	c.psmux.Lock()
 	for name := range c.topicHandlerMap {
 		topicName := name
 		go util.Safe(func() {
@@ -161,7 +161,7 @@ func (c *Client) initTopics() {
 			}
 		})
 	}
-	c.psmux.RUnlock()
+	c.psmux.Unlock()
 }
 
 func (c *Client) onPublish(ctx *arpc.Context) {
@@ -180,12 +180,12 @@ func (c *Client) onPublish(ctx *arpc.Context) {
 	}
 
 	if c.onPublishHandler == nil {
-		c.psmux.RLock()
+		c.psmux.Lock()
 		if h, ok := c.topicHandlerMap[topic.Name]; ok {
 			h(topic)
-			c.psmux.RUnlock()
+			c.psmux.Unlock()
 		} else {
-			c.psmux.RUnlock()
+			c.psmux.Unlock()
 		}
 	} else {
 		c.onPublishHandler(topic)

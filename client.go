@@ -55,7 +55,7 @@ type Client struct {
 	running      bool
 	reconnecting bool
 
-	mux             sync.RWMutex
+	mux             sync.Mutex
 	seq             uint64
 	sessionMap      map[uint64]*rpcSession
 	asyncHandlerMap map[uint64]HandlerFunc
@@ -70,8 +70,8 @@ type Client struct {
 
 // Get returns value for key
 func (c *Client) Get(key string) (interface{}, bool) {
-	c.mux.RLock()
-	defer c.mux.RUnlock()
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	if len(c.values) == 0 {
 		return nil, false
 	}
