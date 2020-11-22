@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpcext/quic"
+	"github.com/lesismal/arpc/protocol/quic"
 )
 
 func main() {

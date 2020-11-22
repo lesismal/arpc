@@ -571,7 +571,7 @@ func (c *Client) recvLoop() {
 		for c.running {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
-				log.Debug("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
+				log.Error("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
 				c.Stop()
 				return
 			}
@@ -584,7 +584,7 @@ func (c *Client) recvLoop() {
 			for {
 				msg, err = c.Handler.Recv(c)
 				if err != nil {
-					log.Info("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
+					log.Error("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
 					break
 				}
 				c.Handler.OnMessage(c, msg)
@@ -596,8 +596,13 @@ func (c *Client) recvLoop() {
 			c.clearSession()
 			c.clearAsyncHandler()
 
+			// if c.running {
+			// 	log.Info("%v\t%v\tReconnect Start", c.Handler.LogTag(), addr)
+			// }
+			i := 0
 			for c.running {
-				log.Debug("%v\t%v\tReconnecting ...", c.Handler.LogTag(), addr)
+				i++
+				log.Info("%v\t%v\tReconnect Trying %v", c.Handler.LogTag(), addr, i)
 				conn, err := c.Dialer()
 				if err == nil {
 					c.Conn = conn

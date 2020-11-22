@@ -116,7 +116,7 @@ func (l *logger) Warn(format string, v ...interface{}) {
 // Error uses log.Printf to log a message at LevelError.
 func (l *logger) Error(format string, v ...interface{}) {
 	if LogLevelError >= l.level {
-		log.Printf("[Err] "+format, v...)
+		log.Printf("[ERR] "+format, v...)
 	}
 }
 
