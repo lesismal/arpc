@@ -87,7 +87,7 @@ type Handler interface {
 	// SetReaderWrapper registers reader wrapper for net.Conn.
 	SetReaderWrapper(wrapper func(conn net.Conn) io.Reader)
 
-	// Recv reads and returns a message from a client.
+	// Recv reads a message from a client.
 	Recv(c *Client) (*Message, error)
 	// Send writes buffer data to a connection.
 	Send(c net.Conn, buffer []byte) (int, error)
@@ -128,7 +128,7 @@ type Handler interface {
 	// OnMessage finds method/router middlewares and handler, then call them one by one.
 	OnMessage(c *Client, m *Message)
 
-	// GetBuffer makes a buffer by size and returns it.
+	// GetBuffer makes a buffer by size.
 	GetBuffer(size int) []byte
 
 	// SetBufferFactory registers buffer maker.

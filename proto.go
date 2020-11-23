@@ -51,28 +51,25 @@ const (
 )
 
 const (
-	// HeadLen defines rpc packet's head length
+	// HeadLen represents Message head length.
 	HeadLen int = 16
 
-	// MaxMethodLen limit
+	// MaxMethodLen limits Message method length.
 	MaxMethodLen int = 127
 
-	// MaxBodyLen limit
+	// MaxBodyLen limits Message body length.
 	MaxBodyLen int = 1024*1024*64 - 16
 )
 
-// M is a shortcut for map[string]interface{}
-// type M map[string]interface{}
-
-// Header defines rpc head
+// Header defines Message head
 type Header []byte
 
-// BodyLen return length of message body
+// BodyLen returns Message body length.
 func (h Header) BodyLen() int {
 	return int(binary.LittleEndian.Uint32(h[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd]))
 }
 
-// message clones header with body length
+// message creates a Message by body length.
 func (h Header) message(handler Handler) (*Message, error) {
 	bodyLen := h.BodyLen()
 	if bodyLen < 0 || bodyLen > MaxBodyLen {
@@ -84,33 +81,33 @@ func (h Header) message(handler Handler) (*Message, error) {
 	return m, nil
 }
 
-// Message defines rpc packet
+// Message represents an arpc Message.
 type Message struct {
 	Buffer []byte
 	values map[string]interface{}
 }
 
-// Len returns total length of buffer
+// Len returns total length of buffer.
 func (m *Message) Len() int {
 	return len(m.Buffer)
 }
 
-// Cmd returns cmd
+// Cmd returns cmd.
 func (m *Message) Cmd() byte {
 	return m.Buffer[HeaderIndexCmd]
 }
 
-// SetCmd sets cmd
+// SetCmd sets cmd.
 func (m *Message) SetCmd(cmd byte) {
 	m.Buffer[HeaderIndexCmd] = cmd
 }
 
-// IsError returns error flag
+// IsError returns error flag.
 func (m *Message) IsError() bool {
 	return m.Buffer[HeaderIndexFlag]&HeaderFlagMaskError > 0
 }
 
-// SetError sets error flag
+// SetError sets error flag.
 func (m *Message) SetError(isError bool) {
 	if isError {
 		m.Buffer[HeaderIndexFlag] |= HeaderFlagMaskError
@@ -119,7 +116,7 @@ func (m *Message) SetError(isError bool) {
 	}
 }
 
-// Error returns error
+// Error returns error.
 func (m *Message) Error() error {
 	if !m.IsError() {
 		return nil
@@ -127,12 +124,12 @@ func (m *Message) Error() error {
 	return errors.New(util.BytesToStr(m.Buffer[HeadLen+m.MethodLen():]))
 }
 
-// IsAsync returns async flag
+// IsAsync returns async flag.
 func (m *Message) IsAsync() bool {
 	return m.Buffer[HeaderIndexFlag]&HeaderFlagMaskAsync > 0
 }
 
-// SetAsync sets async flag
+// SetAsync sets async flag.
 func (m *Message) SetAsync(isAsync bool) {
 	if isAsync {
 		m.Buffer[HeaderIndexFlag] |= HeaderFlagMaskAsync
@@ -141,12 +138,12 @@ func (m *Message) SetAsync(isAsync bool) {
 	}
 }
 
-// Values returns values
+// Values returns values.
 func (m *Message) Values() map[string]interface{} {
 	return m.values
 }
 
-// SetFlagBit sets flag bit with value by index
+// SetFlagBit sets flag bit value by index.
 func (m *Message) SetFlagBit(index int, value bool) error {
 	switch index {
 	case 0, 1, 2, 3, 4, 5, 6, 7:
@@ -169,7 +166,7 @@ func (m *Message) SetFlagBit(index int, value bool) error {
 	return ErrInvalidFlagBitIndex
 }
 
-// IsFlagBitSet returns flag bit value
+// IsFlagBitSet returns flag bit value.
 func (m *Message) IsFlagBitSet(index int) bool {
 	switch index {
 	case 0, 1, 2, 3, 4, 5, 6, 7:
@@ -182,17 +179,17 @@ func (m *Message) IsFlagBitSet(index int) bool {
 	return false
 }
 
-// MethodLen returns method length
+// MethodLen returns method length.
 func (m *Message) MethodLen() int {
 	return int(m.Buffer[HeaderIndexMethodLen])
 }
 
-// SetMethodLen sets method length
+// SetMethodLen sets method length.
 func (m *Message) SetMethodLen(l int) {
 	m.Buffer[HeaderIndexMethodLen] = byte(l)
 }
 
-// Method returns method
+// Method returns method.
 func (m *Message) Method() string {
 	return string(m.Buffer[HeadLen : HeadLen+m.MethodLen()])
 }
@@ -201,33 +198,33 @@ func (m *Message) method() string {
 	return util.BytesToStr(m.Buffer[HeadLen : HeadLen+m.MethodLen()])
 }
 
-// BodyLen returns length of body[ method && body ]
+// BodyLen returns body length.
 func (m *Message) BodyLen() int {
 	return int(binary.LittleEndian.Uint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd]))
 }
 
-// SetBodyLen sets length of body[ method && body ]
+// SetBodyLen sets body length.
 func (m *Message) SetBodyLen(l int) {
 	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(l))
 }
 
-// Seq returns sequence
+// Seq returns sequence number.
 func (m *Message) Seq() uint64 {
 	return binary.LittleEndian.Uint64(m.Buffer[HeaderIndexSeqBegin:HeaderIndexSeqEnd])
 }
 
-// SetSeq sets sequence
+// SetSeq sets sequence number.
 func (m *Message) SetSeq(seq uint64) {
 	binary.LittleEndian.PutUint64(m.Buffer[HeaderIndexSeqBegin:HeaderIndexSeqEnd], seq)
 }
 
-// Data returns data after method
+// Data returns payload data after method.
 func (m *Message) Data() []byte {
 	length := HeadLen + m.MethodLen()
 	return m.Buffer[length:]
 }
 
-// Get returns value for key
+// Get returns value for key.
 func (m *Message) Get(key string) (interface{}, bool) {
 	if len(m.values) == 0 {
 		return nil, false
@@ -236,7 +233,7 @@ func (m *Message) Get(key string) (interface{}, bool) {
 	return value, ok
 }
 
-// Set sets key-value pair
+// Set sets key-value pair.
 func (m *Message) Set(key string, value interface{}) {
 	if value == nil {
 		return
@@ -247,7 +244,7 @@ func (m *Message) Set(key string, value interface{}) {
 	m.values[key] = value
 }
 
-// newMessage factory
+// newMessage creates a Message.
 func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[string]interface{}) *Message {
 	var (
 		data    []byte
@@ -283,7 +280,7 @@ func checkMethod(method string) error {
 	return nil
 }
 
-// MessageCoder .
+// MessageCoder defines Message coding middleware interface.
 type MessageCoder interface {
 	// Encode wrap message before send to client
 	Encode(*Client, *Message) *Message

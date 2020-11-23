@@ -23,7 +23,7 @@ type Context struct {
 	handlers []HandlerFunc
 }
 
-// Get returns value for key
+// Get returns value for key.
 func (ctx *Context) Get(key string) (interface{}, bool) {
 	if len(ctx.values) == 0 {
 		return nil, false
@@ -32,7 +32,7 @@ func (ctx *Context) Get(key string) (interface{}, bool) {
 	return value, ok
 }
 
-// Set sets key-value pair
+// Set sets key-value pair.
 func (ctx *Context) Set(key string, value interface{}) {
 	if value == nil {
 		return
@@ -43,18 +43,18 @@ func (ctx *Context) Set(key string, value interface{}) {
 	ctx.values[key] = value
 }
 
-// Values returns values
+// Values returns values.
 func (ctx *Context) Values() map[string]interface{} {
 	return ctx.values
 }
 
-// Body returns body
+// Body returns body.
 func (ctx *Context) Body() []byte {
 	return ctx.Message.Data()
 }
 
 // Bind parses the body data and stores the result
-// in the value pointed to by v
+// in the value pointed to by v.
 func (ctx *Context) Bind(v interface{}) error {
 	msg := ctx.Message
 	if msg.IsError() {
@@ -76,17 +76,17 @@ func (ctx *Context) Bind(v interface{}) error {
 	return nil
 }
 
-// Write responses message to client
+// Write responses a Message to the Client.
 func (ctx *Context) Write(v interface{}) error {
 	return ctx.write(v, false, TimeForever)
 }
 
-// WriteWithTimeout responses message to client with timeout
+// WriteWithTimeout responses a Message to the Client with timeout.
 func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error {
 	return ctx.write(v, false, timeout)
 }
 
-// Error responses error message to client
+// Error responses an error Message to the Client.
 func (ctx *Context) Error(v interface{}) error {
 	return ctx.write(v, true, TimeForever)
 }

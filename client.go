@@ -68,7 +68,7 @@ type Client struct {
 	values map[string]interface{}
 }
 
-// Get returns value for key
+// Get returns value for key.
 func (c *Client) Get(key string) (interface{}, bool) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -79,7 +79,7 @@ func (c *Client) Get(key string) (interface{}, bool) {
 	return value, ok
 }
 
-// Set sets key-value pair
+// Set sets key-value pair.
 func (c *Client) Set(key string, value interface{}) {
 	// if value == nil {
 	// 	return
