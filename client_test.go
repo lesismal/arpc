@@ -26,6 +26,7 @@ var (
 	methodNotifyWith   = "/notifywith"
 	methodCallError    = "/callerror"
 	methodCallNotFound = "/notfound"
+	methodCallTimeout  = "/timeout"
 	methodInvalidLong  = `1234567890
 						1234567890
 						1234567890
@@ -91,7 +92,6 @@ func init() {
 	log.Println("AsyncResponse:", AsyncResponse())
 	log.Println("RecvBufferSize:", RecvBufferSize())
 	log.Println("SendQueueSize:", SendQueueSize())
-
 }
 
 func initServer() {
@@ -132,11 +132,15 @@ func initServer() {
 		ctx.Bind(nil)
 	}, false)
 	testServer.Handler.Handle(methodNotifyWith, func(ctx *Context) {
-		ctx.Bind(nil)
 	}, false)
 	testServer.Handler.Handle(methodCallError, func(ctx *Context) {
-		ctx.Bind(nil)
 		ctx.Error(ctx.Message.Data())
+	}, false)
+	testServer.Handler.Handle(methodCallTimeout, func(ctx *Context) {
+		str := ""
+		ctx.Bind(&str)
+		time.Sleep(time.Second / 5)
+		ctx.Write(str)
 	}, false)
 	ln, err := net.Listen("tcp", testClientServerAddr)
 	if err != nil {
@@ -179,6 +183,20 @@ func TestClient_Set(t *testing.T) {
 		t.Fatalf("Client.Get() failed: Get '%v', want '%v'", cv, value)
 	}
 
+}
+
+func TestClient_Delete(t *testing.T) {
+	key := "key"
+	value := "value"
+
+	c := &Client{}
+	c.running = true
+	c.Set(key, value)
+	c.Delete(key)
+	cv, ok := c.Get(key)
+	if ok {
+		t.Fatalf("Client.Get() failed: Get '%v', want nil", cv)
+	}
 }
 
 func TestClient_NewMessage(t *testing.T) {
@@ -321,6 +339,12 @@ func testClientCallError(c *Client, t *testing.T) {
 		t.Fatalf("Client.Call() error is nil, want %v", ErrMethodNotFound)
 	} else if err.Error() != ErrMethodNotFound.Error() {
 		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrMethodNotFound.Error())
+	}
+
+	if err = c.Call(methodCallTimeout, "", nil, time.Second/10); err == nil {
+		t.Fatalf("Client.Call() error is nil, want %v", ErrClientTimeout)
+	} else if err.Error() != ErrClientTimeout.Error() {
+		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientTimeout.Error())
 	}
 
 	if err = c.Call(methodInvalidLong, "", nil, time.Second); err == nil {

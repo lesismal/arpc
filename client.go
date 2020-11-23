@@ -426,7 +426,7 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 		select {
 		case c.chSend <- msg:
 		case <-timer.C:
-			c.Handler.OnOverstock(c, msg)
+			// c.Handler.OnOverstock(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
