@@ -17,117 +17,125 @@ import (
 // DefaultHandler is the default Handler used by arpc
 var DefaultHandler Handler = NewHandler()
 
-// HandlerFunc defines the handler func used by arpc router middleware.
+// HandlerFunc defines message handler of arpc middleware and method/router.
 type HandlerFunc func(*Context)
 
-// routerHandler saves all middleware and method-handler funcs for every method by register order,
-// all the func are called one by one for each calling.
+// routerHandler saves all middleware and method/router handler funcs
+// for every method by register order,
+// all the funcs will be called one by one for every message.
 type routerHandler struct {
 	async    bool
 	handlers []HandlerFunc
 }
 
-// Handler defines net message handler
+// Handler defines net message handler interface.
 type Handler interface {
-	// Clone returns a copy
+	// Clone returns a copy of Handler.
 	Clone() Handler
 
-	// LogTag returns log tag value
+	// LogTag returns log tag value.
 	LogTag() string
-	// SetLogTag value
+	// SetLogTag sets log tag.
 	SetLogTag(tag string)
 
-	// HandleConnected registers callback on connected
+	// HandleConnected registers handler which will be called when client connected.
 	HandleConnected(onConnected func(*Client))
-	// OnConnected would be called when Client connected
+	// OnConnected will be called when client is connected.
 	OnConnected(c *Client)
 
-	// HandleDisconnected registers callback on disconnected
+	// HandleDisconnected registers handler which will be called when client is disconnected.
 	HandleDisconnected(onDisConnected func(*Client))
-	// OnDisconnected would be called when Client disconnected
+	// OnDisconnected will be called when client is disconnected.
 	OnDisconnected(c *Client)
 
-	// HandleOverstock registers callback on Client chSend overstock
+	// HandleOverstock registers handler which will be called when client send queue is overstock.
 	HandleOverstock(onOverstock func(c *Client, m *Message))
-	// OnOverstock would be called when Client chSend is full
+	// OnOverstock will be called when client chSend is full.
 	OnOverstock(c *Client, m *Message)
 
-	// HandleMessageDropped registers callback on message dropped
+	// HandleMessageDropped registers handler which will be called when message dropped.
 	HandleMessageDropped(onOverstock func(c *Client, m *Message))
-	// OnOverstock would be called when message is dropped
+	// OnOverstock will be called when message is dropped.
 	OnMessageDropped(c *Client, m *Message)
 
-	// HandleSessionMiss registers callback on async message seq not found
+	// HandleSessionMiss registers handler which will be called when async message seq not found.
 	HandleSessionMiss(onSessionMiss func(c *Client, m *Message))
-	// OnSessionMiss would be called when Client async message seq not found
+	// OnSessionMiss will be called when async message seq not found.
 	OnSessionMiss(c *Client, m *Message)
 
-	// BeforeRecv registers callback before Recv
+	// BeforeRecv registers handler which will be called before Recv.
 	BeforeRecv(h func(net.Conn) error)
-	// BeforeSend registers callback before Send
+	// BeforeSend registers handler which will be called before Send.
 	BeforeSend(h func(net.Conn) error)
 
-	// BatchRecv flag
+	// BatchRecv returns BatchRecv flag.
 	BatchRecv() bool
-	// SetBatchRecv flag
+	// SetBatchRecv sets BatchRecv flag.
 	SetBatchRecv(batch bool)
-	// BatchSend flag
+	// BatchSend returns BatchSend flag.
 	BatchSend() bool
-	// SetBatchSend flag
+	// SetBatchSend sets BatchSend flag.
 	SetBatchSend(batch bool)
 
-	// AsyncResponse flag
+	// AsyncResponse returns AsyncResponse flag.
 	AsyncResponse() bool
-	// SetAsyncResponse flag
+	// SetAsyncResponse sets AsyncResponse flag.
 	SetAsyncResponse(async bool)
 
-	// WrapReader wraps net.Conn to Read data with io.Reader, buffer e.g.
+	// WrapReader wraps net.Conn to Read data with io.Reader.
 	WrapReader(conn net.Conn) io.Reader
-	// SetReaderWrapper sets reader wrapper
+	// SetReaderWrapper registers reader wrapper for net.Conn.
 	SetReaderWrapper(wrapper func(conn net.Conn) io.Reader)
 
-	// Recv reads and returns a message from a client
+	// Recv reads and returns a message from a client.
 	Recv(c *Client) (*Message, error)
-	// Send writes a message to a connection
-	Send(c net.Conn, buf []byte) (int, error)
-	// SendN writes batch messages to a connection
+	// Send writes buffer data to a connection.
+	Send(c net.Conn, buffer []byte) (int, error)
+	// SendN writes multiple buffer data to a connection.
 	SendN(conn net.Conn, buffers net.Buffers) (int, error)
 
-	// RecvBufferSize returns Client.Reader size
+	// RecvBufferSize returns client's read buffer size.
 	RecvBufferSize() int
-	// SetRecvBufferSize sets Client.Reader size
+	// SetRecvBufferSize sets client's read buffer size.
 	SetRecvBufferSize(size int)
 
-	// SendQueueSize returns Client.chSend capacity
+	// SendQueueSize returns client's send queue channel capacity.
 	SendQueueSize() int
-	// SetSendQueueSize sets Client.chSend capacity
+	// SetSendQueueSize sets client's send queue channel capacity.
 	SetSendQueueSize(size int)
 
-	// Use sets middleware
+	// Use registers method/router handler middleware.
 	Use(h HandlerFunc)
 
-	// UseCoder sets middleware for message encoding/decoding
+	// UseCoder registers message coding middleware,
+	// coder.Encode will be called before message send,
+	// coder.Decode will be called after message recv.
 	UseCoder(coder MessageCoder)
 
-	// Coders returns encoding/decoding middlewares
+	// Coders returns coding middlewares.
 	Coders() []MessageCoder
 
-	// Handle registers method handler
+	// Handle registers method/router handler.
+	//
+	// If pass a Boolean value of "true", the handler will be called asynchronously in a new goroutine,
+	// Else the handler will be called synchronously in the client's reading goroutine one by one.
 	Handle(m string, h HandlerFunc, args ...interface{})
 
-	// HandleNotFound registers "" method handler
+	// HandleNotFound registers "" method/router handler,
+	// It will be called when mothod/router is not found.
 	HandleNotFound(h HandlerFunc)
 
-	// OnMessage dispatches messages
+	// OnMessage finds method/router middlewares and handler, then call them one by one.
 	OnMessage(c *Client, m *Message)
 
-	// GetBuffer factory
+	// GetBuffer makes a buffer by size and returns it.
 	GetBuffer(size int) []byte
 
-	// SetBufferFactory registers buffer factory handler
+	// SetBufferFactory registers buffer maker.
 	SetBufferFactory(f func(int) []byte)
 }
 
+// handler represents a default Handler implementation.
 type handler struct {
 	logtag         string
 	batchRecv      bool
@@ -519,7 +527,7 @@ func (h *handler) SetBufferFactory(f func(int) []byte) {
 	h.bufferFactory = f
 }
 
-// NewHandler factory
+// NewHandler returns a default Handler implementation.
 func NewHandler() Handler {
 	h := &handler{
 		logtag:         "[ARPC CLI]",
@@ -535,127 +543,133 @@ func NewHandler() Handler {
 	return h
 }
 
-// SetHandler sets default handler
+// SetHandler sets default Handler.
 func SetHandler(h Handler) {
 	DefaultHandler = h
 }
 
-// SetLogTag value for DefaultHandler
+// SetLogTag sets DefaultHandler's log tag.
 func SetLogTag(tag string) {
 	DefaultHandler.SetLogTag(tag)
 }
 
-// HandleConnected registers callback on connected for DefaultHandler
+// HandleConnected registers default handler which will be called when client connected.
 func HandleConnected(onConnected func(*Client)) {
 	DefaultHandler.HandleConnected(onConnected)
 }
 
-// HandleDisconnected registers callback on disconnected for DefaultHandler
+// HandleDisconnected registers default handler which will be called when client disconnected.
 func HandleDisconnected(onDisConnected func(*Client)) {
 	DefaultHandler.HandleDisconnected(onDisConnected)
 }
 
-// HandleOverstock registers callback on Client chSend overstock for DefaultHandler
+// HandleOverstock registers default handler which will be called when client send queue is overstock.
 func HandleOverstock(onOverstock func(c *Client, m *Message)) {
 	DefaultHandler.HandleOverstock(onOverstock)
 }
 
-// HandleMessageDropped registers callback on message dropped for DefaultHandler
+// HandleMessageDropped registers default handler which will be called when message dropped.
 func HandleMessageDropped(onOverstock func(c *Client, m *Message)) {
 	DefaultHandler.HandleMessageDropped(onOverstock)
 }
 
-// HandleSessionMiss registers callback on async message seq not found for DefaultHandler
+// HandleSessionMiss registers default handler which will be called when async message seq not found.
 func HandleSessionMiss(onSessionMiss func(c *Client, m *Message)) {
 	DefaultHandler.HandleSessionMiss(onSessionMiss)
 }
 
-// BeforeRecv registers callback before Recv for DefaultHandler
+// BeforeRecv registers default handler which will be called before Recv.
 func BeforeRecv(h func(net.Conn) error) {
 	DefaultHandler.BeforeRecv(h)
 }
 
-// BeforeSend registers callback before Send for DefaultHandler
+// BeforeSend registers default handler which will be called before Send.
 func BeforeSend(h func(net.Conn) error) {
 	DefaultHandler.BeforeSend(h)
 }
 
-// BatchRecv flag
+// BatchRecv returns default BatchRecv flag.
 func BatchRecv() bool {
 	return DefaultHandler.BatchRecv()
 }
 
-// SetBatchRecv flag for DefaultHandler
+// SetBatchRecv sets default BatchRecv flag.
 func SetBatchRecv(batch bool) {
 	DefaultHandler.SetBatchRecv(batch)
 }
 
-// BatchSend flag
+// BatchSend returns default BatchSend flag.
 func BatchSend() bool {
 	return DefaultHandler.BatchSend()
 }
 
-// SetBatchSend flag for DefaultHandler
+// SetBatchSend sets default BatchSend flag.
 func SetBatchSend(batch bool) {
 	DefaultHandler.SetBatchSend(batch)
 }
 
-// AsyncResponse flag
+// AsyncResponse returns default AsyncResponse flag.
 func AsyncResponse() bool {
 	return DefaultHandler.AsyncResponse()
 }
 
-// SetAsyncResponse flag for DefaultHandler
+// SetAsyncResponse sets default AsyncResponse flag.
 func SetAsyncResponse(async bool) {
 	DefaultHandler.SetAsyncResponse(async)
 }
 
-// SetReaderWrapper sets reader wrapper for DefaultHandler
+// SetReaderWrapper registers default reader wrapper for net.Conn.
 func SetReaderWrapper(wrapper func(conn net.Conn) io.Reader) {
 	DefaultHandler.SetReaderWrapper(wrapper)
 }
 
-// RecvBufferSize returns Client.Reader size
+// RecvBufferSize returns default client's read buffer size.
 func RecvBufferSize() int {
 	return DefaultHandler.RecvBufferSize()
 }
 
-// SetRecvBufferSize sets Client.Reader size for DefaultHandler
+// SetRecvBufferSize sets default client's read buffer size.
 func SetRecvBufferSize(size int) {
 	DefaultHandler.SetRecvBufferSize(size)
 }
 
-// SendQueueSize returns Client.chSend capacity
+// SendQueueSize returns default client's send queue channel capacity.
 func SendQueueSize() int {
 	return DefaultHandler.SendQueueSize()
 }
 
-// SetSendQueueSize sets Client.chSend capacity for DefaultHandler
+// SetSendQueueSize sets default client's send queue channel capacity.
 func SetSendQueueSize(size int) {
 	DefaultHandler.SetSendQueueSize(size)
 }
 
-// Use sets middleware for DefaultHandler
+// Use registers default method/router handler middleware.
 func Use(h HandlerFunc) {
 	DefaultHandler.Use(h)
 }
 
-// UseCoder sets middleware for message encoding/decoding for DefaultHandler
+// UseCoder registers default message coding middleware,
+// coder.Encode will be called before message send,
+// coder.Decode will be called after message recv.
 func UseCoder(coder MessageCoder) {
 	DefaultHandler.UseCoder(coder)
 }
 
-// Handle registers method handler for DefaultHandler
+// Handle registers default method/router handler.
+//
+// If pass a Boolean value of "true", the handler will be called asynchronously in a new goroutine,
+// Else the handler will be called synchronously in the client's reading goroutine one by one.
 func Handle(m string, h HandlerFunc, args ...interface{}) {
 	DefaultHandler.Handle(m, h, args...)
 }
 
-// HandleNotFound registers "" method handler for DefaultHandler
+// HandleNotFound registers default "" method/router handler,
+// It will be called when mothod/router is not found.
 func HandleNotFound(h HandlerFunc) {
 	DefaultHandler.HandleNotFound(h)
 }
 
-// SetBufferFactory registers buffer factory handler for DefaultHandler
+// SetBufferFactory registers default buffer maker.
 func SetBufferFactory(f func(int) []byte) {
 	DefaultHandler.SetBufferFactory(f)
 }

@@ -138,8 +138,11 @@ func initServer() {
 		ctx.Bind(nil)
 		ctx.Error(ctx.Message.Data())
 	}, false)
-	go testServer.Run(testClientServerAddr)
-	time.Sleep(time.Second / 10)
+	ln, err := net.Listen("tcp", testClientServerAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	go testServer.Serve(ln)
 }
 
 func TestClient_Get(t *testing.T) {
@@ -245,12 +248,13 @@ func testClientCallMethodString(c *Client, t *testing.T) {
 	// } else if rsp != req {
 	// 	t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
 	// }
-	if err = c.Call(methodCallString, &req, &rsp, -1, map[string]interface{}{}); err != nil {
+	if err = c.Call(methodCallString, &req, &rsp, time.Second, map[string]interface{}{}); err != nil {
 		t.Fatalf("Client.Call() error = %v", err)
-	} else if rsp != req {
-		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
 	}
-	if err = c.Call(methodCallString, &req, nil, -1); err != nil {
+	if err = c.Call(methodCallString, nil, &rsp, time.Second, map[string]interface{}{}); err != nil {
+		t.Fatalf("Client.Call() error = %v", err)
+	}
+	if err = c.Call(methodCallString, &req, nil, time.Second); err != nil {
 		t.Fatalf("Client.Call() error = %v", err)
 	}
 }
@@ -266,12 +270,12 @@ func testClientCallMethodBytes(c *Client, t *testing.T) {
 	} else if string(rsp) != string(req) {
 		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
 	}
-	if err = c.Call(methodCallBytes, &req, &rsp, -1); err != nil {
+	if err = c.Call(methodCallBytes, &req, &rsp, time.Second); err != nil {
 		t.Fatalf("Client.Call() error = %v", err)
 	} else if string(rsp) != string(req) {
 		t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
 	}
-	if err = c.Call(methodCallBytes, &req, nil, -1); err != nil {
+	if err = c.Call(methodCallBytes, &req, nil, time.Second); err != nil {
 		t.Fatalf("Client.Call() error = %v", err)
 	}
 }
@@ -313,13 +317,13 @@ func testClientCallError(c *Client, t *testing.T) {
 		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZero.Error())
 	}
 
-	if err = c.Call(methodCallNotFound, "", nil, -1); err == nil {
+	if err = c.Call(methodCallNotFound, "", nil, time.Second); err == nil {
 		t.Fatalf("Client.Call() error is nil, want %v", ErrMethodNotFound)
 	} else if err.Error() != ErrMethodNotFound.Error() {
 		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrMethodNotFound.Error())
 	}
 
-	if err = c.Call(methodInvalidLong, "", nil, -1); err == nil {
+	if err = c.Call(methodInvalidLong, "", nil, time.Second); err == nil {
 		t.Fatalf("Client.Call() error is nil, want %v", invalidMethodErrString)
 	} else if err.Error() != invalidMethodErrString {
 		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
@@ -538,9 +542,9 @@ func testClientCallAsyncError(c *Client, t *testing.T) {
 
 	asyncHandler, _ = getAsyncHandler()
 	if err = c.CallAsync(methodCallAsync, "", asyncHandler, 0); err == nil {
-		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutZeroWithNonNilHandler.Error())
-	} else if err.Error() != ErrClientInvalidTimeoutZeroWithNonNilHandler.Error() {
-		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZeroWithNonNilHandler.Error())
+		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutZeroWithNonNilCallback.Error())
+	} else if err.Error() != ErrClientInvalidTimeoutZeroWithNonNilCallback.Error() {
+		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZeroWithNonNilCallback.Error())
 	}
 
 	invalidMethodErrString := fmt.Sprintf("invalid method length: %v, should <= %v", len(methodInvalidLong), MaxMethodLen)

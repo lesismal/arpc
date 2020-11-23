@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Context definition
+// Context represents an arpc Call's context.
 type Context struct {
 	Client  *Client
 	Message *Message
@@ -53,7 +53,8 @@ func (ctx *Context) Body() []byte {
 	return ctx.Message.Data()
 }
 
-// Bind body data to struct
+// Bind parses the body data and stores the result
+// in the value pointed to by v
 func (ctx *Context) Bind(v interface{}) error {
 	msg := ctx.Message
 	if msg.IsError() {
@@ -90,7 +91,7 @@ func (ctx *Context) Error(v interface{}) error {
 	return ctx.write(v, true, TimeForever)
 }
 
-// Next .
+// Next calls next middleware or method/router handler.
 func (ctx *Context) Next() {
 	ctx.index++
 	if !ctx.done && ctx.index < len(ctx.handlers) {
@@ -102,7 +103,7 @@ func (ctx *Context) Next() {
 	// }
 }
 
-// Done .
+// Done stops the one-by-one-calling of middlewares and method/router handler.
 func (ctx *Context) Done() {
 	ctx.done = true
 }
