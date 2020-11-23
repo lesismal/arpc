@@ -355,7 +355,7 @@ func testClientCallError(c *Client, t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second/1000)
 	defer cancel()
-	time.Sleep(time.Second / 1000)
+	time.Sleep(time.Second / 100)
 	if err = c.CallWith(ctx, methodCallTimeout, &req, nil); err == nil {
 		t.Fatalf("Client.Call() error is nil, want %v", ErrClientTimeout)
 	} else if err.Error() != ErrClientTimeout.Error() {
@@ -747,7 +747,7 @@ func testClientNotifyWithMethodString(c *Client, t *testing.T) {
 		t.Fatalf("Client.NotifyWith() error = %v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second/1000)
-	time.Sleep(time.Second / 1000)
+	time.Sleep(time.Second / 100)
 	defer cancel()
 	if err = c.NotifyWith(ctx, methodNotifyWith, &req); err == nil {
 		t.Fatalf("Client.NotifyWith() error = nil, want: '%v'", ErrClientTimeout)
