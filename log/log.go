@@ -105,28 +105,28 @@ func (l *logger) SetLevel(lvl int) {
 // Debug uses fmt.Printf to log a message at LevelDebug.
 func (l *logger) Debug(format string, v ...interface{}) {
 	if LogLevelDebug >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [DBG] "+format, v...)
+		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [DBG] "+format+"\n", v...)
 	}
 }
 
 // Info uses fmt.Printf to log a message at LevelInfo.
 func (l *logger) Info(format string, v ...interface{}) {
 	if LogLevelInfo >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [INF] "+format, v...)
+		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [INF] "+format+"\n", v...)
 	}
 }
 
 // Warn uses fmt.Printf to log a message at LevelWarn.
 func (l *logger) Warn(format string, v ...interface{}) {
 	if LogLevelWarn >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [WRN] "+format, v...)
+		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [WRN] "+format+"\n", v...)
 	}
 }
 
 // Error uses fmt.Printf to log a message at LevelError.
 func (l *logger) Error(format string, v ...interface{}) {
 	if LogLevelError >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [ERR] "+format, v...)
+		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [ERR] "+format+"\n", v...)
 	}
 }
 
