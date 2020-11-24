@@ -42,8 +42,8 @@ github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+o
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/lesismal/arpc v0.0.0-20201116145829-6a366eaa53b9 h1:68Cj37SPYy2Naip4Z5ZmQRdaKBXgiwHn30EyVTCmKp4=
-github.com/lesismal/arpc v0.0.0-20201116145829-6a366eaa53b9/go.mod h1:Bhghaw0/4n2U3EMNGbS19Osqj6UBuFjTooyCR/12hUQ=
+github.com/lesismal/arpc v0.0.0-20201124134656-bf928e8aba23 h1:t9AOnWwWbW7HiybbDmKh6JvcyTOhcCtnIeI3fQTl0SA=
+github.com/lesismal/arpc v0.0.0-20201124134656-bf928e8aba23/go.mod h1:Bhghaw0/4n2U3EMNGbS19Osqj6UBuFjTooyCR/12hUQ=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
