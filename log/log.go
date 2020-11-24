@@ -5,11 +5,21 @@
 package log
 
 import (
-	"log"
+	"fmt"
+	"os"
+	"time"
 )
 
-// DefaultLogger is the default logger and is used by arpc
-var DefaultLogger Logger = &logger{level: LevelInfo}
+var (
+	// TimeFormat is used to format time parameters.
+	TimeFormat = "2006-01-02 15:04:05.000"
+
+	// Output is used to receive log output.
+	Output = os.Stdout
+
+	// DefaultLogger is the default logger and is used by arpc
+	DefaultLogger Logger = &logger{level: LevelInfo}
+)
 
 const (
 	// LevelAll enables all logs.
@@ -67,7 +77,7 @@ func SetLevel(lvl int) {
 		DefaultLogger.SetLogLevel(lvl)
 		break
 	default:
-		log.Printf("invalid log level: %v", lvl)
+		fmt.Fprintf(Output, "invalid log level: %v", lvl)
 	}
 }
 
@@ -88,35 +98,35 @@ func (l *logger) SetLevel(lvl int) {
 		l.level = lvl
 		break
 	default:
-		log.Printf("invalid log level: %v", lvl)
+		fmt.Fprintf(Output, "invalid log level: %v", lvl)
 	}
 }
 
-// Debug uses log.Printf to log a message at LevelDebug.
+// Debug uses fmt.Printf to log a message at LevelDebug.
 func (l *logger) Debug(format string, v ...interface{}) {
 	if LogLevelDebug >= l.level {
-		log.Printf("[DBG] "+format, v...)
+		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [DBG] "+format, v...)
 	}
 }
 
-// Info uses log.Printf to log a message at LevelInfo.
+// Info uses fmt.Printf to log a message at LevelInfo.
 func (l *logger) Info(format string, v ...interface{}) {
 	if LogLevelInfo >= l.level {
-		log.Printf("[INF] "+format, v...)
+		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [INF] "+format, v...)
 	}
 }
 
-// Warn uses log.Printf to log a message at LevelWarn.
+// Warn uses fmt.Printf to log a message at LevelWarn.
 func (l *logger) Warn(format string, v ...interface{}) {
 	if LogLevelWarn >= l.level {
-		log.Printf("[WRN] "+format, v...)
+		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [WRN] "+format, v...)
 	}
 }
 
-// Error uses log.Printf to log a message at LevelError.
+// Error uses fmt.Printf to log a message at LevelError.
 func (l *logger) Error(format string, v ...interface{}) {
 	if LogLevelError >= l.level {
-		log.Printf("[ERR] "+format, v...)
+		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [ERR] "+format, v...)
 	}
 }
 
