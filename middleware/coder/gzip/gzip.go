@@ -31,10 +31,12 @@ func gzipUnCompress(data []byte) ([]byte, error) {
 	return undatas, nil
 }
 
+// Gzip represents a gzip coding middleware.
 type Gzip struct {
 	critical int
 }
 
+// Encode implements arpc MessageCoder.
 func (c *Gzip) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 	if len(msg.Buffer) > c.critical && !msg.IsFlagBitSet(coder.FlagBitGZip) {
 		buf := gzipCompress(msg.Buffer[arpc.HeaderIndexReserved+1:])
@@ -49,6 +51,7 @@ func (c *Gzip) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 	return msg
 }
 
+// Decode implements arpc MessageCoder.
 func (c *Gzip) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 	if msg.IsFlagBitSet(coder.FlagBitGZip) {
 		buf, err := gzipUnCompress(msg.Buffer[arpc.HeaderIndexReserved+1:])
@@ -61,6 +64,7 @@ func (c *Gzip) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 	return msg
 }
 
+// New returns the gzip coding middleware.
 func New() *Gzip {
 	return &Gzip{critical: 1024}
 }

@@ -11,8 +11,8 @@ import (
 func main() {
 	svr := arpc.NewServer()
 
-	svr.Handler.Use(router.Recover)
-	svr.Handler.Use(router.Logger)
+	svr.Handler.Use(router.Recover())
+	svr.Handler.Use(router.Logger())
 
 	// register router
 	svr.Handler.Handle("/panic", func(ctx *arpc.Context) {

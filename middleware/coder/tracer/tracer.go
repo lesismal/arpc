@@ -13,31 +13,39 @@ import (
 )
 
 const (
-	TraceIdKey = "traceid"
-	SpanIdKey  = "spanid"
+	// TraceIDKey .
+	TraceIDKey = "traceid"
+	// SpanIDKey .
+	SpanIDKey = "spanid"
 
-	TraceInfoSep     = ":|:"
+	// TraceInfoSep .
+	TraceInfoSep = ":|:"
+	// TraceOrSpanIDSep .
 	TraceOrSpanIDSep = "_"
 )
 
+// Span represents a span.
 type Span map[string]interface{}
 
+// Values returns span values.
 func (sp Span) Values() map[string]interface{} {
 	return sp
 }
 
+// TraceID returns trace id.
 func (sp Span) TraceID() string {
 	traceID := ""
-	iTraceID, ok := sp[TraceIdKey]
+	iTraceID, ok := sp[TraceIDKey]
 	if ok {
 		traceID = iTraceID.(string)
 	}
 	return traceID
 }
 
+// SpanID returns span id.
 func (sp Span) SpanID() string {
 	spanID := ""
-	iSpanID, ok := sp[SpanIdKey]
+	iSpanID, ok := sp[SpanIDKey]
 	if ok {
 		spanID = iSpanID.(string)
 	}
@@ -47,16 +55,16 @@ func (sp Span) SpanID() string {
 func (sp Span) pack(msg *arpc.Message) {
 	traceID := ""
 	spanID := ""
-	iTraceId, _ := sp[TraceIdKey]
-	if iTraceId != nil {
-		traceID = iTraceId.(string)
+	iTraceID := sp[TraceIDKey]
+	if iTraceID != nil {
+		traceID = iTraceID.(string)
 	}
 	if traceID == "" {
 		return
 	}
-	iSpanId, _ := sp[SpanIdKey]
-	if iSpanId != nil {
-		spanID = iSpanId.(string)
+	iSpanID := sp[SpanIDKey]
+	if iSpanID != nil {
+		spanID = iSpanID.(string)
 	}
 	if spanID == "" {
 		return
@@ -76,7 +84,7 @@ func (sp Span) unpack(msg *arpc.Message) {
 		if bufLen > 2 {
 			traceID := ""
 			spanID := ""
-			traceInfoLen := int((msg.Buffer[bufLen-2] << 8) | msg.Buffer[bufLen-1])
+			traceInfoLen := (int(msg.Buffer[bufLen-2]) << 8) | int(msg.Buffer[bufLen-1])
 			if bufLen >= 2+traceInfoLen {
 				traceInfo := util.BytesToStr(msg.Buffer[bufLen-2-traceInfoLen : bufLen-2])
 				traceInfoArr := strings.Split(traceInfo, TraceInfoSep)
@@ -85,8 +93,8 @@ func (sp Span) unpack(msg *arpc.Message) {
 				}
 			}
 			if traceID != "" && spanID != "" {
-				msg.Set(TraceIdKey, traceID)
-				msg.Set(SpanIdKey, spanID)
+				msg.Set(TraceIDKey, traceID)
+				msg.Set(SpanIDKey, spanID)
 			}
 			msg.Buffer = msg.Buffer[:len(msg.Buffer)-2-traceInfoLen]
 			msg.SetFlagBit(coder.FlagBitTracer, false)
@@ -95,6 +103,7 @@ func (sp Span) unpack(msg *arpc.Message) {
 	}
 }
 
+// Tracer represents a trace coding middleware.
 type Tracer struct {
 	tracePrefix string
 	spanPrefix  string
@@ -102,6 +111,7 @@ type Tracer struct {
 	spanCount   uint64
 }
 
+// Encode implements arpc MessageCoder.
 func (tracer *Tracer) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 	sp := Span(msg.Values())
 	sp.pack(msg)
@@ -109,12 +119,14 @@ func (tracer *Tracer) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Messa
 	return msg
 }
 
+// Decode implements arpc MessageCoder.
 func (tracer *Tracer) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 	sp := Span(msg.Values())
 	sp.unpack(msg)
 	return msg
 }
 
+// NextSpan inherit pre span's trace id and creates a new span.
 func (tracer *Tracer) NextSpan(values map[string]interface{}) Span {
 	if len(values) == 0 {
 		return tracer.NewSpan()
@@ -122,14 +134,14 @@ func (tracer *Tracer) NextSpan(values map[string]interface{}) Span {
 
 	traceID := ""
 	spanID := ""
-	iTraceID, ok := values[TraceIdKey]
+	iTraceID, ok := values[TraceIDKey]
 	if ok {
 		traceID, ok = iTraceID.(string)
 		if !ok {
 			return tracer.NewSpan()
 		}
 	}
-	iSpanID, ok := values[SpanIdKey]
+	iSpanID, ok := values[SpanIDKey]
 	if ok {
 		spanID, ok = iSpanID.(string)
 		if ok {
@@ -147,19 +159,21 @@ func (tracer *Tracer) NextSpan(values map[string]interface{}) Span {
 	}
 
 	return Span{
-		TraceIdKey: traceID,
-		SpanIdKey:  spanID,
+		TraceIDKey: traceID,
+		SpanIDKey:  spanID,
 	}
 }
 
+// NewSpan creates a new span.
 func (tracer *Tracer) NewSpan() Span {
 	now := time.Now().UnixNano()
 	return Span{
-		TraceIdKey: fmt.Sprintf("%v%v%v%v%v", tracer.tracePrefix, TraceOrSpanIDSep, now, TraceOrSpanIDSep, atomic.AddUint64(&tracer.traceCount, 1)),
-		SpanIdKey:  fmt.Sprintf("%v%v%v%v%v", tracer.spanPrefix, TraceOrSpanIDSep, now, TraceOrSpanIDSep, atomic.AddUint64(&tracer.spanCount, 1)),
+		TraceIDKey: fmt.Sprintf("%v%v%v%v%v", tracer.tracePrefix, TraceOrSpanIDSep, now, TraceOrSpanIDSep, atomic.AddUint64(&tracer.traceCount, 1)),
+		SpanIDKey:  fmt.Sprintf("%v%v%v%v%v", tracer.spanPrefix, TraceOrSpanIDSep, now, TraceOrSpanIDSep, atomic.AddUint64(&tracer.spanCount, 1)),
 	}
 }
 
+// New returns the trace coding middleware.
 func New(tracePrefix string, spanPrefix string) *Tracer {
 	return &Tracer{
 		tracePrefix: tracePrefix,

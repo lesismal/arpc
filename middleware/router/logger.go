@@ -7,6 +7,7 @@ import (
 	"github.com/lesismal/arpc/log"
 )
 
+// Logger returns the logger middleware.
 func Logger() arpc.HandlerFunc {
 	return func(ctx *arpc.Context) {
 		t := time.Now()

@@ -5,6 +5,7 @@ import (
 	"github.com/lesismal/arpc/util"
 )
 
+// Recover returns the recovery middleware handler.
 func Recover() arpc.HandlerFunc {
 	return func(ctx *arpc.Context) {
 		defer util.Recover()

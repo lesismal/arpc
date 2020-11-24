@@ -27,6 +27,7 @@ type ServiceManager interface {
 	ClientBy(serviceName string) (*arpc.Client, error)
 }
 
+// ServiceNode .
 type ServiceNode struct {
 	name     string
 	addr     string
@@ -184,7 +185,7 @@ func (s *serviceManager) AddServiceNodes(path string, value string) {
 	}
 }
 
-// DeleteServiceNodes deletes all nods for path's addr, would be called by a Discovery when service was setted
+// DeleteServiceNodes deletes all nods for path's addr, would be called by a Discovery when service was setted.
 func (s *serviceManager) DeleteServiceNodes(path string) {
 	arr := strings.Split(path, "/")
 	if len(arr) < 3 {
@@ -200,7 +201,7 @@ func (s *serviceManager) DeleteServiceNodes(path string) {
 	}
 }
 
-// Client returns a reachable client by service's name
+// ClientBy returns a reachable client by service's name.
 func (s *serviceManager) ClientBy(serviceName string) (*arpc.Client, error) {
 	s.mux.RLock()
 	defer s.mux.RUnlock()

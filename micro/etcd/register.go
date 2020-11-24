@@ -10,6 +10,7 @@ import (
 	"github.com/lesismal/arpc/util"
 )
 
+// RegisterMutexPrefix .
 const RegisterMutexPrefix = "_arpc_micro_reg_mux_pfx"
 
 //Register .

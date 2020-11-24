@@ -168,7 +168,7 @@ func TestClient_Set(t *testing.T) {
 	}
 
 	c.Set(key, value)
-	cv, ok = c.Get(key)
+	_, ok = c.Get(key)
 	if ok {
 		t.Fatalf("Client.Get() failed: Get '%v', want nil", value)
 	}
@@ -248,7 +248,8 @@ func TestClient_Call(t *testing.T) {
 	testClientCallMethodString(c, t)
 	testClientCallMethodBytes(c, t)
 	testClientCallMethodStruct(c, t)
-	testClientCallError(c, t)
+	testClientCallError1(c, t)
+	testClientCallError2(c, t)
 	testClientCallDisconnected(c, t)
 
 	SetBatchRecv(true)
@@ -314,7 +315,7 @@ func testClientCallMethodStruct(c *Client, t *testing.T) {
 	}
 }
 
-func testClientCallError(c *Client, t *testing.T) {
+func testClientCallError1(c *Client, t *testing.T) {
 	var (
 		err error
 		req = "my error"
@@ -346,6 +347,13 @@ func testClientCallError(c *Client, t *testing.T) {
 	} else if err.Error() != ErrMethodNotFound.Error() {
 		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrMethodNotFound.Error())
 	}
+}
+
+func testClientCallError2(c *Client, t *testing.T) {
+	var (
+		err error
+		req = "my error"
+	)
 
 	if err = c.Call(methodCallTimeout, "", nil, time.Second/10); err == nil {
 		t.Fatalf("Client.Call() error is nil, want %v", ErrClientTimeout)
@@ -353,13 +361,15 @@ func testClientCallError(c *Client, t *testing.T) {
 		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientTimeout.Error())
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second/1000)
-	defer cancel()
-	time.Sleep(time.Second / 100)
-	if err = c.CallWith(ctx, methodCallTimeout, &req, nil); err == nil {
-		t.Fatalf("Client.Call() error is nil, want '%v'", ErrClientTimeout)
-	} else if err.Error() != ErrClientTimeout.Error() {
-		t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientTimeout.Error())
+	for i := 0; i < 10; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second/1000)
+		defer cancel()
+		time.Sleep(time.Second / 100)
+		if err = c.CallWith(ctx, methodCallTimeout, &req, nil); err == nil {
+			t.Fatalf("Client.Call() error is nil, want '%v'", ErrClientTimeout)
+		} else if err.Error() != ErrClientTimeout.Error() {
+			t.Fatalf("Client.Call() error, returns '%v', want '%v'", err.Error(), ErrClientTimeout.Error())
+		}
 	}
 
 	if err = c.Call(methodInvalidLong, "", nil, time.Second); err == nil {
