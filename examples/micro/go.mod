@@ -9,7 +9,7 @@ require (
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/uuid v1.1.2 // indirect
-	github.com/lesismal/arpc v0.0.0-20201124134656-bf928e8aba23 // indirect
+	github.com/lesismal/arpc v0.0.0-20201128080055-abd93a624428 // indirect
 	go.uber.org/zap v1.16.0 // indirect
 	google.golang.org/genproto v0.0.0-20201116144945-7adebfbe6a3f // indirect
 	google.golang.org/grpc v1.33.2 // indirect
