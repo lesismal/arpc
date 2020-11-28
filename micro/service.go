@@ -90,7 +90,7 @@ func (list *serviceNodeList) next() (*arpc.Client, error) {
 	defer list.mux.RUnlock()
 	l := len(list.nodes)
 	if l == 0 {
-		return nil, ErrServiceUnreachable
+		return nil, ErrServiceNotFound
 	}
 	for i := 0; i < l; i++ {
 		list.index++
