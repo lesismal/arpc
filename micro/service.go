@@ -111,11 +111,11 @@ type serviceManager struct {
 func (s *serviceManager) setServiceNode(name string, addr string, nodes []*ServiceNode) {
 	s.mux.Lock()
 	list, ok := s.serviceList[name]
-	s.mux.Unlock()
 	if !ok {
 		list = &serviceNodeList{}
 		s.serviceList[name] = list
 	}
+	s.mux.Unlock()
 	list.addByAddr(addr, nodes)
 }
 

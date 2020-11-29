@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/log"
@@ -31,9 +32,14 @@ func main() {
 		ctx.Write(ret)
 		log.Info("/echo: \"%v\", error: %v", ret, err)
 	})
-	go svr.Run(addr)
+	go func() {
+		err := svr.Run(addr)
+		log.Error("server exit: %v", err)
+		os.Exit(0)
+	}()
 
-	key := fmt.Sprintf("%v/%v/%v", appPrefix, service, addr)
+	time.Sleep(time.Second / 2)
+	key := fmt.Sprintf("%v/%v/%v/%v", appPrefix, service, addr, time.Now().UnixNano())
 	value := fmt.Sprintf("%v", weight)
 	register, err := etcd.NewRegister(endpoints, key, value, ttl)
 	if err != nil {

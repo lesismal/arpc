@@ -154,7 +154,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	return c.parseResponse(msg, rsp)
 }
 
-// CallWith uses context to make rpc calls.
+// CallWith uses context to make rpc call.
 // CallWith blocks to wait for a response from the server until it times out.
 func (c *Client) CallWith(ctx context.Context, method string, req interface{}, rsp interface{}, args ...interface{}) error {
 	if err := c.checkStateAndMethod(method); err != nil {
@@ -188,7 +188,7 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 	return c.parseResponse(msg, rsp)
 }
 
-// CallAsync makes an asynchronous rpc call with a timeout.
+// CallAsync makes an asynchronous rpc call with timeout.
 // CallAsync will not block waiting for the server's response,
 // But the handler will be called if the response arrives before the timeout.
 func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, timeout time.Duration, args ...interface{}) error {
