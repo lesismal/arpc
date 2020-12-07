@@ -31,6 +31,9 @@ go run github.com/lesismal/arpc/examples/protocols/kcp/client
 go run github.com/lesismal/arpc/examples/protocols/quic/server
 go run github.com/lesismal/arpc/examples/protocols/quic/client
 
+go run github.com/lesismal/arpc/examples/protocols/tls/server
+go run github.com/lesismal/arpc/examples/protocols/tls/client
+
 go run github.com/lesismal/arpc/examples/protocols/unixsocket/server
 go run github.com/lesismal/arpc/examples/protocols/unixsocket/client
 
