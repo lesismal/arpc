@@ -2,8 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	// "crypto/x509"
-	// "encoding/pem"
 	"log"
 
 	"github.com/lesismal/arpc"
