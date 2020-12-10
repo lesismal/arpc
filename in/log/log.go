@@ -36,24 +36,9 @@ const (
 	LevelNone
 )
 
-const (
-	// LogLevelAll enables all logs.
-	LogLevelAll = LevelAll
-	// LogLevelDebug logs are usually disabled in production.
-	LogLevelDebug = LevelDebug
-	// LogLevelInfo is the default logging priority.
-	LogLevelInfo = LevelInfo
-	// LogLevelWarn .
-	LogLevelWarn = LevelWarn
-	// LogLevelError .
-	LogLevelError = LevelError
-	// LogLevelNone disables all logs.
-	LogLevelNone = LevelNone
-)
-
 // Logger defines log interface
 type Logger interface {
-	SetLogLevel(lvl int)
+	SetLevel(lvl int)
 	Debug(format string, v ...interface{})
 	Info(format string, v ...interface{})
 	Warn(format string, v ...interface{})
@@ -65,16 +50,11 @@ func SetLogger(l Logger) {
 	DefaultLogger = l
 }
 
-// SetLogLevel may be deprecated in the future.
-func SetLogLevel(lvl int) {
-	SetLevel(lvl)
-}
-
 // SetLevel sets default logger's priority.
 func SetLevel(lvl int) {
 	switch lvl {
-	case LogLevelAll, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelNone:
-		DefaultLogger.SetLogLevel(lvl)
+	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
+		DefaultLogger.SetLevel(lvl)
 		break
 	default:
 		fmt.Fprintf(Output, "invalid log level: %v", lvl)
@@ -86,15 +66,10 @@ type logger struct {
 	level int
 }
 
-// SetLogLevel may be deprecated in the future.
-func (l *logger) SetLogLevel(lvl int) {
-	l.SetLevel(lvl)
-}
-
 // SetLevel sets logs priority.
 func (l *logger) SetLevel(lvl int) {
 	switch lvl {
-	case LogLevelAll, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelNone:
+	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
 		l.level = lvl
 		break
 	default:
@@ -104,28 +79,28 @@ func (l *logger) SetLevel(lvl int) {
 
 // Debug uses fmt.Printf to log a message at LevelDebug.
 func (l *logger) Debug(format string, v ...interface{}) {
-	if LogLevelDebug >= l.level {
+	if LevelDebug >= l.level {
 		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [DBG] "+format+"\n", v...)
 	}
 }
 
 // Info uses fmt.Printf to log a message at LevelInfo.
 func (l *logger) Info(format string, v ...interface{}) {
-	if LogLevelInfo >= l.level {
+	if LevelInfo >= l.level {
 		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [INF] "+format+"\n", v...)
 	}
 }
 
 // Warn uses fmt.Printf to log a message at LevelWarn.
 func (l *logger) Warn(format string, v ...interface{}) {
-	if LogLevelWarn >= l.level {
+	if LevelWarn >= l.level {
 		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [WRN] "+format+"\n", v...)
 	}
 }
 
 // Error uses fmt.Printf to log a message at LevelError.
 func (l *logger) Error(format string, v ...interface{}) {
-	if LogLevelError >= l.level {
+	if LevelError >= l.level {
 		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [ERR] "+format+"\n", v...)
 	}
 }

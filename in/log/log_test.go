@@ -7,40 +7,40 @@ package log
 import "testing"
 
 func TestSetLogger(t *testing.T) {
-	l := &logger{level: LogLevelDebug}
+	l := &logger{level: LevelDebug}
 	SetLogger(l)
 }
 
-func TestSetLogLevel(t *testing.T) {
-	SetLogLevel(LogLevelAll)
+func TestSetLevel(t *testing.T) {
+	SetLevel(LevelAll)
 	func() {
 		defer func() { recover() }()
-		SetLogLevel(1000)
+		SetLevel(1000)
 	}()
 }
 
-func Test_logger_SetLogLevel(t *testing.T) {
-	l := &logger{level: LogLevelDebug}
-	l.SetLogLevel(LogLevelAll)
+func Test_logger_SetLevel(t *testing.T) {
+	l := &logger{level: LevelDebug}
+	l.SetLevel(LevelAll)
 }
 
 func Test_logger_Debug(t *testing.T) {
-	l := &logger{level: LogLevelDebug}
+	l := &logger{level: LevelDebug}
 	l.Debug("logger debug test")
 }
 
 func Test_logger_Info(t *testing.T) {
-	l := &logger{level: LogLevelDebug}
+	l := &logger{level: LevelDebug}
 	l.Info("logger info test")
 }
 
 func Test_logger_Warn(t *testing.T) {
-	l := &logger{level: LogLevelDebug}
+	l := &logger{level: LevelDebug}
 	l.Warn("logger warn test")
 }
 
 func Test_logger_Error(t *testing.T) {
-	l := &logger{level: LogLevelDebug}
+	l := &logger{level: LevelDebug}
 	l.Error("logger error test")
 }
 
