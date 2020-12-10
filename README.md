@@ -103,7 +103,7 @@ import "github.com/lesismal/arpc"
 
 ## Quick start
  
-- start a [server](https://github.com/lesismal/arpc/blob/master/eg/rpc_sync/server/server.go)
+- start a [server](https://github.com/lesismal/arpc/blob/master/eg/rpc/server/server.go)
 
 ```go
 package main
@@ -185,7 +185,7 @@ handler.Handle("/asyncResponse", func(ctx *arpc.Context) { ... }, async)
 
 ### Router Middleware
 
-See [router middleware](https://github.com/lesismal/arpc/tree/master/middleware/router), it's easy to implement middlewares yourself
+See [router middleware](https://github.com/lesismal/arpc/tree/master/ex/middleware/router), it's easy to implement middlewares yourself
 
 ```golang
 import "github.com/lesismal/arpc/ex/middleware/router"
@@ -472,7 +472,7 @@ arpc.DefaultHandler.SetSendQueueSize(4096)
 
 ## JS Client 
 
-- See [arpc.js](https://github.com/lesismal/arpc/blob/master/ext/jsclient/arpc.js)
+- See [arpc.js](https://github.com/lesismal/arpc/blob/master/ex/jsclient/arpc.js)
 
 ## Web Chat Examples
 
