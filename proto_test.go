@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lesismal/arpc/codec"
+	"github.com/lesismal/arpc/in/codec"
 )
 
 func TestHeader_BodyLen(t *testing.T) {

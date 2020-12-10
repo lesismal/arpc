@@ -10,8 +10,8 @@ import (
 	"io"
 	"net"
 
-	"github.com/lesismal/arpc/log"
-	"github.com/lesismal/arpc/util"
+	"github.com/lesismal/arpc/in/log"
+	"github.com/lesismal/arpc/in/util"
 )
 
 // DefaultHandler is the default Handler used by arpc

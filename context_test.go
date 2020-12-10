@@ -7,7 +7,7 @@ package arpc
 import (
 	"testing"
 
-	"github.com/lesismal/arpc/codec"
+	"github.com/lesismal/arpc/in/codec"
 )
 
 func TestContext_Get(t *testing.T) {
