@@ -9,8 +9,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lesismal/arpc/in/codec"
-	"github.com/lesismal/arpc/in/util"
+	"github.com/lesismal/arpc/internal/codec"
+	"github.com/lesismal/arpc/internal/util"
 )
 
 const (

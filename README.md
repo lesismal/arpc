@@ -188,7 +188,7 @@ handler.Handle("/asyncResponse", func(ctx *arpc.Context) { ... }, async)
 See [router middleware](https://github.com/lesismal/arpc/tree/master/ex/middleware/router), it's easy to implement middlewares yourself
 
 ```golang
-import "github.com/lesismal/arpc/ex/middleware/router"
+import "github.com/lesismal/arpc/extention/middleware/router"
 
 var handler arpc.Handler
 
@@ -212,7 +212,7 @@ handler.Use(func(ctx *arpc.Context) { ... })
 - Coder Middleware is used for converting a message data to your designed format, e.g encrypt/decrypt and compress/uncompress
 
 ```golang
-import "github.com/lesismal/arpc/ex/middleware/coder/gzip"
+import "github.com/lesismal/arpc/extention/middleware/coder/gzip"
 
 var handler arpc.Handler
 
@@ -419,7 +419,7 @@ client, err := arpc.NewClient(dialer)
 ### Custom Codec
 
 ```golang
-import "github.com/lesismal/arpc/in/codec"
+import "github.com/lesismal/arpc/internal/codec"
 
 var codec arpc.Codec = ...
 
@@ -438,7 +438,7 @@ client.Codec = codec
 ### Custom Logger
 
 ```golang
-import "github.com/lesismal/arpc/in/log"
+import "github.com/lesismal/arpc/internal/log"
 
 var logger arpc.Logger = ...
 log.SetLogger(logger) // log.DefaultLogger = logger
@@ -483,7 +483,7 @@ arpc.DefaultHandler.SetSendQueueSize(4096)
 
 - start a server
 ```golang
-import "github.com/lesismal/arpc/ex/pubsub"
+import "github.com/lesismal/arpc/extention/pubsub"
 
 var (
 	address = "localhost:8888"
@@ -511,8 +511,8 @@ func main() {
 
 - start a subscribe client
 ```golang
-import "github.com/lesismal/arpc/in/log"
-import "github.com/lesismal/arpc/ex/pubsub"
+import "github.com/lesismal/arpc/internal/log"
+import "github.com/lesismal/arpc/extention/pubsub"
 
 var (
 	address = "localhost:8888"
@@ -555,7 +555,7 @@ func main() {
 
 - start a publish client
 ```golang
-import "github.com/lesismal/arpc/ex/pubsub"
+import "github.com/lesismal/arpc/extention/pubsub"
 
 var (
 	address = "localhost:8888"
