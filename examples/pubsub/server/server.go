@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lesismal/arpc/extention/pubsub"
+	"github.com/lesismal/arpc/extension/pubsub"
 )
 
 var (

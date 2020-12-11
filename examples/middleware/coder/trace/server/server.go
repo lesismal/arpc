@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extention/middleware/coder/tracer"
+	"github.com/lesismal/arpc/extension/middleware/coder/tracer"
 	"github.com/lesismal/arpc/internal/log"
 )
 

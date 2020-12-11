@@ -70,10 +70,10 @@
 
 - simple echo load testing
 
-| Framework | Protocol        | Codec         | Configuration                                             | Connection Num | Goroutine Num | Qps     |
-| --------- | --------------- | ------------- | --------------------------------------------------------- | -------------- | ------------- | ------- |
-| arpc      | tcp/localhost   | encoding/json | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10            | 80-100k |
-| grpc      | http2/localhost | protobuf      | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10            | 20-30k  |
+| Framework | Protocol        | Codec         | Configuration                                             | Connection Num | Number of Goroutines Per Connection | Qps     |
+| --------- | --------------- | ------------- | --------------------------------------------------------- | -------------- | ----------------------------------- | ------- |
+| arpc      | tcp/localhost   | encoding/json | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10                                  | 80-100k |
+| grpc      | http2/localhost | protobuf      | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10                                  | 20-30k  |
 
 
 ## Header Layout
@@ -103,7 +103,7 @@ import "github.com/lesismal/arpc"
 
 ## Quick start
  
-- start a [server](https://github.com/lesismal/arpc/blob/master/eg/rpc/server/server.go)
+- start a [server](https://github.com/lesismal/arpc/blob/master/examples/rpc/server/server.go)
 
 ```go
 package main
@@ -125,7 +125,7 @@ func main() {
 }
 ```
 
-- start a [client](https://github.com/lesismal/arpc/blob/master/eg/rpc/client/client.go)
+- start a [client](https://github.com/lesismal/arpc/blob/master/examples/rpc/client/client.go)
 
 ```go
 package main
@@ -185,10 +185,10 @@ handler.Handle("/asyncResponse", func(ctx *arpc.Context) { ... }, async)
 
 ### Router Middleware
 
-See [router middleware](https://github.com/lesismal/arpc/tree/master/ex/middleware/router), it's easy to implement middlewares yourself
+See [router middleware](https://github.com/lesismal/arpc/tree/master/extension/middleware/router), it's easy to implement middlewares yourself
 
 ```golang
-import "github.com/lesismal/arpc/extention/middleware/router"
+import "github.com/lesismal/arpc/extension/middleware/router"
 
 var handler arpc.Handler
 
@@ -212,7 +212,7 @@ handler.Use(func(ctx *arpc.Context) { ... })
 - Coder Middleware is used for converting a message data to your designed format, e.g encrypt/decrypt and compress/uncompress
 
 ```golang
-import "github.com/lesismal/arpc/extention/middleware/coder/gzip"
+import "github.com/lesismal/arpc/extension/middleware/coder/gzip"
 
 var handler arpc.Handler
 
@@ -298,7 +298,7 @@ go func() {
 
 ### Broadcast - Notify
 
-- for more details:	[**server**](https://github.com/lesismal/arpc/blob/master/eg/broadcast/server/server.go) [**client**](https://github.com/lesismal/arpc/blob/master/eg/broadcast/client/client.go)
+- for more details:	[**server**](https://github.com/lesismal/arpc/blob/master/examples/broadcast/server/server.go) [**client**](https://github.com/lesismal/arpc/blob/master/examples/broadcast/client/client.go)
 
 ```golang
 var mux = sync.RWMutex{}
@@ -472,18 +472,18 @@ arpc.DefaultHandler.SetSendQueueSize(4096)
 
 ## JS Client 
 
-- See [arpc.js](https://github.com/lesismal/arpc/blob/master/ex/jsclient/arpc.js)
+- See [arpc.js](https://github.com/lesismal/arpc/blob/master/extension/jsclient/arpc.js)
 
 ## Web Chat Examples
 
-- See [webchat](https://github.com/lesismal/arpc/tree/master/eg/webchat)
+- See [webchat](https://github.com/lesismal/arpc/tree/master/examples/webchat)
 
 
 ## Pub/Sub Examples
 
 - start a server
 ```golang
-import "github.com/lesismal/arpc/extention/pubsub"
+import "github.com/lesismal/arpc/extension/pubsub"
 
 var (
 	address = "localhost:8888"
@@ -512,7 +512,7 @@ func main() {
 - start a subscribe client
 ```golang
 import "github.com/lesismal/arpc/internal/log"
-import "github.com/lesismal/arpc/extention/pubsub"
+import "github.com/lesismal/arpc/extension/pubsub"
 
 var (
 	address = "localhost:8888"
@@ -555,7 +555,7 @@ func main() {
 
 - start a publish client
 ```golang
-import "github.com/lesismal/arpc/extention/pubsub"
+import "github.com/lesismal/arpc/extension/pubsub"
 
 var (
 	address = "localhost:8888"
@@ -596,4 +596,4 @@ func main() {
 
 ## More Examples
 
-- See [examples](https://github.com/lesismal/arpc/tree/master/eg)
+- See [examples](https://github.com/lesismal/arpc/tree/master/examples)

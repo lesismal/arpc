@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/lesismal/arpc/extention/micro"
+	"github.com/lesismal/arpc/extension/micro"
 	"github.com/lesismal/arpc/internal/log"
 	"github.com/lesismal/arpc/internal/util"
 	"go.etcd.io/etcd/client/v3"

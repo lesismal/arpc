@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/lesismal/arpc/extention/pubsub"
+	"github.com/lesismal/arpc/extension/pubsub"
 	"github.com/lesismal/arpc/internal/log"
 )
 

@@ -10,7 +10,7 @@ import (
 	"math/big"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extention/protocol/quic"
+	"github.com/lesismal/arpc/extension/protocol/quic"
 )
 
 func main() {

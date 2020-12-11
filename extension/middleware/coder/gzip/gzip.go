@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extention/middleware/coder"
+	"github.com/lesismal/arpc/extension/middleware/coder"
 )
 
 func gzipCompress(data []byte) []byte {

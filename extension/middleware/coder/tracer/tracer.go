@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extention/middleware/coder"
+	"github.com/lesismal/arpc/extension/middleware/coder"
 	"github.com/lesismal/arpc/internal/util"
 )
 

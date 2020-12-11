@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extention/middleware/coder/gzip"
+	"github.com/lesismal/arpc/extension/middleware/coder/gzip"
 )
 
 func main() {

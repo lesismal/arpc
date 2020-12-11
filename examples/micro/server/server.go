@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extention/micro/etcd"
+	"github.com/lesismal/arpc/extension/micro/etcd"
 	"github.com/lesismal/arpc/internal/log"
 )
 

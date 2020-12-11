@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
+	"github.com/lesismal/arpc/extension/protocol/websocket"
 	"github.com/lesismal/arpc/internal/log"
-	"github.com/lesismal/arpcext/websocket"
 )
 
 // Message .

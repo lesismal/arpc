@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extention/middleware/coder/gzip"
+	"github.com/lesismal/arpc/extension/middleware/coder/gzip"
 	"github.com/lesismal/arpc/internal/log"
 )
 

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extention/protocol/websocket"
+	"github.com/lesismal/arpc/extension/protocol/websocket"
 )
 
 func main() {
