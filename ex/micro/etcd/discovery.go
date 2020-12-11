@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/coreos/etcd/clientv3"
 	"github.com/lesismal/arpc/ex/micro"
 	"github.com/lesismal/arpc/in/log"
 	"github.com/lesismal/arpc/in/util"
+	"go.etcd.io/etcd/client/v3"
 )
 
 // Discovery .
