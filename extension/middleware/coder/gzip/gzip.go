@@ -32,13 +32,11 @@ func gzipUnCompress(data []byte) ([]byte, error) {
 }
 
 // Gzip represents a gzip coding middleware.
-type Gzip struct {
-	critical int
-}
+type Gzip int
 
 // Encode implements arpc MessageCoder.
-func (c *Gzip) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
-	if len(msg.Buffer) > c.critical && !msg.IsFlagBitSet(coder.FlagBitGZip) {
+func (g *Gzip) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
+	if len(msg.Buffer) > int(*g) && !msg.IsFlagBitSet(coder.FlagBitGZip) {
 		buf := gzipCompress(msg.Buffer[arpc.HeaderIndexReserved+1:])
 		total := len(buf) + arpc.HeaderIndexReserved + 1
 		if total < len(msg.Buffer) {
@@ -52,7 +50,7 @@ func (c *Gzip) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 }
 
 // Decode implements arpc MessageCoder.
-func (c *Gzip) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
+func (g *Gzip) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 	if msg.IsFlagBitSet(coder.FlagBitGZip) {
 		buf, err := gzipUnCompress(msg.Buffer[arpc.HeaderIndexReserved+1:])
 		if err == nil {
@@ -65,6 +63,7 @@ func (c *Gzip) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 }
 
 // New returns the gzip coding middleware.
-func New() *Gzip {
-	return &Gzip{critical: 1024}
+func New(n int) *Gzip {
+	var g = Gzip(n)
+	return &g
 }

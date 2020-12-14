@@ -9,7 +9,7 @@ import (
 func main() {
 	svr := arpc.NewServer()
 
-	svr.Handler.UseCoder(gzip.New())
+	svr.Handler.UseCoder(gzip.New(1024))
 
 	// register router
 	svr.Handler.Handle("/echo", func(ctx *arpc.Context) {

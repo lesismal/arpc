@@ -18,7 +18,7 @@ func main() {
 	}
 	defer client.Stop()
 
-	client.Handler.UseCoder(gzip.New())
+	client.Handler.UseCoder(gzip.New(1024))
 
 	req := ""
 	for i := 0; i < 2048; i++ {
