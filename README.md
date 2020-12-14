@@ -59,6 +59,7 @@
 - [x] Broadcast
 - [x] Middleware
 - [x] Pub/Sub
+- [x] [Opentracing](https://github.com/opentracing/opentracing-go)
 
 | Pattern | Interactive Directions       | Description              |
 | ------- | ---------------------------- | ------------------------ |

@@ -13,8 +13,8 @@ go run github.com/lesismal/arpc/examples/micro/client
 go run github.com/lesismal/arpc/examples/middleware/coder/gzip/server
 go run github.com/lesismal/arpc/examples/middleware/coder/gzip/client
 
-go run github.com/lesismal/arpc/examples/middleware/coder/trace/server
-go run github.com/lesismal/arpc/examples/middleware/coder/trace/client
+go run github.com/lesismal/arpc/examples/middleware/coder/tracing/server
+go run github.com/lesismal/arpc/examples/middleware/coder/tracing/client
 
 go run github.com/lesismal/arpc/examples/middleware/router/server
 go run github.com/lesismal/arpc/examples/middleware/router/client
