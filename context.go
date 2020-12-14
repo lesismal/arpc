@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"math"
 	"time"
 )
 
@@ -18,7 +19,6 @@ type Context struct {
 	response []interface{}
 	timeout  time.Duration
 
-	done     bool
 	index    int
 	handlers []HandlerFunc
 }
@@ -93,19 +93,16 @@ func (ctx *Context) Error(v interface{}) error {
 
 // Next calls next middleware or method/router handler.
 func (ctx *Context) Next() {
-	ctx.index++
-	if !ctx.done && ctx.index < len(ctx.handlers) {
-		ctx.handlers[ctx.index](ctx)
+	index := ctx.index
+	if index < len(ctx.handlers) {
+		ctx.index++
+		ctx.handlers[index](ctx)
 	}
-	// for !ctx.done && ctx.index < len(ctx.handlers) {
-	// 	ctx.handlers[ctx.index](ctx)
-	// 	ctx.index++
-	// }
 }
 
 // Abort stops the one-by-one-calling of middlewares and method/router handler.
 func (ctx *Context) Abort() {
-	ctx.done = true
+	ctx.index = int(math.MaxInt32)
 }
 
 // Deadline returns the time when work done on behalf of this context
@@ -157,5 +154,5 @@ func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) er
 }
 
 func newContext(cli *Client, msg *Message, handlers []HandlerFunc) *Context {
-	return &Context{Client: cli, Message: msg, values: msg.values, done: false, index: -1, handlers: handlers}
+	return &Context{Client: cli, Message: msg, values: msg.values, index: 0, handlers: handlers}
 }
