@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	addr = "localhost:8888"
+	addr = ":8888"
 
 	method = "Hello"
 )
