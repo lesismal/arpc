@@ -8,8 +8,8 @@ import (
 	"runtime/debug"
 	"unsafe"
 
-	acodec "github.com/lesismal/arpc/internal/codec"
-	"github.com/lesismal/arpc/internal/log"
+	acodec "github.com/lesismal/arpc/codec"
+	"github.com/lesismal/arpc/log"
 )
 
 // Empty struct

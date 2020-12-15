@@ -2,7 +2,7 @@ package router
 
 import (
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/util"
 )
 
 // Recover returns the recovery middleware handler.

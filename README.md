@@ -122,7 +122,7 @@ func main() {
 		}
 	})
 
-	server.Run(":8888")
+	server.Run("localhost:8888")
 }
 ```
 
@@ -420,7 +420,7 @@ client, err := arpc.NewClient(dialer)
 ### Custom Codec
 
 ```golang
-import "github.com/lesismal/arpc/internal/codec"
+import "github.com/lesismal/arpc/codec"
 
 var codec arpc.Codec = ...
 
@@ -439,7 +439,7 @@ client.Codec = codec
 ### Custom Logger
 
 ```golang
-import "github.com/lesismal/arpc/internal/log"
+import "github.com/lesismal/arpc/log"
 
 var logger arpc.Logger = ...
 log.SetLogger(logger) // log.DefaultLogger = logger
@@ -512,7 +512,7 @@ func main() {
 
 - start a subscribe client
 ```golang
-import "github.com/lesismal/arpc/internal/log"
+import "github.com/lesismal/arpc/log"
 import "github.com/lesismal/arpc/extension/pubsub"
 
 var (

@@ -9,8 +9,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/lesismal/arpc/internal/codec"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/codec"
+	"github.com/lesismal/arpc/util"
 )
 
 const (
@@ -62,7 +62,7 @@ const (
 )
 
 // Header defines Message head
-type Header []byte
+type Header [4]byte
 
 // BodyLen returns Message body length.
 func (h Header) BodyLen() int {
@@ -84,7 +84,7 @@ func (h Header) message(handler Handler) (*Message, error) {
 // Message represents an arpc Message.
 type Message struct {
 	Buffer []byte
-	values map[string]interface{}
+	values map[interface{}]interface{}
 }
 
 // Len returns total length of buffer.
@@ -139,7 +139,7 @@ func (m *Message) SetAsync(isAsync bool) {
 }
 
 // Values returns values.
-func (m *Message) Values() map[string]interface{} {
+func (m *Message) Values() map[interface{}]interface{} {
 	return m.values
 }
 
@@ -225,7 +225,7 @@ func (m *Message) Data() []byte {
 }
 
 // Get returns value for key.
-func (m *Message) Get(key string) (interface{}, bool) {
+func (m *Message) Get(key interface{}) (interface{}, bool) {
 	if len(m.values) == 0 {
 		return nil, false
 	}
@@ -234,18 +234,18 @@ func (m *Message) Get(key string) (interface{}, bool) {
 }
 
 // Set sets key-value pair.
-func (m *Message) Set(key string, value interface{}) {
-	if value == nil {
+func (m *Message) Set(key interface{}, value interface{}) {
+	if key == nil || value == nil {
 		return
 	}
 	if m.values == nil {
-		m.values = map[string]interface{}{}
+		m.values = map[interface{}]interface{}{}
 	}
 	m.values[key] = value
 }
 
 // newMessage creates a Message.
-func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[string]interface{}) *Message {
+func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[interface{}]interface{}) *Message {
 	var (
 		data    []byte
 		msg     *Message

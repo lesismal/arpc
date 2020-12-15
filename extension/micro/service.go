@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/internal/log"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 var (

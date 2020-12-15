@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc/extension/pubsub"
-	"github.com/lesismal/arpc/internal/log"
+	"github.com/lesismal/arpc/log"
 )
 
 var (

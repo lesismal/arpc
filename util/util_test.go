@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lesismal/arpc/internal/codec"
+	"github.com/lesismal/arpc/codec"
 )
 
 func Test_StrToBytes(t *testing.T) {

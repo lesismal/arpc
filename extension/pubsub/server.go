@@ -8,12 +8,16 @@ import (
 	"sync"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/internal/log"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 var (
 	addClient interface{} = true
+)
+
+const (
+	userTopicKey = "pubsub-user-topics"
 )
 
 type clientTopics struct {
@@ -63,7 +67,8 @@ func (s *Server) PublishToOne(topicName string, v interface{}) error {
 }
 
 func (s *Server) invalid(ctx *arpc.Context) bool {
-	return ctx.Client.UserData == nil
+	_, ok := ctx.Client.Get(userTopicKey)
+	return !ok
 }
 
 func (s *Server) onAuthenticate(ctx *arpc.Context) {
@@ -104,7 +109,11 @@ func (s *Server) onSubscribe(ctx *arpc.Context) {
 	}
 	topicName := topic.Name
 	if topicName != "" {
-		cts := ctx.Client.UserData.(*clientTopics)
+		topics, ok := ctx.Client.Get(userTopicKey)
+		if !ok {
+			return
+		}
+		cts := topics.(*clientTopics)
 		cts.mux.Lock()
 		tp, ok := cts.topicAgents[topicName]
 		if !ok {
@@ -141,7 +150,11 @@ func (s *Server) onUnsubscribe(ctx *arpc.Context) {
 	}
 	topicName := topic.Name
 	if topicName != "" {
-		cts := ctx.Client.UserData.(*clientTopics)
+		topics, ok := ctx.Client.Get(userTopicKey)
+		if !ok {
+			return
+		}
+		cts := topics.(*clientTopics)
 		cts.mux.Lock()
 		if ta, ok := cts.topicAgents[topicName]; ok {
 			delete(cts.topicAgents, topicName)
@@ -237,19 +250,20 @@ func (s *Server) getOrMakeTopic(topic string) *TopicAgent {
 
 // addClient .
 func (s *Server) addClient(c *arpc.Client) {
-	c.UserData = &clientTopics{
+	c.Set(userTopicKey, &clientTopics{
 		topicAgents: map[string]*TopicAgent{},
-	}
+	})
 }
 
 func (s *Server) deleteClient(c *arpc.Client) {
-	if c.UserData == nil {
+	topics, ok := c.Get(userTopicKey)
+	if !ok {
 		return
 	}
 
 	defer util.Recover()
 
-	cts := c.UserData.(*clientTopics)
+	cts := topics.(*clientTopics)
 	cts.mux.RLock()
 	defer cts.mux.RUnlock()
 	for _, tp := range cts.topicAgents {

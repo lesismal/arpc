@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	addr = ":8888"
+	addr = "localhost:8888"
 
 	methodHello  = "Hello"
 	methodNotify = "Notify"

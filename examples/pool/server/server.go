@@ -17,5 +17,5 @@ func main() {
 		log.Printf("/echo: \"%v\", error: %v", str, err)
 	})
 
-	svr.Run(":8888")
+	svr.Run("localhost:8888")
 }

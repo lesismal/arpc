@@ -16,7 +16,7 @@ func main() {
 		panic(err)
 	}
 	for i := 0; i < pool.Size(); i++ {
-		pool.Get(i).UserData = i
+		pool.Get(i).Set("user", i)
 	}
 	defer pool.Stop()
 
@@ -25,10 +25,11 @@ func main() {
 		rsp := ""
 		client := pool.Next()
 		err = client.Call("/echo", &req, &rsp, time.Second*5)
+		user, _ := pool.Get(i).Get("user")
 		if err != nil {
-			log.Fatalf("client[%v] Call failed: %v", client.UserData, err)
+			log.Fatalf("client[%v] Call failed: %v", user, err)
 		} else {
-			log.Printf("client[%v] Call Response: \"%v\"", client.UserData, rsp)
+			log.Printf("client[%v] Call Response: \"%v\"", user, rsp)
 		}
 	}
 }

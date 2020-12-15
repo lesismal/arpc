@@ -10,7 +10,7 @@ import (
 
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/extension/protocol/websocket"
-	"github.com/lesismal/arpc/internal/log"
+	"github.com/lesismal/arpc/log"
 )
 
 // Message .
@@ -60,7 +60,7 @@ func (room *Room) Run() *Room {
 			select {
 			case cli := <-room.chEnterRoom:
 				room.users[cli] = userCnt
-				cli.UserData = userCnt
+				cli.Set("user", userCnt)
 				userid := fmt.Sprintf("%v", userCnt)
 				cli.Notify("/chat/server/userid", userid, 0)
 				room.broadcastMsg("/chat/server/userenter", NewMessage(userCnt, ""))
@@ -68,9 +68,14 @@ func (room *Room) Run() *Room {
 				log.Info("[user_%v] enter room", userid)
 			case cli := <-room.chLeaveRoom:
 				delete(room.users, cli)
-				userid, _ := cli.UserData.(uint64)
-				room.broadcastMsg("/chat/server/userleave", NewMessage(userid, ""))
-				log.Info("[user_%v] leave room", userid)
+				user, ok := cli.Get("user")
+				if ok {
+					userid, ok := user.(uint64)
+					if ok {
+						room.broadcastMsg("/chat/server/userleave", NewMessage(userid, ""))
+						log.Info("[user_%v] leave room", userid)
+					}
+				}
 			case msg := <-room.chBroadcast:
 				room.broadcastMsg("/chat/server/broadcast", msg)
 			case <-room.chStop:
@@ -107,7 +112,7 @@ func NewRoom() *Room {
 
 // NewServer .
 func NewServer(room *Room) *arpc.Server {
-	ln, _ := websocket.Listen(":8888", nil)
+	ln, _ := websocket.Listen("localhost:8888", nil)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Info("url: %v", r.URL.String())
 		if r.URL.Path == "/" {
@@ -120,7 +125,7 @@ func NewServer(room *Room) *arpc.Server {
 	})
 	http.HandleFunc("/ws", ln.(*websocket.Listener).Handler)
 	go func() {
-		err := http.ListenAndServe(":8888", nil)
+		err := http.ListenAndServe("localhost:8888", nil)
 		if err != nil {
 			log.Error("ListenAndServe: ", err)
 			panic(err)
@@ -130,12 +135,13 @@ func NewServer(room *Room) *arpc.Server {
 	svr := arpc.NewServer()
 
 	svr.Handler.Handle("/chat/user/say", func(ctx *arpc.Context) {
-		if ctx.Client.UserData != nil {
-			userid, _ := ctx.Client.UserData.(uint64)
-			msg := &Message{User: userid}
-			err := ctx.Bind(&msg.Message)
-			if err == nil {
-				room.Broadcast(msg)
+		if user, ok := ctx.Client.Get("user"); ok {
+			if userid, ok := user.(uint64); ok {
+				msg := &Message{User: userid}
+				err := ctx.Bind(&msg.Message)
+				if err == nil {
+					room.Broadcast(msg)
+				}
 			}
 		}
 	})

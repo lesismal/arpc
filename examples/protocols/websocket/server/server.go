@@ -10,10 +10,10 @@ import (
 )
 
 func main() {
-	ln, _ := websocket.Listen(":8888", nil)
+	ln, _ := websocket.Listen("localhost:8888", nil)
 	http.HandleFunc("/ws", ln.(*websocket.Listener).Handler)
 	go func() {
-		err := http.ListenAndServe(":8888", nil)
+		err := http.ListenAndServe("localhost:8888", nil)
 		if err != nil {
 			log.Fatal("ListenAndServe: ", err)
 		}

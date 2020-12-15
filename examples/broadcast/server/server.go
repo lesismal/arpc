@@ -45,7 +45,7 @@ func main() {
 		}
 	}()
 
-	server.Run(":8888")
+	server.Run("localhost:8888")
 }
 
 func broadcast(i int) {

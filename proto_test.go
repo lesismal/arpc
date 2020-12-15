@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lesismal/arpc/internal/codec"
+	"github.com/lesismal/arpc/codec"
 )
 
 func TestHeader_BodyLen(t *testing.T) {
@@ -23,7 +23,7 @@ func TestHeader_message(t *testing.T) {
 	if msg.BodyLen() != 10 {
 		t.Fatalf("Header.BodyLen() = %v, want %v", msg.BodyLen(), 10)
 	}
-	head := Header(msg.Buffer[:HeadLen])
+	head := Header{msg.Buffer[0], msg.Buffer[1], msg.Buffer[2], msg.Buffer[3]}
 	msg2, err := head.message(DefaultHandler)
 	if err != nil {
 		t.Fatalf("Header.message() error = %v", err)

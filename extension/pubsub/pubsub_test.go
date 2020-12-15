@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lesismal/arpc/internal/log"
+	"github.com/lesismal/arpc/log"
 )
 
 func TestPubSub(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/extension/middleware/router"
-	"github.com/lesismal/arpc/internal/log"
+	"github.com/lesismal/arpc/log"
 )
 
 func main() {
@@ -28,5 +28,5 @@ func main() {
 		time.Sleep(time.Millisecond)
 	})
 
-	svr.Run(":8888")
+	svr.Run("localhost:8888")
 }

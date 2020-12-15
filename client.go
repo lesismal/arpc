@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lesismal/arpc/internal/codec"
-	"github.com/lesismal/arpc/internal/log"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/codec"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 const (
@@ -43,14 +43,12 @@ func newSession(seq uint64) *rpcSession {
 // with a single Client, and a Client may be used by
 // multiple goroutines simultaneously.
 type Client struct {
-	Conn     net.Conn
-	Reader   io.Reader
-	head     [4]byte
-	Head     Header
-	Codec    codec.Codec
-	Handler  Handler
-	Dialer   DialerFunc
-	UserData interface{}
+	Conn    net.Conn
+	Codec   codec.Codec
+	Handler Handler
+	Reader  io.Reader
+	Dialer  DialerFunc
+	Head    Header
 
 	running      bool
 	reconnecting bool
@@ -65,11 +63,12 @@ type Client struct {
 
 	onStop func(*Client)
 
-	values map[string]interface{}
+	values map[interface{}]interface{}
+	// UserData interface{}
 }
 
 // Get returns value for key.
-func (c *Client) Get(key string) (interface{}, bool) {
+func (c *Client) Get(key interface{}) (interface{}, bool) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	if len(c.values) == 0 {
@@ -80,28 +79,25 @@ func (c *Client) Get(key string) (interface{}, bool) {
 }
 
 // Set sets key-value pair.
-func (c *Client) Set(key string, value interface{}) {
-	// if value == nil {
-	// 	return
-	// }
+func (c *Client) Set(key interface{}, value interface{}) {
+	if key == nil || value == nil {
+		return
+	}
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	if c.running {
 		if c.values == nil {
-			c.values = map[string]interface{}{}
+			c.values = map[interface{}]interface{}{}
 		}
 		c.values[key] = value
 	}
 }
 
 // Delete deletes key-value pair
-func (c *Client) Delete(key string) {
+func (c *Client) Delete(key interface{}) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
-	if c.running {
-		if c.values == nil {
-			return
-		}
+	if c.running && c.values != nil {
 		delete(c.values, key)
 	}
 }
@@ -322,7 +318,7 @@ func (c *Client) Restart() error {
 		c.chClose = make(chan util.Empty)
 		c.sessionMap = make(map[uint64]*rpcSession)
 		c.asyncHandlerMap = make(map[uint64]HandlerFunc)
-		c.values = map[string]interface{}{}
+		c.values = map[interface{}]interface{}{}
 
 		c.initReader()
 		go util.Safe(c.sendLoop)
@@ -440,7 +436,7 @@ func (c *Client) newRequestMessage(cmd byte, method string, v interface{}, isErr
 	if len(args) == 0 {
 		return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, nil)
 	}
-	return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, args[0].(map[string]interface{}))
+	return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, args[0].(map[interface{}]interface{}))
 }
 
 func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
@@ -732,7 +728,6 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 
 	c := &Client{}
 	c.Conn = conn
-	c.Head = Header(c.head[:])
 	c.Codec = codec
 	c.Handler = handler
 	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
@@ -760,7 +755,6 @@ func NewClient(dialer DialerFunc) (*Client, error) {
 	c := &Client{}
 	c.Conn = conn
 
-	c.Head = Header(c.head[:])
 	c.Codec = codec.DefaultCodec
 	c.Handler = DefaultHandler.Clone()
 	c.Dialer = dialer

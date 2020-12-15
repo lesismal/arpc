@@ -10,8 +10,8 @@ import (
 	"io"
 	"net"
 
-	"github.com/lesismal/arpc/internal/log"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 )
 
 // DefaultHandler is the default Handler used by arpc
@@ -414,7 +414,7 @@ func (h *handler) Recv(c *Client) (*Message, error) {
 		}
 	}
 
-	_, err = io.ReadFull(c.Reader, c.Head[:HeaderIndexBodyLenEnd])
+	_, err = io.ReadFull(c.Reader, c.Head[:])
 	if err != nil {
 		return nil, err
 	}

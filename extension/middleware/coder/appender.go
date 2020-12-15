@@ -2,7 +2,7 @@ package coder
 
 import (
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/util"
 )
 
 // Appender .

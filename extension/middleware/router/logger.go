@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/internal/log"
+	"github.com/lesismal/arpc/log"
 )
 
 // Logger returns the logger middleware.

@@ -11,10 +11,10 @@ import (
 )
 
 func TestAll(t *testing.T) {
-	ln, _ := NewListener(":8888", nil)
+	ln, _ := NewListener("localhost:8888", nil)
 	http.HandleFunc("/ws", ln.(*Listener).Handler)
 	go func() {
-		err := http.ListenAndServe(":8888", nil)
+		err := http.ListenAndServe("localhost:8888", nil)
 		if err != nil {
 			log.Fatal("ListenAndServe: ", err)
 		}

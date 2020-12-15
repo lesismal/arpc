@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/lesismal/arpc/internal/log"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 	"go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 )

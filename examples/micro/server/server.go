@@ -9,7 +9,7 @@ import (
 
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/extension/micro/etcd"
-	"github.com/lesismal/arpc/internal/log"
+	"github.com/lesismal/arpc/log"
 )
 
 func main() {

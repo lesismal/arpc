@@ -25,5 +25,5 @@ func main() {
 		log.Printf("/echo/async: \"%v\", error: %v", str, err)
 	})
 
-	svr.Run(":8888")
+	svr.Run("localhost:8888")
 }

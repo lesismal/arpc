@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	ln, err := utp.NewSocket("udp", ":8888")
+	ln, err := utp.NewSocket("udp", "localhost:8888")
 	if err != nil {
 		log.Fatalf("failed to ListenUnix: %v", err)
 	}

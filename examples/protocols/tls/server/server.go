@@ -69,7 +69,7 @@ func main() {
 		InsecureSkipVerify: true,
 	}
 	tlsConfig.BuildNameToCertificate()
-	ln, err := tls.Listen("tcp", ":8888", tlsConfig)
+	ln, err := tls.Listen("tcp", "localhost:8888", tlsConfig)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

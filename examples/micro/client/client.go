@@ -6,7 +6,7 @@ import (
 
 	"github.com/lesismal/arpc/extension/micro"
 	"github.com/lesismal/arpc/extension/micro/etcd"
-	"github.com/lesismal/arpc/internal/log"
+	"github.com/lesismal/arpc/log"
 )
 
 func dialer(addr string) (net.Conn, error) {

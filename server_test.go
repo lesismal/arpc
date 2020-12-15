@@ -112,13 +112,14 @@ func TestServer_Run(t *testing.T) {
 	svr := NewServer()
 	go svr.Run(testServerAddr)
 	go svr.Run(testServerAddr)
-	time.Sleep(time.Second / 100)
+	time.Sleep(time.Second / 2)
 	svr.Stop()
+
 }
 
 func TestServer_Shutdown(t *testing.T) {
 	svr := NewServer()
-	go svr.Run(":8899")
-	time.Sleep(time.Second / 100)
+	go svr.Run("localhost:8899")
+	time.Sleep(time.Second / 2)
 	svr.Shutdown(context.Background())
 }

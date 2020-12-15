@@ -30,7 +30,7 @@ func main() {
 		log.Printf("/echo: \"%v\", error: %v", str, err)
 	}, true)
 
-	go server.Run(":8888")
+	go server.Run("localhost:8888")
 
 	quit := make(chan os.Signal)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

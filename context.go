@@ -13,18 +13,14 @@ import (
 type Context struct {
 	Client  *Client
 	Message *Message
-	values  map[string]interface{}
-
-	err      interface{}
-	response []interface{}
-	timeout  time.Duration
+	values  map[interface{}]interface{}
 
 	index    int
 	handlers []HandlerFunc
 }
 
 // Get returns value for key.
-func (ctx *Context) Get(key string) (interface{}, bool) {
+func (ctx *Context) Get(key interface{}) (interface{}, bool) {
 	if len(ctx.values) == 0 {
 		return nil, false
 	}
@@ -33,18 +29,18 @@ func (ctx *Context) Get(key string) (interface{}, bool) {
 }
 
 // Set sets key-value pair.
-func (ctx *Context) Set(key string, value interface{}) {
-	if value == nil {
+func (ctx *Context) Set(key interface{}, value interface{}) {
+	if key == nil || value == nil {
 		return
 	}
 	if ctx.values == nil {
-		ctx.values = map[string]interface{}{}
+		ctx.values = map[interface{}]interface{}{}
 	}
 	ctx.values[key] = value
 }
 
 // Values returns values.
-func (ctx *Context) Values() map[string]interface{} {
+func (ctx *Context) Values() map[interface{}]interface{} {
 	return ctx.values
 }
 
@@ -93,7 +89,7 @@ func (ctx *Context) Error(v interface{}) error {
 
 // Next calls next middleware or method/router handler.
 func (ctx *Context) Next() {
-	index := ctx.index
+	index := int(ctx.index)
 	if index < len(ctx.handlers) {
 		ctx.index++
 		ctx.handlers[index](ctx)
@@ -102,42 +98,28 @@ func (ctx *Context) Next() {
 
 // Abort stops the one-by-one-calling of middlewares and method/router handler.
 func (ctx *Context) Abort() {
-	ctx.index = int(math.MaxInt32)
+	ctx.index = int(math.MaxInt8)
 }
 
-// Deadline returns the time when work done on behalf of this context
-// should be canceled. Deadline returns ok==false when no deadline is
-// set. Successive calls to Deadline return the same results.
-func (c *Context) Deadline() (deadline time.Time, ok bool) {
+// Deadline implements stdlib's Context.
+func (ctx *Context) Deadline() (deadline time.Time, ok bool) {
 	return
 }
 
-// Done returns a channel that's closed when work done on behalf of this
-// context should be canceled. Done may return nil if this context can
-// never be canceled. Successive calls to Done return the same value.
-func (c *Context) Done() <-chan struct{} {
+// Done implements stdlib's Context.
+func (ctx *Context) Done() <-chan struct{} {
 	return nil
 }
 
-// Err returns a non-nil error value after Done is closed,
-// successive calls to Err return the same error.
-// If Done is not yet closed, Err returns nil.
-// If Done is closed, Err returns a non-nil error explaining why:
-// Canceled if the context was canceled
-// or DeadlineExceeded if the context's deadline passed.
-func (c *Context) Err() error {
+// Err implements stdlib's Context.
+func (ctx *Context) Err() error {
 	return nil
 }
 
-// Value returns the value associated with this context for key, or nil
-// if no value is associated with key. Successive calls to Value with
-// the same key returns the same result.
-func (c *Context) Value(key interface{}) interface{} {
-	if keyString, ok := key.(string); ok {
-		value, _ := c.Get(keyString)
-		return value
-	}
-	return nil
+// Value returns the value associated with this context for key, implements stdlib's Context.
+func (ctx *Context) Value(key interface{}) interface{} {
+	value, _ := ctx.Get(key)
+	return value
 }
 
 func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
@@ -150,7 +132,7 @@ func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) er
 		isError = true
 	}
 	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.values)
-	return cli.PushMsg(rsp, ctx.timeout)
+	return cli.PushMsg(rsp, timeout)
 }
 
 func newContext(cli *Client, msg *Message, handlers []HandlerFunc) *Context {

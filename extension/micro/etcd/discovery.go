@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc/extension/micro"
-	"github.com/lesismal/arpc/internal/log"
-	"github.com/lesismal/arpc/internal/util"
+	"github.com/lesismal/arpc/log"
+	"github.com/lesismal/arpc/util"
 	"go.etcd.io/etcd/client/v3"
 )
 

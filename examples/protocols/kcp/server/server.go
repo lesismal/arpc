@@ -12,7 +12,7 @@ import (
 func main() {
 	key := pbkdf2.Key([]byte("demo pass"), []byte("demo salt"), 1024, 32, sha1.New)
 	block, _ := kcp.NewAESBlockCrypt(key)
-	ln, err := kcp.ListenWithOptions(":8888", block, 10, 3)
+	ln, err := kcp.ListenWithOptions("localhost:8888", block, 10, 3)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
