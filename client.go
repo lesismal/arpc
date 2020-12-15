@@ -596,7 +596,7 @@ func (c *Client) recvLoop() {
 			c.Handler.OnMessage(c, msg)
 		}
 	} else {
-		go c.Handler.OnConnected(c)
+		// c.Handler.OnConnected(c)
 
 		for c.running {
 			for {
