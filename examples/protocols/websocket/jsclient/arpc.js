@@ -1,26 +1,26 @@
-var SOCK_STATE_CLOSED = 0;
-var SOCK_STATE_CONNECTING = 1;
-var SOCK_STATE_CONNECTED = 2;
+var _SOCK_STATE_CLOSED = 0;
+var _SOCK_STATE_CONNECTING = 1;
+var _SOCK_STATE_CONNECTED = 2;
 
-var CmdNone = 0;
-var CmdRequest = 1;
-var CmdResponse = 2;
-var CmdNotify = 3;
+var _CmdNone = 0;
+var _CmdRequest = 1;
+var _CmdResponse = 2;
+var _CmdNotify = 3;
 
-var HeaderIndexBodyLenBegin = 0;
-var HeaderIndexBodyLenEnd = 4;
-var HeaderIndexReserved = 4;
-var HeaderIndexCmd = 5;
-var HeaderIndexFlag = 6;
-var HeaderIndexMethodLen = 7;
-var HeaderIndexSeqBegin = 8;
-var HeaderIndexSeqEnd = 16;
-var HeaderFlagMaskError = 0x01;
-var HeaderFlagMaskAsync = 0x02;
+var _HeaderIndexBodyLenBegin = 0;
+var _HeaderIndexBodyLenEnd = 4;
+var _HeaderIndexReserved = 4;
+var _HeaderIndexCmd = 5;
+var _HeaderIndexFlag = 6;
+var _HeaderIndexMethodLen = 7;
+var _HeaderIndexSeqBegin = 8;
+var _HeaderIndexSeqEnd = 16;
+var _HeaderFlagMaskError = 0x01;
+var _HeaderFlagMaskAsync = 0x02;
 
-var ErrClosed = "[client stopped]";
-var ErrDisconnected = "[error disconnected]";
-var ErrReconnecting = "[error reconnecting]";
+var _ErrClosed = "[client stopped]";
+var _ErrDisconnected = "[error disconnected]";
+var _ErrReconnecting = "[error reconnecting]";
 
 function Codec() {
     this.Marshal = function (obj) {
@@ -62,24 +62,24 @@ function ArpcClient(url, codec) {
 
     this.handlers = {};
 
-    this.state = SOCK_STATE_CONNECTING;
+    this.state = _SOCK_STATE_CONNECTING;
 
-    this.Handle = function (method, h) {
+    this.handle = function (method, h) {
         if (this.handlers[method]) {
             throw ("handler for [${method}] exists");
         }
         this.handlers[method] = { h: h };
     }
 
-    this.Call = function (method, request, timeout, cb) {
-        if (this.state == SOCK_STATE_CLOSED) {
+    this.call = function (method, request, timeout, cb) {
+        if (this.state == _SOCK_STATE_CLOSED) {
             return new Promise(function (resolve, reject) {
-                resolve({ data: null, err: ErrClosed });
+                resolve({ data: null, err: _ErrClosed });
             });
         }
-        if (this.state == SOCK_STATE_CONNECTING) {
+        if (this.state == _SOCK_STATE_CONNECTING) {
             return new Promise(function (resolve, reject) {
-                resolve({ data: null, err: ErrReconnecting });
+                resolve({ data: null, err: _ErrReconnecting });
             });
         }
         this.seqNum++;
@@ -113,14 +113,14 @@ function ArpcClient(url, codec) {
             buffer = new Uint8Array(16 + method.length);
         }
         var bodyLen = buffer.length - 16;
-        for (var i = HeaderIndexBodyLenBegin; i < HeaderIndexBodyLenEnd; i++) {
-            buffer[i] = (bodyLen >> ((i - HeaderIndexBodyLenBegin) * 8)) & 0xFF;
+        for (var i = _HeaderIndexBodyLenBegin; i < _HeaderIndexBodyLenEnd; i++) {
+            buffer[i] = (bodyLen >> ((i - _HeaderIndexBodyLenBegin) * 8)) & 0xFF;
         }
 
-        buffer[HeaderIndexCmd] = CmdRequest & 0xFF;
-        buffer[HeaderIndexMethodLen] = method.length & 0xFF;
-        for (var i = HeaderIndexSeqBegin; i < HeaderIndexSeqBegin + 4; i++) {
-            buffer[i] = (seq >> ((i - HeaderIndexSeqBegin) * 8)) & 0xFF;
+        buffer[_HeaderIndexCmd] = _CmdRequest & 0xFF;
+        buffer[_HeaderIndexMethodLen] = method.length & 0xFF;
+        for (var i = _HeaderIndexSeqBegin; i < _HeaderIndexSeqBegin + 4; i++) {
+            buffer[i] = (seq >> ((i - _HeaderIndexSeqBegin) * 8)) & 0xFF;
         }
 
         var methodBuffer = new TextEncoder("utf-8").encode(method);
@@ -133,12 +133,12 @@ function ArpcClient(url, codec) {
         return p;
     }
 
-    this.Notify = function (method, notify) {
-        if (this.state == SOCK_STATE_CLOSED) {
-            return ErrClosed;
+    this.notify = function (method, notify) {
+        if (this.state == _SOCK_STATE_CLOSED) {
+            return _ErrClosed;
         }
-        if (this.state == SOCK_STATE_CONNECTING) {
-            return ErrReconnecting;
+        if (this.state == _SOCK_STATE_CONNECTING) {
+            return _ErrReconnecting;
         }
         this.seqNum++;
         var buffer;
@@ -154,14 +154,13 @@ function ArpcClient(url, codec) {
             buffer = new Uint8Array(16 + method.length);
         }
         var bodyLen = buffer.length - 16;
-        for (var i = HeaderIndexBodyLenBegin; i < HeaderIndexBodyLenEnd; i++) {
-            buffer[i] = (bodyLen >> ((i - HeaderIndexBodyLenBegin) * 8)) & 0xFF;
+        for (var i = _HeaderIndexBodyLenBegin; i < _HeaderIndexBodyLenEnd; i++) {
+            buffer[i] = (bodyLen >> ((i - _HeaderIndexBodyLenBegin) * 8)) & 0xFF;
         }
-
-        buffer[HeaderIndexCmd] = CmdNotify & 0xFF;
-        buffer[HeaderIndexMethodLen] = method.length & 0xFF;
-        for (var i = HeaderIndexSeqBegin; i < HeaderIndexSeqBegin + 4; i++) {
-            buffer[i] = (this.seqNum >> ((i - HeaderIndexSeqBegin) * 8)) & 0xFF;
+        buffer[_HeaderIndexCmd] = _CmdNotify & 0xFF;
+        buffer[_HeaderIndexMethodLen] = method.length & 0xFF;
+        for (var i = _HeaderIndexSeqBegin; i < _HeaderIndexSeqBegin + 4; i++) {
+            buffer[i] = (this.seqNum >> ((i - _HeaderIndexSeqBegin) * 8)) & 0xFF;
         }
 
         var methodBuffer = new TextEncoder("utf-8").encode(method);
@@ -172,32 +171,32 @@ function ArpcClient(url, codec) {
         this.ws.send(buffer);
     }
 
-    this.Shutdown = function () {
+    this.shutdown = function () {
         this.ws.close();
-        this.state = SOCK_STATE_CLOSED;
+        this.state = _SOCK_STATE_CLOSED;
     }
 
-    this.onMessage = function (event) {
+    this._onMessage = function (event) {
         try {
             var offset = 0;
             while (offset < event.data.byteLength) {
                 var headArr = new Uint8Array(event.data.slice(offset, offset + 16));
                 var bodyLen = 0;
-                for (var i = HeaderIndexBodyLenBegin; i < HeaderIndexBodyLenEnd; i++) {
-                    bodyLen |= (headArr[i] << ((i - HeaderIndexBodyLenBegin) * 8)) & 0xFF;
+                for (var i = _HeaderIndexBodyLenBegin; i < _HeaderIndexBodyLenEnd; i++) {
+                    bodyLen |= (headArr[i] << ((i - _HeaderIndexBodyLenBegin) * 8)) & 0xFF;
                 }
-                var cmd = headArr[HeaderIndexCmd];
-                var isError = headArr[HeaderIndexFlag] & HeaderFlagMaskError;
-                var isAsync = headArr[HeaderIndexFlag] & HeaderFlagMaskAsync;
-                var methodLen = headArr[HeaderIndexMethodLen];
+                var cmd = headArr[_HeaderIndexCmd];
+                var isError = headArr[_HeaderIndexFlag] & _HeaderFlagMaskError;
+                var isAsync = headArr[_HeaderIndexFlag] & _HeaderFlagMaskAsync;
+                var methodLen = headArr[_HeaderIndexMethodLen];
                 var method = new TextDecoder("utf-8").decode(event.data.slice(offset + 16, offset + 16 + methodLen));
                 var bodyArr;
                 if (bodyLen > methodLen) {
                     bodyArr = event.data.slice(offset + 16 + methodLen, offset + 16 + methodLen + bodyLen);
                 }
                 var seq = 0;
-                for (var i = offset + HeaderIndexSeqBegin; i < offset + HeaderIndexSeqBegin + 4; i++) {
-                    seq |= headArr[i] << (i - offset - HeaderIndexSeqBegin);
+                for (var i = offset + _HeaderIndexSeqBegin; i < offset + _HeaderIndexSeqBegin + 4; i++) {
+                    seq |= headArr[i] << (i - offset - _HeaderIndexSeqBegin);
                 }
 
                 if (methodLen == 0) {
@@ -206,8 +205,8 @@ function ArpcClient(url, codec) {
                 }
 
                 switch (cmd) {
-                    case CmdRequest:
-                    case CmdNotify:
+                    case _CmdRequest:
+                    case _CmdNotify:
                         var handler = client.handlers[method]
                         if (handler) {
                             var data = client.codec.Unmarshal(bodyArr);
@@ -217,7 +216,7 @@ function ArpcClient(url, codec) {
                             return
                         }
                         break;
-                    case CmdResponse:
+                    case _CmdResponse:
                         var session = client.sessionMap[seq];
                         if (session) {
                             if (session.timer) {
@@ -258,10 +257,10 @@ function ArpcClient(url, codec) {
         // 消息类型,不设置则默认为'text'
         client.ws.binaryType = 'arraybuffer';
 
-        client.state = SOCK_STATE_CONNECTING;
+        client.state = _SOCK_STATE_CONNECTING;
 
         client.ws.onopen = function (event) {
-            client.state = SOCK_STATE_CONNECTED;
+            client.state = _SOCK_STATE_CONNECTED;
             console.log("[ArpcClient] websocket onopen");
             if (client.onOpen) {
                 client.onOpen(client);
@@ -280,14 +279,14 @@ function ArpcClient(url, codec) {
                     if (session.timer) {
                         clearTimeout(session.timer);
                     }
-                    session.resolve({ data: null, err: ErrDisconnected });
+                    session.resolve({ data: null, err: _ErrDisconnected });
                 } 
             }
             // shutdown
-            if (client.state == SOCK_STATE_CLOSED) {
+            if (client.state == _SOCK_STATE_CLOSED) {
                 return;
             }
-            client.state = SOCK_STATE_CONNECTING;
+            client.state = _SOCK_STATE_CONNECTING;
             client.init();
         };
         client.ws.onerror = function (event) {
@@ -296,7 +295,7 @@ function ArpcClient(url, codec) {
                 client.onError(client);
             }
         };
-        client.ws.onmessage = client.onMessage;
+        client.ws.onmessage = client._onMessage;
     }
 
     try {

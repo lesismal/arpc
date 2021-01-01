@@ -15,7 +15,7 @@
         client.onClose = function () {
             console.log("ArpcClient onClose");
         }
-        client.Handle("/server/notify", function (ctx) {
+        client.handle("/server/notify", function (ctx) {
             console.log("[/server/notify]:", ctx.data);
             document.getElementById("notify").innerHTML = ctx.data;
         });
@@ -24,16 +24,16 @@
         setInterval(function () {
             count++;
             // use promise
-            client.Call("/call/echo", `call ${count}`, timeout).then(function (reply) {
+            client.call("/call/echo", `call ${count}`, timeout).then(function (reply) {
                 console.log("[/call/echo]:", reply.data, reply.err);
                 document.getElementById("response").innerHTML = `[/call/echo] reply: '${reply.data}', error: '${reply.err}'`;
             });
             // use callback
-            // client.Call("/call/echo", `call ${count}`, timeout, function (reply) {
+            // client.call("/call/echo", `call ${count}`, timeout, function (reply) {
             //     console.log("[/call/echo]:", reply.data, reply.err);
             //     document.getElementById("response").innerHTML = `[/call/echo] reply: '${reply.data}', error: '${reply.err}'`;
             // });
-            client.Notify("/notify", `notify ${count}`);
+            client.notify("/notify", `notify ${count}`);
         }, 1000);
     </script>
 </body>

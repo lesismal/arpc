@@ -168,6 +168,7 @@ func main() {
 	<-quit
 
 	room.Stop()
+	time.Sleep(time.Second / 10)
 	server.Stop()
 
 	log.Info("server exit")

@@ -34,26 +34,26 @@
                 appendLog(item);
             }
 
-            client.Handle("/chat/server/userid", function (ctx) {
+            client.handle("/chat/server/userid", function (ctx) {
                 myId = ctx.data;
                 var item = document.createElement("div");
                 item.innerText = `[my id: ${myId}]`;
                 appendLog(item);
             });
 
-            client.Handle("/chat/server/userenter", function (ctx) {
+            client.handle("/chat/server/userenter", function (ctx) {
                 var item = document.createElement("div");
                 item.innerText = `[user_${ctx.data.user}] enter room, welcome!~~~`;
                 appendLog(item);
             });
 
-            client.Handle("/chat/server/userleave", function (ctx) {
+            client.handle("/chat/server/userleave", function (ctx) {
                 var item = document.createElement("div");
                 item.innerText = `[user_${ctx.data.user}] leave room.`;
                 appendLog(item);
             });
 
-            client.Handle("/chat/server/broadcast", function (ctx) {
+            client.handle("/chat/server/broadcast", function (ctx) {
                 var item = document.createElement("div");
                 if (ctx.data.user == myId) {
                     item.innerText = `[myself]: ${ctx.data.message}`;
@@ -63,11 +63,11 @@
                 appendLog(item);
             });
 
-            client.Handle("/chat/server/shutdown", function (ctx) {
+            client.handle("/chat/server/shutdown", function (ctx) {
                 var item = document.createElement("div");
                 item.innerText = "server shutdown";
                 appendLog(item);
-                client.Shutdown();
+                client.shutdown();
             });
 
             document.getElementById("form").onsubmit = function () {
@@ -77,7 +77,7 @@
                 if (!msgInput.value) {
                     return false;
                 }
-                client.Notify("/chat/user/say", msgInput.value);
+                client.notify("/chat/user/say", msgInput.value);
                 msgInput.value = "";
                 return false;
             };
