@@ -27,7 +27,7 @@
 	- [Performance](#performance)
 	- [Header Layout](#header-layout)
 	- [Installation](#installation)
-	- [Quick start](#quick-start)
+	- [Quick Start](#quick-start)
 	- [API Examples](#api-examples)
 		- [Register Routers](#register-routers)
 		- [Router Middleware](#router-middleware)
@@ -102,7 +102,7 @@ import "github.com/lesismal/arpc"
 ```
 
 
-## Quick start
+## Quick Start
  
 - start a [server](https://github.com/lesismal/arpc/blob/master/examples/rpc/server/server.go)
 
