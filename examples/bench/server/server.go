@@ -8,9 +8,7 @@ import (
 )
 
 const (
-	addr = ":8888"
-
-	method = "Hello"
+	addr = "localhost:8888"
 )
 
 // HelloReq .
