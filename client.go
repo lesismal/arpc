@@ -730,6 +730,7 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 	c.Conn = conn
 	c.Codec = codec
 	c.Handler = handler
+	c.Head = make([]byte, 4)
 	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
@@ -754,10 +755,10 @@ func NewClient(dialer DialerFunc) (*Client, error) {
 
 	c := &Client{}
 	c.Conn = conn
-
 	c.Codec = codec.DefaultCodec
 	c.Handler = DefaultHandler.Clone()
 	c.Dialer = dialer
+	c.Head = make([]byte, 4)
 	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)

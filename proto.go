@@ -62,7 +62,7 @@ const (
 )
 
 // Header defines Message head
-type Header [4]byte
+type Header []byte
 
 // BodyLen returns Message body length.
 func (h Header) BodyLen() int {
