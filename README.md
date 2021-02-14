@@ -9,8 +9,8 @@
 [2]: https://godoc.org/github.com/lesismal/arpc
 [3]: https://img.shields.io/badge/license-MIT-blue.svg
 [4]: LICENSE
-[5]: https://travis-ci.org/lesismal/arpc.svg?branch=master
-[6]: https://travis-ci.org/lesismal/arpc
+[5]: https://img.shields.io/github/workflow/status/lesismal/arpc/build-linux?style=flat-square&logo=github-actions
+[6]: https://github.com/lesismal/arpc/actions?query=workflow%3build-linux
 [7]: https://goreportcard.com/badge/github.com/lesismal/arpc
 [8]: https://goreportcard.com/report/github.com/lesismal/arpc
 [9]: https://codecov.io/gh/lesismal/arpc/branch/master/graph/badge.svg

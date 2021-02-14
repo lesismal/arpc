@@ -11,7 +11,7 @@ import (
 )
 
 func TestAll(t *testing.T) {
-	ln, _ := NewListener("localhost:8888", nil)
+	ln, _ := Listen("localhost:8888", nil)
 	http.HandleFunc("/ws", ln.(*Listener).Handler)
 	go func() {
 		err := http.ListenAndServe("localhost:8888", nil)
@@ -25,14 +25,14 @@ func TestAll(t *testing.T) {
 	go func() {
 		conn, err := ln.Accept()
 		if err != nil {
-			t.Fatalf("failed to listen: %v", err)
+			log.Fatalf("failed to listen: %v", err)
 		}
 		defer conn.Close()
 
 		bread := make([]byte, len(str))
 		_, err = conn.Read(bread)
 		if err != nil {
-			t.Fatalf("failed to listen: %v", err)
+			log.Fatalf("failed to listen: %v", err)
 		}
 		conn.Write(bread)
 	}()
