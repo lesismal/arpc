@@ -51,18 +51,18 @@ func onData(c *nbio.Conn, data []byte) {
 	}
 	session := iSession.(*Session)
 	buffer := session.Buffer
-	buffer.Write(append([]byte{}, data...))
-	buf, err := buffer.HeadN(4)
+	buffer.Push(append([]byte{}, data...))
+	buf, err := buffer.Head(4)
 	if err != nil {
 		return
 	}
 	header := arpc.Header(buf)
-	buf, err = buffer.ReadN(arpc.HeadLen + header.BodyLen())
+	buf, err = buffer.Pop(arpc.HeadLen + header.BodyLen())
 	if err != nil {
 		return
 	}
 
-	handler.OnMessage(session.Client, &arpc.Message{Buffer: buf})
+	handler.OnMessage(session.Client, &arpc.Message{Buffer: append([]byte{}, buf...)})
 }
 
 func main() {
