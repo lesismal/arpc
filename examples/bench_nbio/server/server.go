@@ -8,7 +8,7 @@ import (
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/codec"
 	"github.com/lesismal/arpc/log"
-	"github.com/lesismal/lib/bytes"
+	"github.com/lesismal/llib/bytes"
 	"github.com/lesismal/nbio"
 	nlog "github.com/lesismal/nbio/log"
 )
