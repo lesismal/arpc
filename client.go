@@ -50,6 +50,8 @@ type Client struct {
 	Dialer  DialerFunc
 	Head    Header
 
+	IsAsync bool
+
 	running      bool
 	reconnecting bool
 

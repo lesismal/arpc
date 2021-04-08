@@ -77,11 +77,6 @@ func (ctx *Context) Write(v interface{}) error {
 	return ctx.write(v, false, TimeForever)
 }
 
-// Write2 responses a Message to the Client.
-func (ctx *Context) Write2(v interface{}) error {
-	return ctx.write2(v, false)
-}
-
 // WriteWithTimeout responses a Message to the Client with timeout.
 func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error {
 	return ctx.write(v, false, timeout)
@@ -89,11 +84,6 @@ func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error
 
 // Error responses an error Message to the Client.
 func (ctx *Context) Error(v interface{}) error {
-	return ctx.write(v, true, TimeForever)
-}
-
-// Error2 responses an error Message to the Client.
-func (ctx *Context) Error2(v interface{}) error {
 	return ctx.write(v, true, TimeForever)
 }
 
@@ -134,6 +124,9 @@ func (ctx *Context) Value(key interface{}) interface{} {
 
 func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
 	cli := ctx.Client
+	if cli.IsAsync {
+		return ctx.writeDirectly(v, isError)
+	}
 	req := ctx.Message
 	if req.Cmd() != CmdRequest {
 		return ErrContextResponseToNotify
@@ -145,7 +138,7 @@ func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) er
 	return cli.PushMsg(rsp, timeout)
 }
 
-func (ctx *Context) write2(v interface{}, isError bool) error {
+func (ctx *Context) writeDirectly(v interface{}, isError bool) error {
 	cli := ctx.Client
 	req := ctx.Message
 	if req.Cmd() != CmdRequest {

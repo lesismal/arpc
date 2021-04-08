@@ -10,7 +10,7 @@ import (
 	"github.com/lesismal/arpc/log"
 	"github.com/lesismal/llib/bytes"
 	"github.com/lesismal/nbio"
-	nlog "github.com/lesismal/nbio/log"
+	nlog "github.com/lesismal/nbio/loging"
 )
 
 var (
@@ -25,7 +25,7 @@ type Session struct {
 }
 
 func onOpen(c *nbio.Conn) {
-	client := &arpc.Client{Conn: c, Codec: codec.DefaultCodec}
+	client := &arpc.Client{Conn: c, Codec: codec.DefaultCodec, IsAsync: true}
 	session := &Session{
 		Client: client,
 		Buffer: bytes.NewBuffer(),
@@ -63,11 +63,11 @@ func main() {
 		str := ""
 		err := ctx.Bind(&str)
 		if err != nil {
-			ctx.Error2("invalid message")
+			ctx.Error("invalid message")
 			log.Error("Bind failed: %v", err)
 			return
 		}
-		ctx.Write2(str)
+		ctx.Write(str)
 		log.Info("/echo: %v", str)
 	})
 
