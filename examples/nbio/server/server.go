@@ -8,9 +8,8 @@ import (
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/codec"
 	"github.com/lesismal/arpc/log"
-	"github.com/lesismal/llib/bytes"
 	"github.com/lesismal/nbio"
-	nlog "github.com/lesismal/nbio/loging"
+	nlog "github.com/lesismal/nbio/logging"
 )
 
 var (
@@ -21,14 +20,14 @@ var (
 // Session .
 type Session struct {
 	Client *arpc.Client
-	Buffer *bytes.Buffer
+	Buffer []byte
 }
 
 func onOpen(c *nbio.Conn) {
 	client := &arpc.Client{Conn: c, Codec: codec.DefaultCodec, IsAsync: true}
 	session := &Session{
 		Client: client,
-		Buffer: bytes.NewBuffer(),
+		Buffer: nil,
 	}
 	c.SetSession(session)
 }
@@ -40,19 +39,20 @@ func onData(c *nbio.Conn, data []byte) {
 		return
 	}
 	session := iSession.(*Session)
-	buffer := session.Buffer
-	buffer.Push(append([]byte{}, data...))
-	buf, err := buffer.Head(4)
-	if err != nil {
-		return
-	}
-	header := arpc.Header(buf)
-	buf, err = buffer.Pop(arpc.HeadLen + header.BodyLen())
-	if err != nil {
+	session.Buffer = append(session.Buffer, data...)
+	if len(session.Buffer) < arpc.HeadLen {
 		return
 	}
 
-	handler.OnMessage(session.Client, &arpc.Message{Buffer: buf})
+	headBuf := session.Buffer[:4]
+	header := arpc.Header(headBuf)
+	if len(session.Buffer) < arpc.HeadLen+header.BodyLen() {
+		return
+	}
+
+	msg := &arpc.Message{Buffer: session.Buffer[:arpc.HeadLen+header.BodyLen()]}
+	session.Buffer = session.Buffer[arpc.HeadLen+header.BodyLen():]
+	handler.OnMessage(session.Client, msg)
 }
 
 func main() {

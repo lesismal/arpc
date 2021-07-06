@@ -280,7 +280,7 @@ function ArpcClient(url, codec) {
                         clearTimeout(session.timer);
                     }
                     session.resolve({ data: null, err: _ErrDisconnected });
-                } 
+                }
             }
             // shutdown
             if (client.state == _SOCK_STATE_CLOSED) {
