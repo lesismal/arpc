@@ -148,8 +148,19 @@ func (ctx *Context) writeDirectly(v interface{}, isError bool) error {
 		isError = true
 	}
 	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.values)
-	_, err := cli.Conn.Write(rsp.Buffer)
-	return err
+	if !cli.reconnecting {
+		coders := cli.Handler.Coders()
+		for j := 0; j < len(coders); j++ {
+			rsp = coders[j].Encode(cli, rsp)
+		}
+		_, err := cli.Handler.Send(cli.Conn, rsp.Buffer)
+		if err != nil {
+			cli.Conn.Close()
+		}
+		return err
+	}
+	cli.dropMessage(rsp)
+	return ErrClientReconnecting
 }
 
 func newContext(cli *Client, msg *Message, handlers []HandlerFunc) *Context {
