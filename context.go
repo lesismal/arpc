@@ -124,7 +124,7 @@ func (ctx *Context) Value(key interface{}) interface{} {
 
 func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) error {
 	cli := ctx.Client
-	if cli.IsAsync {
+	if cli.IsAsyncWrite {
 		return ctx.writeDirectly(v, isError)
 	}
 	req := ctx.Message
