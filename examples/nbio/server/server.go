@@ -24,7 +24,7 @@ type Session struct {
 }
 
 func onOpen(c *nbio.Conn) {
-	client := &arpc.Client{Conn: c, Codec: codec.DefaultCodec, IsAsync: true}
+	client := &arpc.Client{Conn: c, Codec: codec.DefaultCodec, Handler: handler}
 	session := &Session{
 		Client: client,
 		Buffer: nil,
@@ -57,6 +57,8 @@ func onData(c *nbio.Conn, data []byte) {
 
 func main() {
 	nlog.SetLogger(log.DefaultLogger)
+
+	handler.SetAsyncWrite(false)
 
 	// register router
 	handler.Handle("/echo", func(ctx *arpc.Context) {

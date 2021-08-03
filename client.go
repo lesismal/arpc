@@ -50,8 +50,6 @@ type Client struct {
 	Dialer  DialerFunc
 	Head    Header
 
-	IsAsyncWrite bool
-
 	running      bool
 	reconnecting bool
 
@@ -131,7 +129,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		c.deleteSession(seq)
 	}()
 
-	if c.IsAsyncWrite {
+	if c.Handler.AsyncWrite() {
 		select {
 		case c.chSend <- msg:
 		case <-timer.C:
@@ -142,13 +140,18 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 			return ErrClientStopped
 		}
 	} else {
-		coders := c.Handler.Coders()
-		for j := 0; j < len(coders); j++ {
-			msg = coders[j].Encode(c, msg)
-		}
-		if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
-			c.Conn.Close()
-			return err
+		if !c.reconnecting {
+			coders := c.Handler.Coders()
+			for j := 0; j < len(coders); j++ {
+				msg = coders[j].Encode(c, msg)
+			}
+			if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
+				c.Conn.Close()
+				return err
+			}
+		} else {
+			c.dropMessage(msg)
+			return ErrClientReconnecting
 		}
 	}
 
@@ -176,7 +179,7 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 	c.addSession(seq, sess)
 	defer c.deleteSession(seq)
 
-	if c.IsAsyncWrite {
+	if c.Handler.AsyncWrite() {
 		select {
 		case c.chSend <- msg:
 		case <-ctx.Done():
@@ -187,13 +190,18 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 			return ErrClientStopped
 		}
 	} else {
-		coders := c.Handler.Coders()
-		for j := 0; j < len(coders); j++ {
-			msg = coders[j].Encode(c, msg)
-		}
-		if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
-			c.Conn.Close()
-			return err
+		if !c.reconnecting {
+			coders := c.Handler.Coders()
+			for j := 0; j < len(coders); j++ {
+				msg = coders[j].Encode(c, msg)
+			}
+			if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
+				c.Conn.Close()
+				return err
+			}
+		} else {
+			c.dropMessage(msg)
+			return ErrClientReconnecting
 		}
 	}
 
@@ -230,7 +238,7 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 		defer timer.Stop()
 	}
 
-	if c.IsAsyncWrite {
+	if c.Handler.AsyncWrite() {
 		switch timeout {
 		case TimeZero:
 			err = c.pushMessage(msg, nil)
@@ -238,13 +246,18 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 			err = c.pushMessage(msg, timer)
 		}
 	} else {
-		coders := c.Handler.Coders()
-		for j := 0; j < len(coders); j++ {
-			msg = coders[j].Encode(c, msg)
-		}
-		_, err = c.Handler.Send(c.Conn, msg.Buffer)
-		if err != nil {
-			c.Conn.Close()
+		if !c.reconnecting {
+			coders := c.Handler.Coders()
+			for j := 0; j < len(coders); j++ {
+				msg = coders[j].Encode(c, msg)
+			}
+			_, err = c.Handler.Send(c.Conn, msg.Buffer)
+			if err != nil {
+				c.Conn.Close()
+			}
+		} else {
+			c.dropMessage(msg)
+			err = ErrClientReconnecting
 		}
 	}
 
@@ -265,7 +278,7 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration, 
 
 	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
 
-	if c.IsAsyncWrite {
+	if c.Handler.AsyncWrite() {
 		switch timeout {
 		case TimeZero:
 			err = c.pushMessage(msg, nil)
@@ -275,13 +288,18 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration, 
 			err = c.pushMessage(msg, timer)
 		}
 	} else {
-		coders := c.Handler.Coders()
-		for j := 0; j < len(coders); j++ {
-			msg = coders[j].Encode(c, msg)
-		}
-		_, err = c.Handler.Send(c.Conn, msg.Buffer)
-		if err != nil {
-			c.Conn.Close()
+		if !c.reconnecting {
+			coders := c.Handler.Coders()
+			for j := 0; j < len(coders); j++ {
+				msg = coders[j].Encode(c, msg)
+			}
+			_, err = c.Handler.Send(c.Conn, msg.Buffer)
+			if err != nil {
+				c.Conn.Close()
+			}
+		} else {
+			c.dropMessage(msg)
+			err = ErrClientReconnecting
 		}
 	}
 
@@ -297,7 +315,7 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 
 	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
 
-	if c.IsAsyncWrite {
+	if c.Handler.AsyncWrite() {
 		select {
 		case c.chSend <- msg:
 		case <-ctx.Done():
@@ -308,13 +326,18 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 			return ErrClientStopped
 		}
 	} else {
-		coders := c.Handler.Coders()
-		for j := 0; j < len(coders); j++ {
-			msg = coders[j].Encode(c, msg)
-		}
-		if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
-			c.Conn.Close()
-			return err
+		if !c.reconnecting {
+			coders := c.Handler.Coders()
+			for j := 0; j < len(coders); j++ {
+				msg = coders[j].Encode(c, msg)
+			}
+			if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
+				c.Conn.Close()
+				return err
+			}
+		} else {
+			c.dropMessage(msg)
+			return ErrClientReconnecting
 		}
 	}
 
@@ -328,16 +351,21 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 		return err
 	}
 
-	if !c.IsAsyncWrite {
-		coders := c.Handler.Coders()
-		for j := 0; j < len(coders); j++ {
-			msg = coders[j].Encode(c, msg)
+	if !c.Handler.AsyncWrite() {
+		if !c.reconnecting {
+			coders := c.Handler.Coders()
+			for j := 0; j < len(coders); j++ {
+				msg = coders[j].Encode(c, msg)
+			}
+			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			if err != nil {
+				c.Conn.Close()
+			}
+			return err
+		} else {
+			c.dropMessage(msg)
+			return ErrClientReconnecting
 		}
-		_, err := c.Handler.Send(c.Conn, msg.Buffer)
-		if err != nil {
-			c.Conn.Close()
-		}
-		return err
 	}
 
 	if timeout < 0 {
@@ -390,7 +418,7 @@ func (c *Client) Restart() error {
 		c.values = map[interface{}]interface{}{}
 
 		c.initReader()
-		if c.IsAsyncWrite {
+		if c.Handler.AsyncWrite() {
 			go util.Safe(c.sendLoop)
 		}
 		go util.Safe(c.recvLoop)
@@ -622,7 +650,7 @@ func (c *Client) run() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		if c.IsAsyncWrite {
+		if c.Handler.AsyncWrite() {
 			go util.Safe(c.sendLoop)
 		}
 		go util.Safe(c.recvLoop)
@@ -635,7 +663,7 @@ func (c *Client) runWebsocket() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		if c.IsAsyncWrite {
+		if c.Handler.AsyncWrite() {
 			go util.Safe(c.sendLoop)
 		}
 		c.Conn.(WebsocketConn).HandleWebsocket(c.recvLoop)
@@ -822,17 +850,10 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 }
 
 // NewClient creates a Client.
-func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
+func NewClient(dialer DialerFunc) (*Client, error) {
 	conn, err := dialer()
 	if err != nil {
 		return nil, err
-	}
-
-	isAsyncWrite := true
-	if len(args) > 0 {
-		if asyncWrite, ok := args[0].(bool); ok {
-			isAsyncWrite = asyncWrite
-		}
 	}
 
 	c := &Client{}
@@ -845,7 +866,6 @@ func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
 	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
-	c.IsAsyncWrite = isAsyncWrite
 
 	c.run()
 

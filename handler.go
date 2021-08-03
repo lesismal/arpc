@@ -77,6 +77,11 @@ type Handler interface {
 	// SetBatchSend sets BatchSend flag.
 	SetBatchSend(batch bool)
 
+	// AsyncWrite returns AsyncWrite flag.
+	AsyncWrite() bool
+	// SetAsyncWrite sets AsyncWrite flag.
+	SetAsyncWrite(async bool)
+
 	// AsyncResponse returns AsyncResponse flag.
 	AsyncResponse() bool
 	// SetAsyncResponse sets AsyncResponse flag.
@@ -140,6 +145,7 @@ type handler struct {
 	logtag         string
 	batchRecv      bool
 	batchSend      bool
+	asyncWrite     bool
 	asyncResponse  bool
 	recvBufferSize int
 	sendQueueSize  int
@@ -281,6 +287,14 @@ func (h *handler) BatchSend() bool {
 
 func (h *handler) SetBatchSend(batch bool) {
 	h.batchSend = batch
+}
+
+func (h *handler) AsyncWrite() bool {
+	return h.asyncWrite
+}
+
+func (h *handler) SetAsyncWrite(async bool) {
+	h.asyncWrite = async
 }
 
 func (h *handler) AsyncResponse() bool {
