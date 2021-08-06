@@ -80,6 +80,7 @@ func (h Header) message(handler Handler) (*Message, error) {
 
 	// msg := &Message{Buffer: handler.Malloc(HeadLen + bodyLen)}
 	msg := messagePool.Get().(*Message)
+	msg.ref = 1
 	msg.Buffer = handler.Malloc(HeadLen + bodyLen)
 
 	binary.LittleEndian.PutUint32(msg.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
@@ -115,8 +116,9 @@ func (m *Message) Release() int32 {
 }
 
 // ReleaseAndPayback decrement the reference count and put the Message to the pool if the reference count equal to 0.
-func (m *Message) ReleaseAndPayback() {
+func (m *Message) ReleaseAndPayback(h Handler) {
 	if atomic.AddInt32(&m.ref, -1) == 0 {
+		h.Free(m.Buffer)
 		*m = emptyMessage
 		messagePool.Put(m)
 	}
@@ -307,8 +309,9 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 
 	// msg = &Message{Buffer: h.Malloc(HeadLen + bodyLen), values: values}
 	msg = messagePool.Get().(*Message)
-	msg.Buffer = h.Malloc(HeadLen + bodyLen)
+	msg.ref = 1
 	msg.values = values
+	msg.Buffer = h.Malloc(HeadLen + bodyLen)
 
 	msg.SetCmd(cmd)
 	msg.SetError(isError)

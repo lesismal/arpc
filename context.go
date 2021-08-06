@@ -31,6 +31,7 @@ type Context struct {
 }
 
 func (ctx *Context) Release() {
+	ctx.Message.Release()
 	*ctx = emptyContext
 	contextPool.Put(ctx)
 }
