@@ -6,7 +6,18 @@ package arpc
 
 import (
 	"math"
+	"sync"
 	"time"
+)
+
+var (
+	contextPool = sync.Pool{
+		New: func() interface{} {
+			return &Context{}
+		},
+	}
+
+	emptyContext = Context{}
 )
 
 // Context represents an arpc Call's context.
@@ -17,6 +28,11 @@ type Context struct {
 
 	index    int
 	handlers []HandlerFunc
+}
+
+func (ctx *Context) Release() {
+	*ctx = emptyContext
+	contextPool.Put(ctx)
 }
 
 // Get returns value for key.
@@ -164,5 +180,12 @@ func (ctx *Context) writeDirectly(v interface{}, isError bool) error {
 }
 
 func newContext(cli *Client, msg *Message, handlers []HandlerFunc) *Context {
-	return &Context{Client: cli, Message: msg, values: msg.values, index: 0, handlers: handlers}
+	ctx := contextPool.Get().(*Context)
+	ctx.Client = cli
+	ctx.Message = msg
+	ctx.values = msg.values
+	ctx.index = 0
+	ctx.handlers = handlers
+	return ctx
+	// return &Context{Client: cli, Message: msg, values: msg.values, index: 0, handlers: handlers}
 }

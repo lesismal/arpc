@@ -53,6 +53,11 @@ type Handler interface {
 	// OnOverstock will be called when client chSend is full.
 	OnOverstock(c *Client, m *Message)
 
+	// HandleMessageDone registers handler which will be called when message dropped.
+	HandleMessageDone(onMessageDone func(c *Client, m *Message))
+	// OnMessageDone will be called when message is dropped.
+	OnMessageDone(c *Client, m *Message)
+
 	// HandleMessageDropped registers handler which will be called when message dropped.
 	HandleMessageDropped(onOverstock func(c *Client, m *Message))
 	// OnOverstock will be called when message is dropped.
@@ -62,6 +67,11 @@ type Handler interface {
 	HandleSessionMiss(onSessionMiss func(c *Client, m *Message))
 	// OnSessionMiss will be called when async message seq not found.
 	OnSessionMiss(c *Client, m *Message)
+
+	// HandleContextDone registers handler which will be called when message dropped.
+	HandleContextDone(onContextDone func(ctx *Context))
+	// OnContextDone will be called when message is dropped.
+	OnContextDone(ctx *Context)
 
 	// BeforeRecv registers handler which will be called before Recv.
 	BeforeRecv(h func(net.Conn) error)
@@ -133,11 +143,15 @@ type Handler interface {
 	// OnMessage finds method/router middlewares and handler, then call them one by one.
 	OnMessage(c *Client, m *Message)
 
-	// GetBuffer makes a buffer by size.
-	GetBuffer(size int) []byte
+	// Malloc makes a buffer by size.
+	Malloc(size int) []byte
+	// HandleMalloc registers buffer maker.
+	HandleMalloc(f func(int) []byte)
 
-	// SetBufferFactory registers buffer maker.
-	SetBufferFactory(f func(int) []byte)
+	// Free release a buffer.
+	Free([]byte)
+	// HandleFree registers buffer releaser.
+	HandleFree(f func([]byte))
 }
 
 // handler represents a default Handler implementation.
@@ -153,12 +167,15 @@ type handler struct {
 	onConnected      func(*Client)
 	onDisConnected   func(*Client)
 	onOverstock      func(c *Client, m *Message)
+	onMessageSent    func(c *Client, m *Message)
 	onMessageDropped func(c *Client, m *Message)
 	onSessionMiss    func(c *Client, m *Message)
+	onContextDone    func(ctx *Context)
 
-	beforeRecv    func(net.Conn) error
-	beforeSend    func(net.Conn) error
-	bufferFactory func(int) []byte
+	beforeRecv func(net.Conn) error
+	beforeSend func(net.Conn) error
+	malloc     func(int) []byte
+	free       func([]byte)
 
 	wrapReader func(conn net.Conn) io.Reader
 
@@ -255,6 +272,16 @@ func (h *handler) OnMessageDropped(c *Client, m *Message) {
 	}
 }
 
+func (h *handler) HandleMessageDone(onMessageSent func(c *Client, m *Message)) {
+	h.onMessageSent = onMessageSent
+}
+
+func (h *handler) OnMessageDone(c *Client, m *Message) {
+	if h.onMessageSent != nil {
+		h.onMessageSent(c, m)
+	}
+}
+
 func (h *handler) HandleSessionMiss(onSessionMiss func(c *Client, m *Message)) {
 	h.onSessionMiss = onSessionMiss
 }
@@ -262,6 +289,16 @@ func (h *handler) HandleSessionMiss(onSessionMiss func(c *Client, m *Message)) {
 func (h *handler) OnSessionMiss(c *Client, m *Message) {
 	if h.onSessionMiss != nil {
 		h.onSessionMiss(c, m)
+	}
+}
+
+func (h *handler) HandleContextDone(onContextDone func(ctx *Context)) {
+	h.onContextDone = onContextDone
+}
+
+func (h *handler) OnContextDone(ctx *Context) {
+	if h.onContextDone != nil {
+		h.onContextDone(ctx)
 	}
 }
 
@@ -452,7 +489,8 @@ func (h *handler) Send(conn net.Conn, buffer []byte) (int, error) {
 		}
 	}
 
-	return conn.Write(buffer)
+	n, err := conn.Write(buffer)
+	return n, err
 }
 
 func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
@@ -487,18 +525,22 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 			ctx := newContext(c, msg, rh.handlers)
 			if !rh.async {
 				ctx.Next()
+				ctx.Client.Handler.OnContextDone(ctx)
 			} else {
-				go ctx.Next()
-			}
-		} else {
-			if cmd == CmdRequest {
-				if rh, ok = h.routes[""]; ok {
-					ctx := newContext(c, msg, rh.handlers)
+				go func() {
 					ctx.Next()
-				} else {
-					ctx := newContext(c, msg, rh.handlers)
-					ctx.Error(ErrMethodNotFound)
-				}
+					ctx.Client.Handler.OnContextDone(ctx)
+				}()
+			}
+		} else if cmd == CmdRequest {
+			if rh, ok = h.routes[""]; ok {
+				ctx := newContext(c, msg, rh.handlers)
+				ctx.Next()
+				ctx.Client.Handler.OnContextDone(ctx)
+			} else {
+				ctx := newContext(c, msg, rh.handlers)
+				ctx.Error(ErrMethodNotFound)
+				ctx.Client.Handler.OnContextDone(ctx)
 			}
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
@@ -530,15 +572,25 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 	}
 }
 
-func (h *handler) GetBuffer(size int) []byte {
-	if h.bufferFactory != nil {
-		return h.bufferFactory(size)
+func (h *handler) Malloc(size int) []byte {
+	if h.malloc != nil {
+		return h.malloc(size)
 	}
 	return make([]byte, size)
 }
 
-func (h *handler) SetBufferFactory(f func(int) []byte) {
-	h.bufferFactory = f
+func (h *handler) HandleMalloc(f func(int) []byte) {
+	h.malloc = f
+}
+
+func (h *handler) Free(b []byte) {
+	if h.free != nil {
+		h.free(b)
+	}
+}
+
+func (h *handler) HandleFree(f func([]byte)) {
+	h.free = f
 }
 
 // NewHandler returns a default Handler implementation.
@@ -684,7 +736,7 @@ func HandleNotFound(h HandlerFunc) {
 	DefaultHandler.HandleNotFound(h)
 }
 
-// SetBufferFactory registers default buffer maker.
-func SetBufferFactory(f func(int) []byte) {
-	DefaultHandler.SetBufferFactory(f)
+// HandleMalloc registers default buffer maker.
+func HandleMalloc(f func(int) []byte) {
+	DefaultHandler.HandleMalloc(f)
 }
