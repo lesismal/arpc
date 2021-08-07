@@ -804,7 +804,6 @@ func (c *Client) normalSendLoop() {
 func (c *Client) batchSendLoop() {
 	var msg *Message
 	var coders []MessageCoder
-	var messages []*Message = make([]*Message, 10)[0:0]
 	var buffer = c.Handler.Malloc(2048)[0:0]
 	defer c.Handler.Free(buffer)
 
@@ -847,7 +846,6 @@ func (c *Client) batchSendLoop() {
 		} else {
 			c.dropMessage(msg)
 		}
-		messages = messages[0:0]
 	}
 }
 
