@@ -146,12 +146,12 @@ type Handler interface {
 	// Malloc makes a buffer by size.
 	Malloc(size int) []byte
 	// HandleMalloc registers buffer maker.
-	HandleMalloc(f func(int) []byte)
+	HandleMalloc(f func(size int) []byte)
 
 	// Free release a buffer.
 	Free([]byte)
 	// HandleFree registers buffer releaser.
-	HandleFree(f func([]byte))
+	HandleFree(f func(buf []byte))
 }
 
 // handler represents a default Handler implementation.
