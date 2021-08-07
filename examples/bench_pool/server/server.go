@@ -30,14 +30,11 @@ func OnHello(ctx *arpc.Context) {
 }
 
 func initPool(svr *arpc.Server) {
-	bufferPool := mempool.New(1024 * 1024 * 16)
-	svr.Handler.HandleMalloc(func(i int) []byte {
-		// return mempool.Malloc(i)
-		return bufferPool.Malloc(i)
+	svr.Handler.HandleMalloc(func(size int) []byte {
+		return mempool.Malloc(size)
 	})
 	svr.Handler.HandleFree(func(buf []byte) {
-		// mempool.Free(buf)
-		bufferPool.Free(buf)
+		mempool.Free(buf)
 	})
 	svr.Handler.HandleContextDone(func(ctx *arpc.Context) {
 		ctx.Release()

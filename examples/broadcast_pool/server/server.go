@@ -15,14 +15,11 @@ var server = arpc.NewServer()
 var clientMap = make(map[*arpc.Client]struct{})
 
 func initPool() {
-	bufferPool := mempool.New(1024 * 1024 * 16)
-	server.Handler.HandleMalloc(func(i int) []byte {
-		// return mempool.Malloc(i)
-		return bufferPool.Malloc(i)
+	server.Handler.HandleMalloc(func(size int) []byte {
+		return mempool.Malloc(size)
 	})
 	server.Handler.HandleFree(func(buf []byte) {
-		// mempool.Free(buf)
-		bufferPool.Free(buf)
+		mempool.Free(buf)
 	})
 	server.Handler.HandleContextDone(func(ctx *arpc.Context) {
 		ctx.Release()
