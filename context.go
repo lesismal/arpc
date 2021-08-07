@@ -101,7 +101,7 @@ func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error
 
 // Error responses an error Message to the Client.
 func (ctx *Context) Error(v interface{}) error {
-	return ctx.write(v, true, TimeForever)
+	return ctx.write(v, v != nil, TimeForever)
 }
 
 // Next calls next middleware or method/router handler.

@@ -24,6 +24,8 @@ func main() {
 			clientMap[ctx.Client] = struct{}{}
 			mux.Unlock()
 
+			ctx.Write(nil)
+
 			log.Printf("enter success")
 		} else {
 			log.Printf("enter failed invalid passwd: %v", passwd)
