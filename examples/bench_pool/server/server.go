@@ -37,11 +37,14 @@ func main() {
 
 	svr := arpc.NewServer()
 
+	bufferPool := mempool.New(1024 * 1024 * 16)
 	svr.Handler.HandleMalloc(func(i int) []byte {
-		return mempool.Malloc(i)
+		// return mempool.Malloc(i)
+		return bufferPool.Malloc(i)
 	})
 	svr.Handler.HandleFree(func(buf []byte) {
-		mempool.Free(buf)
+		// mempool.Free(buf)
+		bufferPool.Free(buf)
 	})
 	svr.Handler.HandleContextDone(func(ctx *arpc.Context) {
 		ctx.Release()
