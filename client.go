@@ -134,9 +134,11 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		case c.chSend <- msg:
 		case <-timer.C:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		}
 	} else {
@@ -186,9 +188,11 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 		case c.chSend <- msg:
 		case <-ctx.Done():
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		}
 	} else {
@@ -326,9 +330,11 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 		case c.chSend <- msg:
 		case <-ctx.Done():
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		}
 	} else {
@@ -356,6 +362,7 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 	err := c.CheckState()
 	if err != nil {
+		c.Handler.OnMessageDone(c, msg)
 		return err
 	}
 
@@ -394,6 +401,7 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 		case c.chSend <- msg:
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		}
 	default:
@@ -521,6 +529,7 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 		case c.chSend <- msg:
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		default:
 			c.Handler.OnOverstock(c, msg)
@@ -531,8 +540,10 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 		case c.chSend <- msg:
 		case <-timer.C:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
+			c.Handler.OnMessageDone(c, msg)
 			// c.Handler.OnOverstock(c, msg)
 			return ErrClientStopped
 		}

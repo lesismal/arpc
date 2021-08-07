@@ -253,7 +253,10 @@ func (h *handler) OnDisconnected(c *Client) {
 }
 
 func (h *handler) HandleOverstock(onOverstock func(c *Client, m *Message)) {
-	h.onOverstock = onOverstock
+	h.onOverstock = func(c *Client, m *Message) {
+		onOverstock(c, m)
+		h.OnMessageDone(c, m)
+	}
 }
 
 func (h *handler) OnOverstock(c *Client, m *Message) {
@@ -263,7 +266,10 @@ func (h *handler) OnOverstock(c *Client, m *Message) {
 }
 
 func (h *handler) HandleMessageDropped(onMessageDropped func(c *Client, m *Message)) {
-	h.onMessageDropped = onMessageDropped
+	h.onMessageDropped = func(c *Client, m *Message) {
+		onMessageDropped(c, m)
+		h.OnMessageDone(c, m)
+	}
 }
 
 func (h *handler) OnMessageDropped(c *Client, m *Message) {
@@ -532,16 +538,19 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 					ctx.Client.Handler.OnContextDone(ctx)
 				}()
 			}
-		} else if cmd == CmdRequest {
-			if rh, ok = h.routes[""]; ok {
-				ctx := newContext(c, msg, rh.handlers)
-				ctx.Next()
-				ctx.Client.Handler.OnContextDone(ctx)
-			} else {
-				ctx := newContext(c, msg, rh.handlers)
-				ctx.Error(ErrMethodNotFound)
-				ctx.Client.Handler.OnContextDone(ctx)
+		} else {
+			if cmd == CmdRequest {
+				if rh, ok = h.routes[""]; ok {
+					ctx := newContext(c, msg, rh.handlers)
+					ctx.Next()
+					ctx.Client.Handler.OnContextDone(ctx)
+					return
+				}
 			}
+
+			ctx := newContext(c, msg, rh.handlers)
+			ctx.Error(ErrMethodNotFound)
+			ctx.Client.Handler.OnContextDone(ctx)
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
 		break

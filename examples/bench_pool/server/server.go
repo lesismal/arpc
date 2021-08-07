@@ -29,14 +29,7 @@ func OnHello(ctx *arpc.Context) {
 	ctx.Write(&HelloRsp{Msg: req.Msg})
 }
 
-func main() {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-
-	svr := arpc.NewServer()
-
+func initPool(svr *arpc.Server) {
 	bufferPool := mempool.New(1024 * 1024 * 16)
 	svr.Handler.HandleMalloc(func(i int) []byte {
 		// return mempool.Malloc(i)
@@ -52,6 +45,17 @@ func main() {
 	svr.Handler.HandleMessageDone(func(c *arpc.Client, m *arpc.Message) {
 		m.ReleaseAndPayback(c.Handler)
 	})
+}
+
+func main() {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	svr := arpc.NewServer()
+
+	initPool(svr)
 
 	svr.Handler.Handle("Hello", OnHello)
 	svr.Serve(ln)
