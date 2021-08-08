@@ -167,7 +167,9 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		return ErrClientStopped
 	}
 
-	return c.parseResponse(msg, rsp)
+	err := c.parseResponse(msg, rsp)
+	c.Handler.OnMessageDone(c, msg)
+	return err
 }
 
 // CallWith uses context to make rpc call.
@@ -221,7 +223,9 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 		return ErrClientStopped
 	}
 
-	return c.parseResponse(msg, rsp)
+	err := c.parseResponse(msg, rsp)
+	c.Handler.OnMessageDone(c, msg)
+	return err
 }
 
 // CallAsync makes an asynchronous rpc call with timeout.
@@ -573,7 +577,7 @@ func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
 			case *string:
 				*vt = string(msg.Data())
 			case *[]byte:
-				*vt = msg.Data()
+				*vt = append([]byte{}, msg.Data()...)
 			// case *error:
 			// 	*vt = msg.Error()
 			default:

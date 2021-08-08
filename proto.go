@@ -168,7 +168,7 @@ func (m *Message) Error() error {
 	if !m.IsError() {
 		return nil
 	}
-	return errors.New(util.BytesToStr(m.Buffer[HeadLen+m.MethodLen():]))
+	return errors.New(string(m.Buffer[HeadLen+m.MethodLen():]))
 }
 
 // IsAsync returns async flag.

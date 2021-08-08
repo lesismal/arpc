@@ -283,7 +283,7 @@ func (h *handler) HandleMessageDone(onMessageSent func(c *Client, m *Message)) {
 }
 
 func (h *handler) OnMessageDone(c *Client, m *Message) {
-	if h.onMessageSent != nil {
+	if h.onMessageSent != nil && m != nil {
 		h.onMessageSent(c, m)
 	}
 }
@@ -295,6 +295,7 @@ func (h *handler) HandleSessionMiss(onSessionMiss func(c *Client, m *Message)) {
 func (h *handler) OnSessionMiss(c *Client, m *Message) {
 	if h.onSessionMiss != nil {
 		h.onSessionMiss(c, m)
+		h.OnMessageDone(c, m)
 	}
 }
 
@@ -531,11 +532,11 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 			ctx := newContext(c, msg, rh.handlers)
 			if !rh.async {
 				ctx.Next()
-				ctx.Client.Handler.OnContextDone(ctx)
+				h.OnContextDone(ctx)
 			} else {
 				go func() {
 					ctx.Next()
-					ctx.Client.Handler.OnContextDone(ctx)
+					h.OnContextDone(ctx)
 				}()
 			}
 		} else {
@@ -543,14 +544,14 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 				if rh, ok = h.routes[""]; ok {
 					ctx := newContext(c, msg, rh.handlers)
 					ctx.Next()
-					ctx.Client.Handler.OnContextDone(ctx)
+					h.OnContextDone(ctx)
 					return
 				}
 			}
 
 			ctx := newContext(c, msg, rh.handlers)
 			ctx.Error(ErrMethodNotFound)
-			ctx.Client.Handler.OnContextDone(ctx)
+			h.OnContextDone(ctx)
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
 		break
@@ -567,8 +568,10 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
 			if ok {
-				ctx := newContext(c, msg, nil)
-				handler(ctx)
+				handlers := append([]HandlerFunc{}, h.middles...)
+				ctx := newContext(c, msg, append(handlers, handler))
+				ctx.Next()
+				h.OnContextDone(ctx)
 			} else {
 				h.OnSessionMiss(c, msg)
 				log.Warn("%v OnMessage: async handler not exist or expired", h.LogTag())
