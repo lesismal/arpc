@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"runtime"
@@ -33,7 +34,9 @@ func dialer() (net.Conn, error) {
 func main() {
 	var (
 		qpsSec                 uint64
+		asyncTimes             uint64
 		qpsTotal               uint64
+		failedTotal            uint64
 		clientNum              = runtime.NumCPU() * 2
 		eachClientCoroutineNum = 10
 	)
@@ -52,14 +55,15 @@ func main() {
 
 	for i := 0; i < clientNum; i++ {
 		client := clients[i]
-		for j := 0; j < eachClientCoroutineNum; j++ {
+		for j := 0; j < eachClientCoroutineNum-1; j++ {
 			go func() {
 				var err error
 				for k := 0; true; k++ {
-					req := &HelloReq{Msg: "hello from client.Call"}
+					req := &HelloReq{Msg: fmt.Sprintf("[%v] %v", client.Conn.LocalAddr(), k)}
 					rsp := &HelloRsp{}
 					err = client.Call(method, req, rsp, time.Second*5)
-					if err != nil {
+					if err != nil || rsp.Msg != req.Msg {
+						atomic.AddUint64(&failedTotal, 1)
 						log.Printf("Call failed: %v", err)
 					} else {
 						//log.Printf("Call Response: \"%v\"", rsp.Msg)
@@ -68,6 +72,35 @@ func main() {
 				}
 			}()
 		}
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			for i := 0; true; i++ {
+				select {
+				case <-ticker.C:
+					req := &HelloReq{Msg: fmt.Sprintf("[%v] %v", client.Conn.LocalAddr(), i)}
+					rsp := &HelloRsp{}
+					err := client.CallAsync(method, req, func(ctx *arpc.Context) {
+						err := ctx.Bind(rsp)
+						if err != nil || rsp.Msg != req.Msg {
+							log.Printf("CallAsync failed: %v", err)
+							atomic.AddUint64(&failedTotal, 1)
+						} else {
+							//log.Printf("Call Response: \"%v\"", rsp.Msg)
+							atomic.AddUint64(&qpsSec, 1)
+							atomic.AddUint64(&asyncTimes, 1)
+						}
+					}, time.Second*5)
+					if err != nil {
+						log.Printf("CallAsync failed: %v", err)
+						atomic.AddUint64(&failedTotal, 1)
+					} else {
+						//log.Printf("Call Response: \"%v\"", rsp.Msg)
+						atomic.AddUint64(&qpsSec, 1)
+						atomic.AddUint64(&asyncTimes, 1)
+					}
+				}
+			}
+		}()
 	}
 
 	ticker := time.NewTicker(time.Second)
@@ -81,7 +114,7 @@ func main() {
 		}
 		qps := atomic.SwapUint64(&qpsSec, 0)
 		qpsTotal += qps
-		log.Printf("[qps: %v], [avg: %v / s], [total: %v, %v s]",
-			qps, int64(float64(qpsTotal)/float64(i-2)), qpsTotal, int64(float64(i-2)))
+		log.Printf("[qps: %v], [asyncTimes: %v], [avg: %v / s], [total failed: %v, success: %v, %v s]",
+			qps, atomic.LoadUint64(&asyncTimes), int64(float64(qpsTotal)/float64(i-2)), atomic.LoadUint64(&failedTotal), qpsTotal, int64(float64(i-2)))
 	}
 }
