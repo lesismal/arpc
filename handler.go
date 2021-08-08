@@ -568,9 +568,8 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 		} else {
 			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
 			if ok {
-				handlers := append([]HandlerFunc{}, h.middles...)
-				ctx := newContext(c, msg, append(handlers, handler))
-				ctx.Next()
+				ctx := newContext(c, msg, nil)
+				handler(ctx)
 				h.OnContextDone(ctx)
 			} else {
 				h.OnSessionMiss(c, msg)
