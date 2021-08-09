@@ -7,30 +7,14 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/nbio/mempool"
 )
 
 var mux = sync.RWMutex{}
 var server = arpc.NewServer()
 var clientMap = make(map[*arpc.Client]struct{})
 
-func initPool() {
-	server.Handler.HandleMalloc(func(size int) []byte {
-		return mempool.Malloc(size)
-	})
-	server.Handler.HandleFree(func(buf []byte) {
-		mempool.Free(buf)
-	})
-	server.Handler.HandleContextDone(func(ctx *arpc.Context) {
-		ctx.Release()
-	})
-	server.Handler.HandleMessageDone(func(c *arpc.Client, m *arpc.Message) {
-		m.ReleaseAndPayback(c.Handler)
-	})
-}
-
 func main() {
-	initPool()
+	server.Handler.EnablePool(true)
 
 	server.Handler.Handle("/enter", func(ctx *arpc.Context) {
 		passwd := ""

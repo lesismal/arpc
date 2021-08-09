@@ -41,6 +41,8 @@ func main() {
 		eachClientCoroutineNum = 10
 	)
 
+	arpc.EnablePool(true)
+
 	clients := make([]*arpc.Client, clientNum)
 
 	for i := 0; i < clientNum; i++ {

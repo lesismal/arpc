@@ -25,6 +25,8 @@ func dialer() (net.Conn, error) {
 }
 
 func main() {
+	arpc.EnablePool(true)
+
 	var clients []*arpc.Client
 
 	arpc.DefaultHandler.Handle("/broadcast", OnBroadcast)

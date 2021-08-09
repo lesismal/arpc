@@ -800,6 +800,7 @@ func (c *Client) normalSendLoop() {
 				c.dropMessage(msg)
 			}
 		case <-c.chClose:
+			c.Handler.OnMessageDone(c, msg)
 			return
 		}
 	}
@@ -815,6 +816,7 @@ func (c *Client) batchSendLoop() {
 		select {
 		case msg = <-c.chSend:
 		case <-c.chClose:
+			c.Handler.OnMessageDone(c, msg)
 			return
 		}
 

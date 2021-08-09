@@ -152,6 +152,9 @@ type Handler interface {
 	Free([]byte)
 	// HandleFree registers buffer releaser.
 	HandleFree(f func(buf []byte))
+
+	// EnablePool registers handlers for pool operation for Context and Message and Message.Buffer
+	EnablePool(enable bool)
 }
 
 // handler represents a default Handler implementation.
@@ -167,7 +170,7 @@ type handler struct {
 	onConnected      func(*Client)
 	onDisConnected   func(*Client)
 	onOverstock      func(c *Client, m *Message)
-	onMessageSent    func(c *Client, m *Message)
+	onMessageDone    func(c *Client, m *Message)
 	onMessageDropped func(c *Client, m *Message)
 	onSessionMiss    func(c *Client, m *Message)
 	onContextDone    func(ctx *Context)
@@ -278,13 +281,13 @@ func (h *handler) OnMessageDropped(c *Client, m *Message) {
 	}
 }
 
-func (h *handler) HandleMessageDone(onMessageSent func(c *Client, m *Message)) {
-	h.onMessageSent = onMessageSent
+func (h *handler) HandleMessageDone(onMessageDone func(c *Client, m *Message)) {
+	h.onMessageDone = onMessageDone
 }
 
 func (h *handler) OnMessageDone(c *Client, m *Message) {
-	if h.onMessageSent != nil && m != nil {
-		h.onMessageSent(c, m)
+	if h.onMessageDone != nil && m != nil {
+		h.onMessageDone(c, m)
 	}
 }
 
@@ -604,6 +607,30 @@ func (h *handler) HandleFree(f func([]byte)) {
 	h.free = f
 }
 
+func (h *handler) EnablePool(enable bool) {
+	if enable {
+		h.HandleMalloc(func(size int) []byte {
+			return BufferPool.Malloc(size)
+		})
+		h.HandleFree(func(buf []byte) {
+			BufferPool.Free(buf)
+		})
+		h.HandleContextDone(func(ctx *Context) {
+			ctx.Release()
+		})
+		h.HandleMessageDone(func(c *Client, m *Message) {
+			m.ReleaseAndPayback(c.Handler)
+		})
+	} else {
+		h.HandleMalloc(func(size int) []byte {
+			return make([]byte, size)
+		})
+		h.HandleFree(func(buf []byte) {})
+		h.HandleContextDone(func(ctx *Context) {})
+		h.HandleMessageDone(func(c *Client, m *Message) {})
+	}
+}
+
 // NewHandler returns a default Handler implementation.
 func NewHandler() Handler {
 	h := &handler{
@@ -750,4 +777,8 @@ func HandleNotFound(h HandlerFunc) {
 // HandleMalloc registers default buffer maker.
 func HandleMalloc(f func(int) []byte) {
 	DefaultHandler.HandleMalloc(f)
+}
+
+func EnablePool(enable bool) {
+	DefaultHandler.EnablePool(enable)
 }
