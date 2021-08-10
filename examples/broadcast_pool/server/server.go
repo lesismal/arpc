@@ -56,7 +56,7 @@ func broadcast(i int) {
 	mux.RLock()
 	defer func() {
 		mux.RUnlock()
-		msg.ReleaseAndPayback(server.Handler)
+		msg.Release()
 	}()
 
 	for client := range clientMap {

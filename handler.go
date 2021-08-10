@@ -6,6 +6,7 @@ package arpc
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -155,6 +156,10 @@ type Handler interface {
 
 	// EnablePool registers handlers for pool operation for Context and Message and Message.Buffer
 	EnablePool(enable bool)
+
+	Context() (context.Context, context.CancelFunc)
+	SetContext(ctx context.Context, cancel context.CancelFunc)
+	Cancel()
 }
 
 // handler represents a default Handler implementation.
@@ -186,6 +191,9 @@ type handler struct {
 	msgCoders []MessageCoder
 
 	routes map[string]*routerHandler
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func (h *handler) Clone() Handler {
@@ -205,6 +213,10 @@ func (h *handler) Clone() Handler {
 		copy(rh.handlers, v.handlers)
 		cp.routes[k] = rh
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cp.ctx = ctx
+	cp.cancel = cancel
 
 	return &cp
 }
@@ -619,7 +631,7 @@ func (h *handler) EnablePool(enable bool) {
 			ctx.Release()
 		})
 		h.HandleMessageDone(func(c *Client, m *Message) {
-			m.ReleaseAndPayback(c.Handler)
+			m.Release()
 		})
 	} else {
 		h.HandleMalloc(func(size int) []byte {
@@ -628,6 +640,21 @@ func (h *handler) EnablePool(enable bool) {
 		h.HandleFree(func(buf []byte) {})
 		h.HandleContextDone(func(ctx *Context) {})
 		h.HandleMessageDone(func(c *Client, m *Message) {})
+	}
+}
+
+func (h *handler) Context() (context.Context, context.CancelFunc) {
+	return h.ctx, h.cancel
+}
+
+func (h *handler) SetContext(ctx context.Context, cancel context.CancelFunc) {
+	h.ctx = ctx
+	h.cancel = cancel
+}
+
+func (h *handler) Cancel() {
+	if h.cancel != nil {
+		h.cancel()
 	}
 }
 
@@ -645,6 +672,9 @@ func NewHandler() Handler {
 	h.wrapReader = func(conn net.Conn) io.Reader {
 		return bufio.NewReaderSize(conn, h.recvBufferSize)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	h.ctx = ctx
+	h.cancel = cancel
 	return h
 }
 

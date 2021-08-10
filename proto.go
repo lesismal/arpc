@@ -80,6 +80,7 @@ func (h Header) message(handler Handler) (*Message, error) {
 
 	// msg := &Message{Buffer: handler.Malloc(HeadLen + bodyLen)}
 	msg := messagePool.Get().(*Message)
+	msg.handler = handler
 	msg.Buffer = handler.Malloc(HeadLen + bodyLen)
 
 	binary.LittleEndian.PutUint32(msg.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
@@ -100,8 +101,9 @@ var (
 type Message struct {
 	Buffer []byte
 
-	ref    int32
-	values map[interface{}]interface{}
+	ref     int32
+	handler Handler
+	values  map[interface{}]interface{}
 }
 
 // Retain increment the reference count and returns the current value.
@@ -111,16 +113,15 @@ func (m *Message) Retain() int32 {
 
 // Release decrement the reference count and returns the current value.
 func (m *Message) Release() int32 {
-	return atomic.AddInt32(&m.ref, -1)
-}
-
-// ReleaseAndPayback decrement the reference count and put the Message to the pool if the reference count equal to 0.
-func (m *Message) ReleaseAndPayback(h Handler) {
-	if atomic.AddInt32(&m.ref, -1) == -1 {
-		h.Free(m.Buffer)
+	n := atomic.AddInt32(&m.ref, -1)
+	if n == -1 {
+		if m.handler != nil {
+			m.handler.Free(m.Buffer)
+		}
 		*m = emptyMessage
 		messagePool.Put(m)
 	}
+	return n
 }
 
 // Reset resets Message to empty value.
@@ -291,6 +292,11 @@ func (m *Message) Set(key interface{}, value interface{}) {
 	m.values[key] = value
 }
 
+// NewMessage creates a Message.
+func NewMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[interface{}]interface{}) *Message {
+	return newMessage(cmd, method, v, false, false, seq, h, codec, nil)
+}
+
 // newMessage creates a Message.
 func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[interface{}]interface{}) *Message {
 	var (
@@ -309,6 +315,7 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 	// msg = &Message{Buffer: h.Malloc(HeadLen + bodyLen), values: values}
 	msg = messagePool.Get().(*Message)
 	msg.values = values
+	msg.handler = h
 	msg.Buffer = h.Malloc(HeadLen + bodyLen)
 
 	msg.SetCmd(cmd)
