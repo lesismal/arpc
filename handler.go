@@ -110,10 +110,15 @@ type Handler interface {
 	// SendN writes multiple buffer data to a connection.
 	SendN(conn net.Conn, buffers net.Buffers) (int, error)
 
-	// RecvBufferSize returns client's read buffer size.
+	// RecvBufferSize returns client's recv buffer size.
 	RecvBufferSize() int
-	// SetRecvBufferSize sets client's read buffer size.
+	// SetRecvBufferSize sets client's recv buffer size.
 	SetRecvBufferSize(size int)
+
+	// SendBufferSize returns client's send buffer size.
+	SendBufferSize() int
+	// SetSendBufferSize sets client's send buffer size.
+	SetSendBufferSize(size int)
 
 	// SendQueueSize returns client's send queue channel capacity.
 	SendQueueSize() int
@@ -170,6 +175,7 @@ type handler struct {
 	asyncWrite     bool
 	asyncResponse  bool
 	recvBufferSize int
+	sendBufferSize int
 	sendQueueSize  int
 
 	onConnected      func(*Client)
@@ -381,6 +387,14 @@ func (h *handler) RecvBufferSize() int {
 
 func (h *handler) SetRecvBufferSize(size int) {
 	h.recvBufferSize = size
+}
+
+func (h *handler) SendBufferSize() int {
+	return h.sendBufferSize
+}
+
+func (h *handler) SetSendBufferSize(size int) {
+	h.sendBufferSize = size
 }
 
 func (h *handler) SendQueueSize() int {
@@ -766,6 +780,16 @@ func RecvBufferSize() int {
 // SetRecvBufferSize sets default client's read buffer size.
 func SetRecvBufferSize(size int) {
 	DefaultHandler.SetRecvBufferSize(size)
+}
+
+// SendBufferSize returns default client's read buffer size.
+func SendBufferSize() int {
+	return DefaultHandler.SendBufferSize()
+}
+
+// SetSendBufferSize sets default client's read buffer size.
+func SetSendBufferSize(size int) {
+	DefaultHandler.SetSendBufferSize(size)
 }
 
 // SendQueueSize returns default client's send queue channel capacity.

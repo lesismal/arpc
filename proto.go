@@ -124,9 +124,9 @@ func (m *Message) Release() int32 {
 	return n
 }
 
-// Reset resets Message to empty value.
-func (m *Message) Reset() {
-	*m = emptyMessage
+// ResetAttrs resets reserved/cmd/flag/methodLen to 0.
+func (m *Message) ResetAttrs() {
+	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenEnd:HeaderIndexSeqBegin], 0)
 }
 
 // Payback put Message to the pool.
@@ -318,6 +318,7 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 	msg.handler = h
 	msg.Buffer = h.Malloc(HeadLen + bodyLen)
 
+	msg.ResetAttrs()
 	msg.SetCmd(cmd)
 	msg.SetError(isError)
 	msg.SetAsync(isAsync)

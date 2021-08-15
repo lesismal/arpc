@@ -800,16 +800,25 @@ func (c *Client) normalSendLoop() {
 				c.dropMessage(msg)
 			}
 		case <-c.chClose:
-			c.Handler.OnMessageDone(c, msg)
-			return
+			// clear msg in send queue
+			for {
+				select {
+				case msg := <-c.chSend:
+					c.Handler.OnMessageDone(c, msg)
+				default:
+					return
+				}
+			}
 		}
 	}
 }
 
 func (c *Client) batchSendLoop() {
 	var msg *Message
+	var chLen int
 	var coders []MessageCoder
 	var buffer = c.Handler.Malloc(2048)[0:0]
+	var sendBufferSize = c.Handler.SendBufferSize()
 	defer c.Handler.Free(buffer)
 
 	for {
@@ -828,8 +837,9 @@ func (c *Client) batchSendLoop() {
 		}
 
 		if !c.reconnecting {
+			chLen = len(c.chSend)
 			coders = c.Handler.Coders()
-			for i := 1; i < len(c.chSend) && i < 10; i++ {
+			for i := 0; i < chLen && len(buffer) < sendBufferSize; i++ {
 				if len(buffer) == 0 {
 					for j := 0; j < len(coders); j++ {
 						msg = coders[j].Encode(c, msg)
