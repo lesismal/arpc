@@ -134,9 +134,11 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		case c.chSend <- msg:
 		case <-timer.C:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		}
 	} else {
@@ -145,10 +147,12 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
+			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			if err != nil {
 				c.Conn.Close()
-				return err
 			}
+			c.Handler.OnMessageDone(c, msg)
+			return err
 		} else {
 			c.dropMessage(msg)
 			return ErrClientReconnecting
@@ -163,7 +167,9 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		return ErrClientStopped
 	}
 
-	return c.parseResponse(msg, rsp)
+	err := c.parseResponse(msg, rsp)
+	c.Handler.OnMessageDone(c, msg)
+	return err
 }
 
 // CallWith uses context to make rpc call.
@@ -184,9 +190,11 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 		case c.chSend <- msg:
 		case <-ctx.Done():
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		}
 	} else {
@@ -195,10 +203,12 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
+			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			if err != nil {
 				c.Conn.Close()
-				return err
 			}
+			c.Handler.OnMessageDone(c, msg)
+			return err
 		} else {
 			c.dropMessage(msg)
 			return ErrClientReconnecting
@@ -213,7 +223,9 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 		return ErrClientStopped
 	}
 
-	return c.parseResponse(msg, rsp)
+	err := c.parseResponse(msg, rsp)
+	c.Handler.OnMessageDone(c, msg)
+	return err
 }
 
 // CallAsync makes an asynchronous rpc call with timeout.
@@ -255,6 +267,7 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 			if err != nil {
 				c.Conn.Close()
 			}
+			c.Handler.OnMessageDone(c, msg)
 		} else {
 			c.dropMessage(msg)
 			err = ErrClientReconnecting
@@ -297,6 +310,7 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration, 
 			if err != nil {
 				c.Conn.Close()
 			}
+			c.Handler.OnMessageDone(c, msg)
 		} else {
 			c.dropMessage(msg)
 			err = ErrClientReconnecting
@@ -320,9 +334,11 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 		case c.chSend <- msg:
 		case <-ctx.Done():
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		}
 	} else {
@@ -331,10 +347,12 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
+			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			if err != nil {
 				c.Conn.Close()
-				return err
 			}
+			c.Handler.OnMessageDone(c, msg)
+			return err
 		} else {
 			c.dropMessage(msg)
 			return ErrClientReconnecting
@@ -348,6 +366,7 @@ func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}
 func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 	err := c.CheckState()
 	if err != nil {
+		c.Handler.OnMessageDone(c, msg)
 		return err
 	}
 
@@ -361,6 +380,7 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 			if err != nil {
 				c.Conn.Close()
 			}
+			c.Handler.OnMessageDone(c, msg)
 			return err
 		} else {
 			c.dropMessage(msg)
@@ -385,6 +405,7 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 		case c.chSend <- msg:
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		}
 	default:
@@ -512,6 +533,7 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 		case c.chSend <- msg:
 		case <-c.chClose:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientStopped
 		default:
 			c.Handler.OnOverstock(c, msg)
@@ -522,8 +544,10 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 		case c.chSend <- msg:
 		case <-timer.C:
 			// c.Handler.OnOverstock(c, msg)
+			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
 		case <-c.chClose:
+			c.Handler.OnMessageDone(c, msg)
 			// c.Handler.OnOverstock(c, msg)
 			return ErrClientStopped
 		}
@@ -553,7 +577,7 @@ func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
 			case *string:
 				*vt = string(msg.Data())
 			case *[]byte:
-				*vt = msg.Data()
+				*vt = append([]byte{}, msg.Data()...)
 			// case *error:
 			// 	*vt = msg.Error()
 			default:
@@ -771,58 +795,83 @@ func (c *Client) normalSendLoop() {
 				if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
 					c.Conn.Close()
 				}
+				c.Handler.OnMessageDone(c, msg)
 			} else {
 				c.dropMessage(msg)
 			}
 		case <-c.chClose:
-			return
+			// clear msg in send queue
+			for {
+				select {
+				case msg := <-c.chSend:
+					c.Handler.OnMessageDone(c, msg)
+				default:
+					return
+				}
+			}
 		}
 	}
 }
 
 func (c *Client) batchSendLoop() {
 	var msg *Message
+	var chLen int
 	var coders []MessageCoder
-	var messages []*Message = make([]*Message, 10)[0:0]
-	var buffers net.Buffers = make([][]byte, 10)[0:0]
+	var buffer = c.Handler.Malloc(2048)[0:0]
+	var sendBufferSize = c.Handler.SendBufferSize()
+	defer c.Handler.Free(buffer)
+
 	for {
 		select {
 		case msg = <-c.chSend:
 		case <-c.chClose:
-			return
+			// clear msg in send queue
+			for {
+				select {
+				case msg := <-c.chSend:
+					c.Handler.OnMessageDone(c, msg)
+				default:
+					return
+				}
+			}
 		}
-		messages = append(messages, msg)
-		for i := 1; i < len(c.chSend) && i < 10; i++ {
-			msg = <-c.chSend
-			messages = append(messages, msg)
-		}
+
 		if !c.reconnecting {
+			chLen = len(c.chSend)
 			coders = c.Handler.Coders()
-			if len(messages) == 1 {
-				for j := 0; j < len(coders); j++ {
-					messages[0] = coders[j].Encode(c, messages[0])
-				}
-				if _, err := c.Handler.Send(c.Conn, messages[0].Buffer); err != nil {
-					c.Conn.Close()
-				}
-			} else {
-				for i := 0; i < len(messages); i++ {
+			for i := 0; i < chLen && len(buffer) < sendBufferSize; i++ {
+				if len(buffer) == 0 {
 					for j := 0; j < len(coders); j++ {
-						messages[i] = coders[j].Encode(c, messages[i])
+						msg = coders[j].Encode(c, msg)
 					}
-					buffers = append(buffers, messages[i].Buffer)
+					buffer = append(buffer, msg.Buffer...)
+					c.Handler.OnMessageDone(c, msg)
 				}
-				if _, err := c.Handler.SendN(c.Conn, buffers); err != nil {
+				msg = <-c.chSend
+				for j := 0; j < len(coders); j++ {
+					msg = coders[j].Encode(c, msg)
+				}
+				buffer = append(buffer, msg.Buffer...)
+				c.Handler.OnMessageDone(c, msg)
+			}
+			if len(buffer) == 0 {
+				for j := 0; j < len(coders); j++ {
+					msg = coders[j].Encode(c, msg)
+				}
+				_, err := c.Handler.Send(c.Conn, msg.Buffer)
+				if err != nil {
 					c.Conn.Close()
 				}
-				buffers = buffers[0:0]
+				c.Handler.OnMessageDone(c, msg)
+			} else {
+				if _, err := c.Handler.Send(c.Conn, buffer); err != nil {
+					c.Conn.Close()
+				}
+				buffer = buffer[0:0]
 			}
 		} else {
-			for _, m := range messages {
-				c.dropMessage(m)
-			}
+			c.dropMessage(msg)
 		}
-		messages = messages[0:0]
 	}
 }
 

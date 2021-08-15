@@ -8,6 +8,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 
 	"github.com/lesismal/arpc/codec"
 	"github.com/lesismal/arpc/util"
@@ -76,15 +78,61 @@ func (h Header) message(handler Handler) (*Message, error) {
 		return nil, fmt.Errorf("invalid body length: %v", bodyLen)
 	}
 
-	m := &Message{Buffer: handler.GetBuffer(HeadLen + bodyLen)}
-	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
-	return m, nil
+	// msg := &Message{Buffer: handler.Malloc(HeadLen + bodyLen)}
+	msg := messagePool.Get().(*Message)
+	msg.handler = handler
+	msg.Buffer = handler.Malloc(HeadLen + bodyLen)
+
+	binary.LittleEndian.PutUint32(msg.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
+	return msg, nil
 }
+
+var (
+	messagePool = sync.Pool{
+		New: func() interface{} {
+			return &Message{}
+		},
+	}
+
+	emptyMessage = Message{}
+)
 
 // Message represents an arpc Message.
 type Message struct {
 	Buffer []byte
-	values map[interface{}]interface{}
+
+	ref     int32
+	handler Handler
+	values  map[interface{}]interface{}
+}
+
+// Retain increment the reference count and returns the current value.
+func (m *Message) Retain() int32 {
+	return atomic.AddInt32(&m.ref, 1)
+}
+
+// Release decrement the reference count and returns the current value.
+func (m *Message) Release() int32 {
+	n := atomic.AddInt32(&m.ref, -1)
+	if n == -1 {
+		if m.handler != nil {
+			m.handler.Free(m.Buffer)
+		}
+		*m = emptyMessage
+		messagePool.Put(m)
+	}
+	return n
+}
+
+// ResetAttrs resets reserved/cmd/flag/methodLen to 0.
+func (m *Message) ResetAttrs() {
+	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenEnd:HeaderIndexSeqBegin], 0)
+}
+
+// Payback put Message to the pool.
+func (m *Message) Payback() {
+	*m = emptyMessage
+	messagePool.Put(m)
 }
 
 // Len returns total length of buffer.
@@ -121,7 +169,7 @@ func (m *Message) Error() error {
 	if !m.IsError() {
 		return nil
 	}
-	return errors.New(util.BytesToStr(m.Buffer[HeadLen+m.MethodLen():]))
+	return errors.New(string(m.Buffer[HeadLen+m.MethodLen():]))
 }
 
 // IsAsync returns async flag.
@@ -244,12 +292,17 @@ func (m *Message) Set(key interface{}, value interface{}) {
 	m.values[key] = value
 }
 
+// NewMessage creates a Message.
+func NewMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[interface{}]interface{}) *Message {
+	return newMessage(cmd, method, v, false, false, seq, h, codec, nil)
+}
+
 // newMessage creates a Message.
 func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[interface{}]interface{}) *Message {
 	var (
 		data    []byte
-		msg     *Message
 		bodyLen int
+		msg     *Message
 	)
 
 	data = util.ValueToBytes(codec, v)
@@ -259,7 +312,13 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 		h = DefaultHandler
 	}
 
-	msg = &Message{Buffer: h.GetBuffer(HeadLen + bodyLen), values: values}
+	// msg = &Message{Buffer: h.Malloc(HeadLen + bodyLen), values: values}
+	msg = messagePool.Get().(*Message)
+	msg.values = values
+	msg.handler = h
+	msg.Buffer = h.Malloc(HeadLen + bodyLen)
+
+	msg.ResetAttrs()
 	msg.SetCmd(cmd)
 	msg.SetError(isError)
 	msg.SetAsync(isAsync)

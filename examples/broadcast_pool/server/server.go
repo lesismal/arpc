@@ -14,6 +14,7 @@ var server = arpc.NewServer()
 var clientMap = make(map[*arpc.Client]struct{})
 
 func main() {
+	server.Handler.EnablePool(true)
 
 	server.Handler.Handle("/enter", func(ctx *arpc.Context) {
 		passwd := ""
@@ -53,8 +54,13 @@ func main() {
 func broadcast(i int) {
 	msg := server.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
 	mux.RLock()
+	defer func() {
+		mux.RUnlock()
+		msg.Release()
+	}()
+
 	for client := range clientMap {
+		msg.Retain()
 		client.PushMsg(msg, arpc.TimeZero)
 	}
-	mux.RUnlock()
 }

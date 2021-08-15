@@ -6,25 +6,41 @@ package arpc
 
 import (
 	"math"
+	"sync"
 	"time"
+)
+
+var (
+	contextPool = sync.Pool{
+		New: func() interface{} {
+			return &Context{}
+		},
+	}
+
+	emptyContext = Context{}
 )
 
 // Context represents an arpc Call's context.
 type Context struct {
 	Client  *Client
 	Message *Message
-	values  map[interface{}]interface{}
 
 	index    int
 	handlers []HandlerFunc
 }
 
+func (ctx *Context) Release() {
+	ctx.Message.Release()
+	*ctx = emptyContext
+	contextPool.Put(ctx)
+}
+
 // Get returns value for key.
 func (ctx *Context) Get(key interface{}) (interface{}, bool) {
-	if len(ctx.values) == 0 {
+	if len(ctx.Message.values) == 0 {
 		return nil, false
 	}
-	value, ok := ctx.values[key]
+	value, ok := ctx.Message.values[key]
 	return value, ok
 }
 
@@ -33,15 +49,18 @@ func (ctx *Context) Set(key interface{}, value interface{}) {
 	if key == nil || value == nil {
 		return
 	}
-	if ctx.values == nil {
-		ctx.values = map[interface{}]interface{}{}
+	if ctx.Message.values == nil {
+		ctx.Message.values = map[interface{}]interface{}{}
 	}
-	ctx.values[key] = value
+	ctx.Message.values[key] = value
 }
 
 // Values returns values.
 func (ctx *Context) Values() map[interface{}]interface{} {
-	return ctx.values
+	if ctx.Message == nil {
+		return nil
+	}
+	return ctx.Message.values
 }
 
 // Body returns body.
@@ -84,7 +103,7 @@ func (ctx *Context) WriteWithTimeout(v interface{}, timeout time.Duration) error
 
 // Error responses an error Message to the Client.
 func (ctx *Context) Error(v interface{}) error {
-	return ctx.write(v, true, TimeForever)
+	return ctx.write(v, v != nil, TimeForever)
 }
 
 // Next calls next middleware or method/router handler.
@@ -134,7 +153,7 @@ func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) er
 	if _, ok := v.(error); ok {
 		isError = true
 	}
-	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.values)
+	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.Message.values)
 	return cli.PushMsg(rsp, timeout)
 }
 
@@ -147,7 +166,7 @@ func (ctx *Context) writeDirectly(v interface{}, isError bool) error {
 	if _, ok := v.(error); ok {
 		isError = true
 	}
-	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.values)
+	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.Message.values)
 	if !cli.reconnecting {
 		coders := cli.Handler.Coders()
 		for j := 0; j < len(coders); j++ {
@@ -164,5 +183,10 @@ func (ctx *Context) writeDirectly(v interface{}, isError bool) error {
 }
 
 func newContext(cli *Client, msg *Message, handlers []HandlerFunc) *Context {
-	return &Context{Client: cli, Message: msg, values: msg.values, index: 0, handlers: handlers}
+	ctx := contextPool.Get().(*Context)
+	ctx.Client = cli
+	ctx.Message = msg
+	ctx.Message.values = msg.values
+	ctx.handlers = handlers
+	return ctx
 }

@@ -169,6 +169,6 @@ func TestSetHandler(t *testing.T) {
 	UseCoder(nil)
 	Handle("nothing", func(*Context) {}, true)
 	HandleNotFound(func(*Context) {})
-	SetBufferFactory(func(int) []byte { return nil })
+	HandleMalloc(func(int) []byte { return nil })
 	SetHandler(d)
 }
