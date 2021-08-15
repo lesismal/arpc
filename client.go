@@ -855,6 +855,9 @@ func (c *Client) batchSendLoop() {
 				c.Handler.OnMessageDone(c, msg)
 			}
 			if len(buffer) == 0 {
+				for j := 0; j < len(coders); j++ {
+					msg = coders[j].Encode(c, msg)
+				}
 				_, err := c.Handler.Send(c.Conn, msg.Buffer)
 				if err != nil {
 					c.Conn.Close()

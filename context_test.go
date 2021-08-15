@@ -11,7 +11,7 @@ import (
 )
 
 func TestContext_Get(t *testing.T) {
-	ctx := &Context{}
+	ctx := &Context{Message: &Message{}}
 	if v, ok := ctx.Get("key"); ok {
 		t.Fatalf("Context.Get() error, returns %v, want nil", v)
 	}
@@ -25,7 +25,7 @@ func TestContext_Set(t *testing.T) {
 	key := "key"
 	value := "value"
 
-	ctx := &Context{}
+	ctx := &Context{Message: &Message{}}
 	ctx.Set(key, nil)
 	cv, ok := ctx.Get(key)
 	if ok {
@@ -101,7 +101,7 @@ func TestContext_Err(t *testing.T) {
 }
 
 func TestContext_Value(t *testing.T) {
-	ctx := &Context{}
+	ctx := &Context{Message: &Message{}}
 	if value := ctx.Value(3); value != nil {
 		t.Fatalf("Context.Value() value != nil, have %v", value)
 	}

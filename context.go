@@ -57,6 +57,9 @@ func (ctx *Context) Set(key interface{}, value interface{}) {
 
 // Values returns values.
 func (ctx *Context) Values() map[interface{}]interface{} {
+	if ctx.Message == nil {
+		return nil
+	}
 	return ctx.Message.values
 }
 
