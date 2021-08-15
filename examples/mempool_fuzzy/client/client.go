@@ -32,6 +32,8 @@ func dialer() (net.Conn, error) {
 }
 
 func main() {
+	flag.Parse()
+
 	arpc.EnablePool(true)
 
 	var clients []*arpc.Client

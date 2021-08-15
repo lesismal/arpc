@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/lesismal/arpc"
-	// "github.com/lesismal/nbio/mempool"
 )
 
 var mux = sync.RWMutex{}
@@ -14,9 +13,6 @@ var server = arpc.NewServer()
 var clientMap = make(map[*arpc.Client]struct{})
 
 func main() {
-	// mempool.DefaultMemPool.Debug = true
-	// arpc.BufferPool = mempool.DefaultMemPool
-
 	server.Handler.EnablePool(true)
 
 	server.Handler.Handle("/echo", func(ctx *arpc.Context) {
