@@ -816,8 +816,15 @@ func (c *Client) batchSendLoop() {
 		select {
 		case msg = <-c.chSend:
 		case <-c.chClose:
-			c.Handler.OnMessageDone(c, msg)
-			return
+			// clear msg in send queue
+			for {
+				select {
+				case msg := <-c.chSend:
+					c.Handler.OnMessageDone(c, msg)
+				default:
+					return
+				}
+			}
 		}
 
 		if !c.reconnecting {
