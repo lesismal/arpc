@@ -35,6 +35,8 @@ func main() {
 	}
 
 	svr := arpc.NewServer()
+	svr.Handler.EnablePool(true)
+	svr.Handler.SetAsyncResponse(true)
 	svr.Handler.Handle("Hello", OnHello)
 	svr.Serve(ln)
 }

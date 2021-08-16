@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"log"
 	"net"
 	"runtime"
@@ -38,6 +40,8 @@ func main() {
 		eachClientCoroutineNum = 10
 	)
 
+	arpc.EnablePool(true)
+
 	clients := make([]*arpc.Client, clientNum)
 
 	for i := 0; i < clientNum; i++ {
@@ -55,14 +59,17 @@ func main() {
 		for j := 0; j < eachClientCoroutineNum; j++ {
 			go func() {
 				var err error
+				var data = make([]byte, 512)
 				for k := 0; true; k++ {
-					req := &HelloReq{Msg: "hello from client.Call"}
+					rand.Read(data)
+					req := &HelloReq{Msg: base64.RawStdEncoding.EncodeToString(data)}
 					rsp := &HelloRsp{}
 					err = client.Call(method, req, rsp, time.Second*5)
 					if err != nil {
 						log.Printf("Call failed: %v", err)
+					} else if rsp.Msg != req.Msg {
+						log.Fatal("Call failed: not equal")
 					} else {
-						//log.Printf("Call Response: \"%v\"", rsp.Msg)
 						atomic.AddUint64(&qpsSec, 1)
 					}
 				}

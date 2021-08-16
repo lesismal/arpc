@@ -70,7 +70,11 @@ func onData(c *nbio.Conn, data []byte) {
 func main() {
 	nlog.SetLogger(log.DefaultLogger)
 
+	arpc.BufferPool = mempool.DefaultMemPool
+
+	handler.EnablePool(true)
 	handler.SetAsyncWrite(false)
+	handler.SetAsyncResponse(true)
 
 	// register router
 	handler.Handle("Hello", func(ctx *arpc.Context) {
@@ -86,6 +90,9 @@ func main() {
 
 	g.OnOpen(onOpen)
 	g.OnData(onData)
+	g.OnWriteBufferRelease(func(c *nbio.Conn, b []byte) {
+		mempool.Free(b)
+	})
 
 	err := g.Start()
 	if err != nil {
