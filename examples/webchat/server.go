@@ -163,7 +163,7 @@ func main() {
 	room := NewRoom().Run()
 	server := NewServer(room)
 
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 

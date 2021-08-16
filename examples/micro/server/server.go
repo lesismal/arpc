@@ -48,7 +48,7 @@ func main() {
 	}
 	defer register.Stop()
 
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	svr.Stop()

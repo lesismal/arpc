@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+
 	// "sync"
 	"syscall"
 	"time"
@@ -32,7 +33,7 @@ func main() {
 
 	go server.Run("localhost:8888")
 
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 

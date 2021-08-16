@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 
+	"github.com/lesismal/arpc/codec"
 	"github.com/lesismal/arpc/log"
 	"github.com/lesismal/arpc/util"
 )
@@ -165,6 +166,13 @@ type Handler interface {
 	Context() (context.Context, context.CancelFunc)
 	SetContext(ctx context.Context, cancel context.CancelFunc)
 	Cancel()
+
+	// NewMessage creates a Message.
+	NewMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, codec codec.Codec, values map[interface{}]interface{}) *Message
+
+	// NewMessageWithBuffer creates a message with the buffer and manage the message by the pool.
+	// The buffer arg should be managed by a pool if EnablePool(true) .
+	NewMessageWithBuffer(buffer []byte) *Message
 }
 
 // handler represents a default Handler implementation.
@@ -670,6 +678,17 @@ func (h *handler) Cancel() {
 	if h.cancel != nil {
 		h.cancel()
 	}
+}
+
+func (h *handler) NewMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, codec codec.Codec, values map[interface{}]interface{}) *Message {
+	return newMessage(cmd, method, v, false, false, seq, h, codec, nil)
+}
+
+func (h *handler) NewMessageWithBuffer(buffer []byte) *Message {
+	msg := messagePool.Get().(*Message)
+	msg.Buffer = buffer
+	msg.handler = h
+	return msg
 }
 
 // NewHandler returns a default Handler implementation.

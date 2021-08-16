@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,6 +11,7 @@ import (
 	"github.com/lesismal/arpc/log"
 	"github.com/lesismal/nbio"
 	nlog "github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -19,15 +21,14 @@ var (
 
 // Session .
 type Session struct {
-	Client *arpc.Client
-	Buffer []byte
+	*arpc.Client
+	bytes.Buffer
 }
 
 func onOpen(c *nbio.Conn) {
 	client := &arpc.Client{Conn: c, Codec: codec.DefaultCodec, Handler: handler}
 	session := &Session{
 		Client: client,
-		Buffer: nil,
 	}
 	c.SetSession(session)
 }
@@ -39,25 +40,27 @@ func onData(c *nbio.Conn, data []byte) {
 		return
 	}
 	session := iSession.(*Session)
-	session.Buffer = append(session.Buffer, data...)
-	if len(session.Buffer) < arpc.HeadLen {
-		return
-	}
+	session.Write(data)
+	for session.Len() >= arpc.HeadLen {
+		headBuf := session.Bytes()[:4]
+		header := arpc.Header(headBuf)
+		total := arpc.HeadLen + header.BodyLen()
+		if session.Len() < total {
+			return
+		}
 
-	headBuf := session.Buffer[:4]
-	header := arpc.Header(headBuf)
-	if len(session.Buffer) < arpc.HeadLen+header.BodyLen() {
-		return
-	}
+		buffer := mempool.Malloc(total)
+		session.Read(buffer)
 
-	msg := &arpc.Message{Buffer: session.Buffer[:arpc.HeadLen+header.BodyLen()]}
-	session.Buffer = session.Buffer[arpc.HeadLen+header.BodyLen():]
-	handler.OnMessage(session.Client, msg)
+		msg := handler.NewMessageWithBuffer(buffer)
+		handler.OnMessage(session.Client, msg)
+	}
 }
 
 func main() {
 	nlog.SetLogger(log.DefaultLogger)
 
+	handler.EnablePool(true)
 	handler.SetAsyncWrite(false)
 
 	// register router
@@ -87,7 +90,7 @@ func main() {
 	}
 	defer g.Stop()
 
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 }
