@@ -173,6 +173,11 @@ type Handler interface {
 	// NewMessageWithBuffer creates a message with the buffer and manage the message by the pool.
 	// The buffer arg should be managed by a pool if EnablePool(true) .
 	NewMessageWithBuffer(buffer []byte) *Message
+
+	// SetAsyncExecutor sets executor.
+	SetAsyncExecutor(executor func(f func()))
+	// AsyncExecute executes a func
+	AsyncExecute(f func())
 }
 
 // handler represents a default Handler implementation.
@@ -208,6 +213,8 @@ type handler struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	executor func(f func())
 }
 
 func (h *handler) Clone() Handler {
@@ -571,10 +578,10 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 				ctx.Next()
 				h.OnContextDone(ctx)
 			} else {
-				go func() {
+				h.AsyncExecute(func() {
 					ctx.Next()
 					h.OnContextDone(ctx)
-				}()
+				})
 			}
 		} else {
 			if cmd == CmdRequest {
@@ -591,7 +598,6 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 			h.OnContextDone(ctx)
 			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
 		}
-		break
 	case CmdResponse:
 		if !msg.IsAsync() {
 			seq := msg.Seq()
@@ -613,10 +619,8 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 				log.Warn("%v OnMessage: async handler not exist or expired", h.LogTag())
 			}
 		}
-		break
 	default:
 		log.Warn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
-		break
 	}
 }
 
@@ -689,6 +693,20 @@ func (h *handler) NewMessageWithBuffer(buffer []byte) *Message {
 	msg.Buffer = buffer
 	msg.handler = h
 	return msg
+}
+
+// SetAsyncExecutor sets executor for message.
+func (h *handler) SetAsyncExecutor(executor func(f func())) {
+	h.executor = executor
+}
+
+// AsyncExecute executes a func.
+func (h *handler) AsyncExecute(f func()) {
+	if h.executor != nil {
+		h.executor(f)
+	} else {
+		go f()
+	}
 }
 
 // NewHandler returns a default Handler implementation.
@@ -852,6 +870,18 @@ func HandleMalloc(f func(int) []byte) {
 	DefaultHandler.HandleMalloc(f)
 }
 
+// EnablePool registers handlers for pool operation for Context and Message and Message.Buffer
 func EnablePool(enable bool) {
 	DefaultHandler.EnablePool(enable)
+}
+
+// SetAsyncExecutor sets executor.
+// AsyncExecute executes a func
+func SetAsyncExecutor(executor func(f func())) {
+	DefaultHandler.SetAsyncExecutor(executor)
+}
+
+// AsyncExecute executes a func.
+func AsyncExecute(f func()) {
+	DefaultHandler.AsyncExecute(f)
 }

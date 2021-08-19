@@ -90,9 +90,6 @@ func main() {
 
 	g.OnOpen(onOpen)
 	g.OnData(onData)
-	g.OnWriteBufferRelease(func(c *nbio.Conn, b []byte) {
-		mempool.Free(b)
-	})
 
 	err := g.Start()
 	if err != nil {
