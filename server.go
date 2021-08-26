@@ -86,8 +86,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 // NewMessage creates a Message.
-func (s *Server) NewMessage(cmd byte, method string, v interface{}) *Message {
-	return newMessage(cmd, method, v, false, false, atomic.AddUint64(&s.seq, 1), s.Handler, s.Codec, nil)
+func (s *Server) NewMessage(cmd byte, method string, v interface{}, args ...interface{}) *Message {
+	if len(args) == 0 {
+		return newMessage(cmd, method, v, false, false, atomic.AddUint64(&s.seq, 1), s.Handler, s.Codec, nil)
+	}
+	return newMessage(cmd, method, v, false, false, atomic.AddUint64(&s.seq, 1), s.Handler, s.Codec, args[0].(map[interface{}]interface{}))
 }
 
 func (s *Server) addLoad() int64 {

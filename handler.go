@@ -685,7 +685,7 @@ func (h *handler) Cancel() {
 }
 
 func (h *handler) NewMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, codec codec.Codec, values map[interface{}]interface{}) *Message {
-	return newMessage(cmd, method, v, false, false, seq, h, codec, nil)
+	return newMessage(cmd, method, v, false, false, seq, h, codec, values)
 }
 
 func (h *handler) NewMessageWithBuffer(buffer []byte) *Message {

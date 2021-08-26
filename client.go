@@ -103,8 +103,11 @@ func (c *Client) Delete(key interface{}) {
 }
 
 // NewMessage creates a Message by client's seq, handler and codec.
-func (c *Client) NewMessage(cmd byte, method string, v interface{}) *Message {
-	return newMessage(cmd, method, v, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, nil)
+func (c *Client) NewMessage(cmd byte, method string, v interface{}, args ...interface{}) *Message {
+	if len(args) == 0 {
+		return newMessage(cmd, method, v, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, nil)
+	}
+	return newMessage(cmd, method, v, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, args[0].(map[interface{}]interface{}))
 }
 
 // Call makes an rpc call with a timeout.

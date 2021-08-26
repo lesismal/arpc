@@ -294,7 +294,7 @@ func (m *Message) Set(key interface{}, value interface{}) {
 
 // NewMessage creates a Message.
 func NewMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[interface{}]interface{}) *Message {
-	return newMessage(cmd, method, v, false, false, seq, h, codec, nil)
+	return newMessage(cmd, method, v, false, false, seq, h, codec, values)
 }
 
 // newMessage creates a Message.
