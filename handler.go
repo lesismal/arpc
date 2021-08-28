@@ -126,6 +126,11 @@ type Handler interface {
 	// SetSendQueueSize sets client's send queue channel capacity.
 	SetSendQueueSize(size int)
 
+	// MaxBodyLen returns max body length of a message.
+	MaxBodyLen() int
+	// SetMaxBodyLen sets max body length of a message.
+	SetMaxBodyLen(l int)
+
 	// Use registers method/router handler middleware.
 	Use(h HandlerFunc)
 
@@ -190,6 +195,7 @@ type handler struct {
 	recvBufferSize int
 	sendBufferSize int
 	sendQueueSize  int
+	maxBodyLen     int
 
 	onConnected      func(*Client)
 	onDisConnected   func(*Client)
@@ -418,6 +424,14 @@ func (h *handler) SendQueueSize() int {
 
 func (h *handler) SetSendQueueSize(size int) {
 	h.sendQueueSize = size
+}
+
+func (h *handler) MaxBodyLen() int {
+	return h.maxBodyLen
+}
+
+func (h *handler) SetMaxBodyLen(l int) {
+	h.maxBodyLen = l
 }
 
 func (h *handler) Use(cb HandlerFunc) {
@@ -719,6 +733,7 @@ func NewHandler() Handler {
 		asyncResponse:  false,
 		recvBufferSize: 8192,
 		sendQueueSize:  4096,
+		maxBodyLen:     DefaultMaxBodyLen,
 	}
 	h.wrapReader = func(conn net.Conn) io.Reader {
 		return bufio.NewReaderSize(conn, h.recvBufferSize)
@@ -837,6 +852,14 @@ func SendQueueSize() int {
 // SetSendQueueSize sets default client's send queue channel capacity.
 func SetSendQueueSize(size int) {
 	DefaultHandler.SetSendQueueSize(size)
+}
+
+func MaxBodyLen() int {
+	return DefaultHandler.MaxBodyLen()
+}
+
+func SetMaxBodyLen(l int) {
+	DefaultHandler.SetMaxBodyLen(l)
 }
 
 // Use registers default method/router handler middleware.

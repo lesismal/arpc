@@ -59,8 +59,8 @@ const (
 	// MaxMethodLen limits Message method length.
 	MaxMethodLen int = 127
 
-	// MaxBodyLen limits Message body length.
-	MaxBodyLen int = 1024*1024*64 - 16
+	// DefaultMaxBodyLen limits Message body length.
+	DefaultMaxBodyLen int = 1024*1024*64 - 16
 )
 
 // Header defines Message head
@@ -74,7 +74,7 @@ func (h Header) BodyLen() int {
 // message creates a Message by body length.
 func (h Header) message(handler Handler) (*Message, error) {
 	bodyLen := h.BodyLen()
-	if bodyLen < 0 || bodyLen > MaxBodyLen {
+	if bodyLen < 0 || bodyLen > handler.MaxBodyLen() {
 		return nil, fmt.Errorf("invalid body length: %v", bodyLen)
 	}
 
