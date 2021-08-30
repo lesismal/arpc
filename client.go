@@ -726,7 +726,7 @@ func (c *Client) recvLoop() {
 			c.Handler.OnMessage(c, msg)
 		}
 	} else {
-		// c.Handler.OnConnected(c)
+		c.Handler.OnConnected(c)
 
 		for c.running {
 			for {
@@ -902,16 +902,26 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 }
 
 // NewClient creates a Client.
-func NewClient(dialer DialerFunc) (*Client, error) {
+func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 	conn, err := dialer()
 	if err != nil {
 		return nil, err
 	}
 
+	var handler Handler
+	if len(args) > 0 {
+		if h, ok := args[0].(Handler); ok {
+			handler = h
+		}
+	}
+	if handler == nil {
+		handler = DefaultHandler.Clone()
+	}
+
 	c := &Client{}
 	c.Conn = conn
 	c.Codec = codec.DefaultCodec
-	c.Handler = DefaultHandler.Clone()
+	c.Handler = handler
 	c.Dialer = dialer
 	c.Head = make([]byte, 4)
 	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
@@ -971,23 +981,27 @@ func (pool *ClientPool) Stop() {
 }
 
 // NewClientPool creates a ClientPool.
-func NewClientPool(dialer DialerFunc, size int) (*ClientPool, error) {
+func NewClientPool(dialer DialerFunc, size int, args ...interface{}) (*ClientPool, error) {
 	pool := &ClientPool{
 		size:    uint64(size),
 		round:   0xFFFFFFFFFFFFFFFF,
 		clients: make([]*Client, size),
 	}
 
+	var handler Handler
+	if len(args) > 0 {
+		if h, ok := args[0].(Handler); ok {
+			handler = h
+		}
+	}
+
 	for i := 0; i < size; i++ {
-		c, err := NewClient(dialer)
+		c, err := NewClient(dialer, handler)
 		if err != nil {
 			for j := 0; j < i; j++ {
 				pool.clients[j].Stop()
 			}
 			return nil, err
-		}
-		if i > 0 {
-			c.Handler = pool.clients[0].Handler
 		}
 		pool.clients[i] = c
 	}
@@ -996,7 +1010,7 @@ func NewClientPool(dialer DialerFunc, size int) (*ClientPool, error) {
 }
 
 // NewClientPoolFromDialers creates a ClientPool by multiple dialers.
-func NewClientPoolFromDialers(dialers []DialerFunc) (*ClientPool, error) {
+func NewClientPoolFromDialers(dialers []DialerFunc, args ...interface{}) (*ClientPool, error) {
 	pool := &ClientPool{
 		size:    0,
 		round:   0xFFFFFFFFFFFFFFFF,
@@ -1006,19 +1020,21 @@ func NewClientPoolFromDialers(dialers []DialerFunc) (*ClientPool, error) {
 	if len(dialers) == 0 {
 		return nil, ErrClientInvalidPoolDialers
 	}
-	var h Handler
+
+	var handler Handler
+	if len(args) > 0 {
+		if h, ok := args[0].(Handler); ok {
+			handler = h
+		}
+	}
+
 	for _, dialer := range dialers {
-		c, err := NewClient(dialer)
+		c, err := NewClient(dialer, handler)
 		if err != nil {
 			for j := 0; j < len(pool.clients); j++ {
 				pool.clients[j].Stop()
 			}
 			return nil, err
-		}
-		if h == nil {
-			h = c.Handler
-		} else {
-			c.Handler = h
 		}
 		pool.clients = append(pool.clients, c)
 	}
