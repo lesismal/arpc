@@ -994,6 +994,9 @@ func NewClientPool(dialer DialerFunc, size int, args ...interface{}) (*ClientPoo
 			handler = h
 		}
 	}
+	if handler == nil {
+		handler = DefaultHandler.Clone()
+	}
 
 	for i := 0; i < size; i++ {
 		c, err := NewClient(dialer, handler)
@@ -1026,6 +1029,9 @@ func NewClientPoolFromDialers(dialers []DialerFunc, args ...interface{}) (*Clien
 		if h, ok := args[0].(Handler); ok {
 			handler = h
 		}
+	}
+	if handler == nil {
+		handler = DefaultHandler.Clone()
 	}
 
 	for _, dialer := range dialers {
