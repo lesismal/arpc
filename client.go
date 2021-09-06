@@ -459,10 +459,11 @@ func (c *Client) Restart() error {
 // Stop stops a Client.
 func (c *Client) Stop() {
 	c.mux.Lock()
-	defer c.mux.Unlock()
+	running := c.running
+	c.running = false
+	c.mux.Unlock()
 
-	if c.running {
-		c.running = false
+	if running {
 		c.Conn.Close()
 		if c.chSend != nil {
 			close(c.chClose)
