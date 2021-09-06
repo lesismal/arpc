@@ -183,7 +183,7 @@ function ArpcClient(url, codec) {
                 var headArr = new Uint8Array(event.data.slice(offset, offset + 16));
                 var bodyLen = 0;
                 for (var i = _HeaderIndexBodyLenBegin; i < _HeaderIndexBodyLenEnd; i++) {
-                    bodyLen |= (headArr[i] << ((i - _HeaderIndexBodyLenBegin) * 8)) & 0xFF;
+                    bodyLen |= (headArr[i] << ((i - _HeaderIndexBodyLenBegin) * 8));
                 }
                 var cmd = headArr[_HeaderIndexCmd];
                 var isError = headArr[_HeaderIndexFlag] & _HeaderFlagMaskError;
