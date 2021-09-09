@@ -5,7 +5,7 @@
 package util
 
 import (
-	"runtime/debug"
+	"runtime"
 	"unsafe"
 
 	acodec "github.com/lesismal/arpc/codec"
@@ -18,7 +18,10 @@ type Empty struct{}
 // Recover handles panic and logs stack info
 func Recover() {
 	if err := recover(); err != nil {
-		log.Error("runtime error: %v\ntraceback:\n%v\n", err, string(debug.Stack()))
+		const size = 64 << 10
+		buf := make([]byte, size)
+		buf = buf[:runtime.Stack(buf, false)]
+		log.Error("runtime error: %v\ntraceback:\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 	}
 }
 

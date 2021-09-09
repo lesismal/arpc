@@ -719,7 +719,7 @@ func (h *handler) AsyncExecute(f func()) {
 	if h.executor != nil {
 		h.executor(f)
 	} else {
-		go f()
+		go util.Safe(f)
 	}
 }
 
