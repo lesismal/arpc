@@ -1,21 +1,23 @@
 # ARPC - More Effective Network Communication 
 
-[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go#distributed-systems
-)
+[![Slack][1]][2]
 
-[![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][9]][10]
+[![Mentioned in Awesome Go][3]][4] [![MIT licensed][5]][6] [![Build Status][7]][8] [![Go Report Card][9]][10] [![Coverage Statusd][11]][12]
 
-[1]: https://godoc.org/github.com/lesismal/arpc?status.svg
-[2]: https://godoc.org/github.com/lesismal/arpc
-[3]: https://img.shields.io/badge/license-MIT-blue.svg
-[4]: LICENSE
-[5]: https://img.shields.io/github/workflow/status/lesismal/arpc/build-linux?style=flat-square&logo=github-actions
-[6]: https://github.com/lesismal/arpc/actions?query=workflow%3build-linux
-[7]: https://goreportcard.com/badge/github.com/lesismal/arpc
-[8]: https://goreportcard.com/report/github.com/lesismal/arpc
-[9]: https://codecov.io/gh/lesismal/arpc/branch/master/graph/badge.svg
-[10]: https://codecov.io/gh/lesismal/arpc
-
+[1]: https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=green
+[2]: https://join.slack.com/t/arpcnbio/shared_invite/zt-vh3g1z2v-qqoDp1hQ45fJZqwPrSz4~Q
+[3]: https://awesome.re/mentioned-badge-flat.svg
+[4]: https://github.com/avelino/awesome-go#distributed-systems
+[5]: https://img.shields.io/badge/license-MIT-blue.svg
+[6]: LICENSE
+[7]: https://img.shields.io/github/workflow/status/lesismal/arpc/build-linux?style=flat-square&logo=github-actions
+[8]: https://github.com/lesismal/arpc/actions?query=workflow%3build-linux
+[9]: https://goreportcard.com/badge/github.com/lesismal/arpc
+[10]: https://goreportcard.com/report/github.com/lesismal/arpc
+[11]: https://codecov.io/gh/lesismal/arpc/branch/master/graph/badge.svg
+[12]: https://codecov.io/gh/lesismal/arpc
+[13]: https://godoc.org/github.com/lesismal/arpc?status.svg
+[14]: https://godoc.org/github.com/lesismal/arpc
 
 
 
