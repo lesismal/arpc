@@ -193,8 +193,8 @@ func (c *Client) onPublish(ctx *arpc.Context) {
 }
 
 // NewClient .
-func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
-	c, err := arpc.NewClient(dialer)
+func NewClient(dialer func() (net.Conn, error), args ...interface{}) (*Client, error) {
+	c, err := arpc.NewClient(dialer, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func NewClient(dialer func() (net.Conn, error)) (*Client, error) {
 		Client:          c,
 		topicHandlerMap: map[string]TopicHandler{},
 	}
-	cli.Handler = cli.Handler.Clone()
+	// cli.Handler = cli.Handler.Clone()
 	cli.Handler.Handle(routePublish, cli.onPublish)
 	cli.Handler.HandleConnected(func(c *arpc.Client) {
 		if cli.Authenticate() == nil {
