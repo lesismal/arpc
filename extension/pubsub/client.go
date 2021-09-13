@@ -194,7 +194,14 @@ func (c *Client) onPublish(ctx *arpc.Context) {
 
 // NewClient .
 func NewClient(dialer func() (net.Conn, error), args ...interface{}) (*Client, error) {
-	c, err := arpc.NewClient(dialer, args...)
+	var handler arpc.Handler
+	if len(args) > 0 {
+		if h, ok := args[0].(arpc.Handler); ok {
+			handler = h.Clone()
+		}
+	}
+
+	c, err := arpc.NewClient(dialer, handler)
 	if err != nil {
 		return nil, err
 	}
