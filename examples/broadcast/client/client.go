@@ -3,23 +3,16 @@ package main
 import (
 	"log"
 	"net"
-	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/arpc"
 )
 
-var notifyCount int32
-
 // OnBroadcast .
 func OnBroadcast(ctx *arpc.Context) {
 	ret := ""
 	ctx.Bind(&ret)
-	log.Printf("OnServerNotify: \"%v\"", ret)
-	if atomic.AddInt32(&notifyCount, 1) >= 20 {
-		os.Exit(0)
-	}
+	log.Printf("OnBroadcast: \"%v\"", ret)
 }
 
 func dialer() (net.Conn, error) {
@@ -45,7 +38,6 @@ func main() {
 	for i := 0; i < 10; i++ {
 		client := clients[i]
 		go func() {
-
 			passwd := "123qwe"
 			response := ""
 			err := client.Call("/enter", passwd, &response, time.Second*5)

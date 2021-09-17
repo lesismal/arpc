@@ -68,17 +68,3 @@ func main() {
 
 	server.Run("localhost:8888")
 }
-
-// func broadcast(i int) {
-// 	msg := server.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
-// 	mux.RLock()
-// 	defer func() {
-// 		mux.RUnlock()
-// 		msg.Release()
-// 	}()
-
-// 	for client := range clientMap {
-// 		msg.Retain()
-// 		client.PushMsg(msg, arpc.TimeZero)
-// 	}
-// }
