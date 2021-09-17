@@ -29,9 +29,9 @@ type Client struct {
 
 // Authenticate .
 func (c *Client) Authenticate() error {
-	if c.Password == "" {
-		return nil
-	}
+	// if c.Password == "" {
+	// 	return nil
+	// }
 	err := c.Call(routeAuthenticate, c.Password, nil, time.Second*5)
 	if err == nil {
 		log.Info("%v [Authenticate] success from\t%v", c.Handler.LogTag(), c.Conn.RemoteAddr())

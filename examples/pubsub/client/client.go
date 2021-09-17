@@ -54,7 +54,7 @@ func newClient() *pubsub.Client {
 	if err != nil {
 		panic(err)
 	}
-	client.Password = password
+	// client.Password = password
 
 	// authentication
 	err = client.Authenticate()

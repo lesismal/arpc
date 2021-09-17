@@ -17,7 +17,7 @@ var (
 
 func main() {
 	s := pubsub.NewServer()
-	s.Password = password
+	// s.Password = password
 
 	// server publish to all clients
 	go func() {
