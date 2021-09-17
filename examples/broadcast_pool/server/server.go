@@ -44,23 +44,41 @@ func main() {
 		ticker := time.NewTicker(time.Second)
 		for i := 0; true; i++ {
 			<-ticker.C
-			broadcast(i)
+			switch i % 4 {
+			case 0:
+				server.Broadcast("/broadcast", fmt.Sprintf("Broadcast msg %d", i))
+			case 1:
+				server.BroadcastWithFilter("/broadcast", fmt.Sprintf("BroadcastWithFilter msg %d", i), func(c *arpc.Client) bool {
+					return true
+				})
+			case 2:
+				server.ForEach(func(c *arpc.Client) {
+					c.Notify("/broadcast", fmt.Sprintf("ForEach msg %d", i), arpc.TimeZero)
+				})
+			case 3:
+				server.ForEachWithFilter(func(c *arpc.Client) {
+					c.Notify("/broadcast", fmt.Sprintf("ForEachWithFilter msg %d", i), arpc.TimeZero)
+				}, func(c *arpc.Client) bool {
+					return true
+				})
+
+			}
 		}
 	}()
 
 	server.Run("localhost:8888")
 }
 
-func broadcast(i int) {
-	msg := server.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
-	mux.RLock()
-	defer func() {
-		mux.RUnlock()
-		msg.Release()
-	}()
+// func broadcast(i int) {
+// 	msg := server.NewMessage(arpc.CmdNotify, "/broadcast", fmt.Sprintf("broadcast msg %d", i))
+// 	mux.RLock()
+// 	defer func() {
+// 		mux.RUnlock()
+// 		msg.Release()
+// 	}()
 
-	for client := range clientMap {
-		msg.Retain()
-		client.PushMsg(msg, arpc.TimeZero)
-	}
-}
+// 	for client := range clientMap {
+// 		msg.Retain()
+// 		client.PushMsg(msg, arpc.TimeZero)
+// 	}
+// }

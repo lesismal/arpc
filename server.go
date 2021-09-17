@@ -58,6 +58,54 @@ func (s *Server) Run(addr string) error {
 	return s.runLoop()
 }
 
+func (s *Server) Broadcast(method string, v interface{}, args ...interface{}) {
+	msg := s.NewMessage(CmdNotify, method, v, args...)
+	s.mux.Lock()
+	defer func() {
+		msg.Release()
+		s.mux.Unlock()
+	}()
+
+	for c := range s.clients {
+		msg.Retain()
+		c.PushMsg(msg, TimeZero)
+	}
+}
+
+func (s *Server) BroadcastWithFilter(method string, v interface{}, filter func(*Client) bool, args ...interface{}) {
+	msg := s.NewMessage(CmdNotify, method, v, args...)
+	s.mux.Lock()
+	defer func() {
+		msg.Release()
+		s.mux.Unlock()
+	}()
+
+	for c := range s.clients {
+		if filter == nil || filter(c) {
+			msg.Retain()
+			c.PushMsg(msg, TimeZero)
+		}
+	}
+}
+
+func (s *Server) ForEach(h func(*Client)) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	for c := range s.clients {
+		h(c)
+	}
+}
+
+func (s *Server) ForEachWithFilter(h func(*Client), filter func(*Client) bool) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	for c := range s.clients {
+		if filter == nil || filter(c) {
+			h(c)
+		}
+	}
+}
+
 // Stop stops service.
 func (s *Server) Stop() error {
 	defer log.Info("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
