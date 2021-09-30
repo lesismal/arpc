@@ -730,6 +730,7 @@ func (c *Client) recvLoop() {
 		c.Handler.OnConnected(c)
 
 		for c.running {
+		RECV:
 			for {
 				msg, err = c.Handler.Recv(c)
 				if err != nil {
@@ -748,9 +749,8 @@ func (c *Client) recvLoop() {
 			// if c.running {
 			// 	log.Info("%v\t%v\tReconnect Start", c.Handler.LogTag(), addr)
 			// }
-			i := 0
-			for c.running {
-				i++
+			maxReconnectTimes := c.Handler.MaxReconnectTimes()
+			for i := 0; c.running && ((maxReconnectTimes <= 0) || (i < maxReconnectTimes)); i++ {
 				log.Info("%v\t%v\tReconnect Trying %v", c.Handler.LogTag(), addr, i)
 				conn, err := c.Dialer()
 				if err == nil {
@@ -764,11 +764,12 @@ func (c *Client) recvLoop() {
 
 					go c.Handler.OnConnected(c)
 
-					break
+					goto RECV
 				}
 
 				time.Sleep(time.Second)
 			}
+			c.Stop()
 		}
 	}
 }
