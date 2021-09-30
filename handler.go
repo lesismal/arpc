@@ -50,6 +50,11 @@ type Handler interface {
 	// OnDisconnected will be called when client is disconnected.
 	OnDisconnected(c *Client)
 
+	// MaxReconnectTimes returns client's max reconnect times.
+	MaxReconnectTimes() int
+	// SetMaxReconnectTimes sets client's max reconnect times for.
+	SetMaxReconnectTimes(n int)
+
 	// HandleOverstock registers handler which will be called when client send queue is overstock.
 	HandleOverstock(onOverstock func(c *Client, m *Message))
 	// OnOverstock will be called when client chSend is full.
@@ -187,15 +192,16 @@ type Handler interface {
 
 // handler represents a default Handler implementation.
 type handler struct {
-	logtag         string
-	batchRecv      bool
-	batchSend      bool
-	asyncWrite     bool
-	asyncResponse  bool
-	recvBufferSize int
-	sendBufferSize int
-	sendQueueSize  int
-	maxBodyLen     int
+	logtag            string
+	batchRecv         bool
+	batchSend         bool
+	asyncWrite        bool
+	asyncResponse     bool
+	recvBufferSize    int
+	sendBufferSize    int
+	sendQueueSize     int
+	maxBodyLen        int
+	maxReconnectTimes int
 
 	onConnected      func(*Client)
 	onDisConnected   func(*Client)
@@ -292,6 +298,14 @@ func (h *handler) OnDisconnected(c *Client) {
 	if h.onDisConnected != nil {
 		h.onDisConnected(c)
 	}
+}
+
+func (h *handler) MaxReconnectTimes() int {
+	return h.maxReconnectTimes
+}
+
+func (h *handler) SetMaxReconnectTimes(n int) {
+	h.maxReconnectTimes = n
 }
 
 func (h *handler) HandleOverstock(onOverstock func(c *Client, m *Message)) {
