@@ -43,6 +43,9 @@ func newSession(seq uint64) *rpcSession {
 // with a single Client, and a Client may be used by
 // multiple goroutines simultaneously.
 type Client struct {
+	// 64-aligned on 32-bit
+	seq uint64
+
 	Conn    net.Conn
 	Codec   codec.Codec
 	Handler Handler
@@ -54,7 +57,6 @@ type Client struct {
 	reconnecting bool
 
 	mux             sync.Mutex
-	seq             uint64
 	sessionMap      map[uint64]*rpcSession
 	asyncHandlerMap map[uint64]HandlerFunc
 
