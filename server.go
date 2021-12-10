@@ -22,6 +22,9 @@ type Server struct {
 	CurrLoad int64
 	MaxLoad  int64
 
+	// 64-aligned on 32-bit
+	seq uint64
+
 	Codec   codec.Codec
 	Handler Handler
 
@@ -29,7 +32,6 @@ type Server struct {
 
 	mux sync.Mutex
 
-	seq     uint64
 	running bool
 	chStop  chan error
 	clients map[*Client]util.Empty

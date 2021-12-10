@@ -99,9 +99,11 @@ var (
 
 // Message represents an arpc Message.
 type Message struct {
+	// 64-aligned on 32-bit
+	ref int32
+
 	Buffer []byte
 
-	ref     int32
 	handler Handler
 	values  map[interface{}]interface{}
 }
