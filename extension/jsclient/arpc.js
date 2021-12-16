@@ -50,12 +50,15 @@ function Context(cli, head, body, method, data, msgObj) {
 }
 
 
-function ArpcClient(url, codec) {
+function ArpcClient(url, codec, httpUrl, httpMethod) {
     var client = this;
 
     this.ws;
     this.url = url;
     this.codec = codec || new Codec();
+
+    this.httpUrl = httpUrl || "/";
+    this.httpMethod = httpMethod || "POST";
 
     this.seqNum = 0;
     this.sessionMap = {};
@@ -71,7 +74,10 @@ function ArpcClient(url, codec) {
         this.handlers[method] = { h: h };
     }
 
-    this.call = function (method, request, timeout, cb) {
+    this.callHttp = function (method, request, timeout, cb) {
+        this.call(method, request, timeout, cb, true);
+    }
+    this.call = function (method, request, timeout, cb, isHttp) {
         if (this.state == _SOCK_STATE_CLOSED) {
             return new Promise(function (resolve, reject) {
                 resolve({ data: null, err: _ErrClosed });
@@ -128,11 +134,18 @@ function ArpcClient(url, codec) {
             buffer[16 + i] = methodBuffer[i];
         }
 
-        this.ws.send(buffer);
+        if (!isHttp) {
+            this.ws.send(buffer);
+        } else {
+            this.request(buffer, this._onMessage);
+        }
 
         return p;
     }
 
+    this.notifyHttp = function (method, notify) {
+        this.notify(method, notify, true);
+    }
     this.notify = function (method, notify) {
         if (this.state == _SOCK_STATE_CLOSED) {
             return _ErrClosed;
@@ -168,12 +181,44 @@ function ArpcClient(url, codec) {
             buffer[16 + i] = methodBuffer[i];
         }
 
-        this.ws.send(buffer);
+        if (!isHttp) {
+            this.ws.send(buffer);
+        } else {
+            this.request(buffer, function () { });
+        }
     }
 
     this.shutdown = function () {
         this.ws.close();
         this.state = _SOCK_STATE_CLOSED;
+    }
+
+    this.request = function (data, cb) {
+        let resolve;
+        let p = new Promise(function (res) {
+            resolve = res;
+            if (typeof (cb) == 'function') {
+                resolve = function (ret) {
+                    res(ret);
+                    cb(ret);
+                }
+            }
+            let r = new XMLHttpRequest();
+            r.open(this.httpMethod, this.httpUrl, true);
+            r.onreadystatechange = function () {
+                if (r.readyState != 4) {
+                    return;
+                }
+                if (r.status != 200) {
+                    resolve({ code: r.status, data: null, err: `request "${this.httpUrl}" failed with status code ${r.status} ` });
+                    return;
+                }
+                // r.responseText
+                resolve({ code: r.status, data: r.response, err: null });
+            };
+            r.send(data);
+        });
+        return p;
     }
 
     this._onMessage = function (event) {

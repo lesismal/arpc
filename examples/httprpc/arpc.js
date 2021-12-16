@@ -75,18 +75,20 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
     }
 
     this.callHttp = function (method, request, timeout, cb) {
-        this.call(method, request, timeout, cb, true);
+        return this.call(method, request, timeout, cb, true);
     }
     this.call = function (method, request, timeout, cb, isHttp) {
-        if (this.state == _SOCK_STATE_CLOSED) {
-            return new Promise(function (resolve, reject) {
-                resolve({ data: null, err: _ErrClosed });
-            });
-        }
-        if (this.state == _SOCK_STATE_CONNECTING) {
-            return new Promise(function (resolve, reject) {
-                resolve({ data: null, err: _ErrReconnecting });
-            });
+        if (!isHttp) {
+            if (this.state == _SOCK_STATE_CLOSED) {
+                return new Promise(function (resolve, reject) {
+                    resolve({ data: null, err: _ErrClosed });
+                });
+            }
+            if (this.state == _SOCK_STATE_CONNECTING) {
+                return new Promise(function (resolve, reject) {
+                    resolve({ data: null, err: _ErrReconnecting });
+                });
+            }
         }
         this.seqNum++;
         var seq = this.seqNum;
@@ -144,14 +146,16 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
     }
 
     this.notifyHttp = function (method, notify) {
-        this.notify(method, notify, true);
+        return this.notify(method, notify, true);
     }
-    this.notify = function (method, notify) {
-        if (this.state == _SOCK_STATE_CLOSED) {
-            return _ErrClosed;
-        }
-        if (this.state == _SOCK_STATE_CONNECTING) {
-            return _ErrReconnecting;
+    this.notify = function (method, notify, isHttp) {
+        if (!isHttp) {
+            if (this.state == _SOCK_STATE_CLOSED) {
+                return _ErrClosed;
+            }
+            if (this.state == _SOCK_STATE_CONNECTING) {
+                return _ErrReconnecting;
+            }
         }
         this.seqNum++;
         var buffer;
@@ -194,8 +198,8 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
     }
 
     this.request = function (data, cb) {
-        let resolve;
-        let p = new Promise(function (res) {
+        var resolve;
+        var p = new Promise(function (res) {
             resolve = res;
             if (typeof (cb) == 'function') {
                 resolve = function (ret) {
@@ -203,18 +207,24 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
                     cb(ret);
                 }
             }
-            let r = new XMLHttpRequest();
-            r.open(this.httpMethod, this.httpUrl, true);
+            var r = new XMLHttpRequest();
+            r.open(client.httpMethod, client.httpUrl, true);
             r.onreadystatechange = function () {
                 if (r.readyState != 4) {
                     return;
                 }
                 if (r.status != 200) {
-                    resolve({ code: r.status, data: null, err: `request "${this.httpUrl}" failed with status code ${r.status} ` });
+                    resolve({ code: r.status, data: null, err: `request "${client.httpUrl}" failed with status code ${r.status} ` });
                     return;
                 }
                 // r.responseText
-                resolve({ code: r.status, data: r.response, err: null });
+                var arr = [];
+                var str = r.responseText;
+                for (var i = 0, j = str.length; i < j; ++i) {
+                    arr.push(str.charCodeAt(i));
+                }
+                arr = new Uint8Array(arr);
+                resolve({ code: r.status, data: arr, err: null });
             };
             r.send(data);
         });
@@ -224,7 +234,11 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
     this._onMessage = function (event) {
         try {
             var offset = 0;
-            while (offset < event.data.byteLength) {
+            var length = event.data.length;
+            if (!length) {
+                length = event.data.byteLength;
+            }
+            while (offset < length) {
                 var headArr = new Uint8Array(event.data.slice(offset, offset + 16));
                 var bodyLen = 0;
                 for (var i = _HeaderIndexBodyLenBegin; i < _HeaderIndexBodyLenEnd; i++) {
@@ -344,7 +358,9 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
     }
 
     try {
-        this.init();
+        if (url) {
+            this.init();
+        }
     } catch (e) {
         console.log("[ArpcClient] init() failed:", e);
     }
