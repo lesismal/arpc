@@ -461,20 +461,25 @@ func (c *Client) Restart() error {
 // Stop stops a Client.
 func (c *Client) Stop() {
 	c.mux.Lock()
-	running := c.running
 	c.running = false
 	c.mux.Unlock()
 
-	if running {
-		c.Conn.Close()
-		if c.chSend != nil {
-			close(c.chClose)
-		}
-		if c.onStop != nil {
-			c.onStop(c)
-		}
-		c.Handler.OnDisconnected(c)
+	c.Conn.Close()
+}
+
+func (c *Client) closeAndClean() {
+	c.mux.Lock()
+	c.running = false
+	c.mux.Unlock()
+
+	c.Conn.Close()
+	if c.chSend != nil {
+		close(c.chClose)
 	}
+	if c.onStop != nil {
+		c.onStop(c)
+	}
+	c.Handler.OnDisconnected(c)
 }
 
 // CheckState checks Client's state.
@@ -723,7 +728,7 @@ func (c *Client) recvLoop() {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
 				log.Error("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
-				c.Stop()
+				c.closeAndClean()
 				return
 			}
 			c.Handler.OnMessage(c, msg)
@@ -771,7 +776,7 @@ func (c *Client) recvLoop() {
 
 				time.Sleep(time.Second)
 			}
-			c.Stop()
+			c.closeAndClean()
 		}
 	}
 }
