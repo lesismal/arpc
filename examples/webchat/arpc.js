@@ -146,7 +146,7 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
     this.notifyHttp = function (method, notify) {
         this.notify(method, notify, true);
     }
-    this.notify = function (method, notify) {
+    this.notify = function (method, notify, isHttp) {
         if (this.state == _SOCK_STATE_CLOSED) {
             return _ErrClosed;
         }
