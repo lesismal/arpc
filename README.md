@@ -71,12 +71,17 @@
 
 ## Performance
 
-- simple echo load testing
+Simple echo testing:
 
 | Framework | Protocol        | Codec         | Configuration                                             | Connection Num | Number of Goroutines Per Connection | Qps     |
 | --------- | --------------- | ------------- | --------------------------------------------------------- | -------------- | ----------------------------------- | ------- |
 | arpc      | tcp/localhost   | encoding/json | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10                                  | 80-100k |
 | grpc      | http2/localhost | protobuf      | os: VMWare Ubuntu 18.04<br>cpu: AMD 3500U 4c8t<br>mem: 2G | 8              | 10                                  | 20-30k  |
+
+Here are some thirdparty benchmark including arpc, **although these repos have provide the performance report, but I suggest you run the code yourself and get the real result, other than just believe other people's doc**:
+- [go-rpc-framework-benchmark](https://github.com/micro-svc/go-rpc-framework-benchmark)
+- [rpcx-benchmark](https://github.com/rpcxio/rpcx-benchmark)
+- [kitex-benchmark](https://github.com/cloudwego/kitex-benchmark)
 
 
 ## Header Layout
