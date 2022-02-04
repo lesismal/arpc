@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+option go_package = "protobuf/RPC";
+package RPC;
+
+
+message message
+{
+	enum type
+	{
+		none = 0;
+		request = 1;
+		response = 2;
+		notify = 3;
+	}
+	type cmd = 1;
+	uint32 flag = 2;
+	uint64 sequence = 3;
+	string method = 4;
+	bytes body = 5;
+}
