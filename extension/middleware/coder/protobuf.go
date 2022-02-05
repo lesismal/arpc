@@ -3,9 +3,10 @@ package coder
 
 import (
 	"github.com/lesismal/arpc"
-	"github.com/lesismal/arpc/extension/middleware/coder/protobuf/RPC"
+	"google.golang.org/protobuf/proto"
 )
-import "github.com/golang/protobuf/proto"
+
+import "github.com/lesismal/arpc/extension/middleware/coder/protobuf/RPC"
 
 type ProtoBufCoder struct {
 }
