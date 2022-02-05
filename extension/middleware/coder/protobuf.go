@@ -5,7 +5,7 @@ import (
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/extension/middleware/coder/protobuf/RPC"
 )
-import "google.golang.org/protobuf/proto"
+import "github.com/golang/protobuf/proto"
 
 type ProtoBufCoder struct {
 }
