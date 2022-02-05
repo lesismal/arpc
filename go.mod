@@ -1,3 +1,3 @@
 module github.com/lesismal/arpc
 
-go 1.6
+go 1.13
