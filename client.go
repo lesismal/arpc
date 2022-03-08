@@ -734,7 +734,7 @@ func (c *Client) recvLoop() {
 			c.Handler.OnMessage(c, msg)
 		}
 	} else {
-		c.Handler.OnConnected(c)
+		go c.Handler.OnConnected(c)
 
 		for c.running {
 		RECV:
