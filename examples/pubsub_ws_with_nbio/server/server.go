@@ -38,6 +38,8 @@ var (
 	psServer *pubsub.Server
 
 	executePool = taskpool.NewMixedPool(1024*4, 1, 1024*runtime.NumCPU())
+
+	keepaliveTime = 60 * time.Second
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +55,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wsConn := conn.(*websocket.Conn)
-	wsConn.SetReadDeadline(time.Now().Add(120 * time.Second))
+	wsConn.SetReadDeadline(time.Now().Add(keepaliveTime))
 }
 
 func main() {
@@ -169,6 +171,8 @@ func onMessage(c *websocket.Conn, mt websocket.MessageType, data []byte) {
 		session.cache = append(session.cache, data...)
 		data = session.cache
 	}
+
+	recieved := false
 	for {
 		if len(data)-start < arpc.HeadLen {
 			goto Exit
@@ -184,9 +188,13 @@ func onMessage(c *websocket.Conn, mt websocket.MessageType, data []byte) {
 		start += total
 		msg := psServer.Handler.NewMessageWithBuffer(buffer)
 		psServer.Handler.OnMessage(session.Client, msg)
+		recieved = true
 	}
 
 Exit:
+	if recieved {
+		c.SetReadDeadline(time.Now().Add(keepaliveTime))
+	}
 	if session.cache != nil {
 		if start == len(data) {
 			mempool.Free(data)
