@@ -70,7 +70,7 @@ func onData(c *nbio.Conn, data []byte) {
 func main() {
 	nlog.SetLogger(log.DefaultLogger)
 
-	arpc.BufferPool = mempool.DefaultMemPool
+	arpc.DefaultAllocator = mempool.DefaultMemPool
 
 	handler.EnablePool(true)
 	handler.SetAsyncWrite(false)

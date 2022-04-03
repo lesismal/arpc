@@ -65,6 +65,7 @@ func main() {
 
 	// init pubsub server handler for nbhttp
 	{
+		// arpc.DefaultAllocator = mempool.DefaultMemPool
 		// psServer.Handler.EnablePool(true)
 		arpc.SetAsyncResponse(true)
 		psServer = pubsub.NewServer()

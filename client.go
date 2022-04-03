@@ -859,14 +859,14 @@ func (c *Client) batchSendLoop() {
 					for j := 0; j < len(coders); j++ {
 						msg = coders[j].Encode(c, msg)
 					}
-					buffer = append(buffer, msg.Buffer...)
+					buffer = c.Handler.Append(buffer, msg.Buffer...)
 					c.Handler.OnMessageDone(c, msg)
 				}
 				msg = <-c.chSend
 				for j := 0; j < len(coders); j++ {
 					msg = coders[j].Encode(c, msg)
 				}
-				buffer = append(buffer, msg.Buffer...)
+				buffer = c.Handler.Append(buffer, msg.Buffer...)
 				c.Handler.OnMessageDone(c, msg)
 			}
 			if len(buffer) == 0 {

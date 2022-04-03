@@ -165,6 +165,11 @@ type Handler interface {
 	// HandleMalloc registers buffer maker.
 	HandleMalloc(f func(size int) []byte)
 
+	// Append append bytes to buffer.
+	Append(b []byte, more ...byte) []byte
+	// HandleAppend registers buffer appender.
+	HandleAppend(f func(b []byte, more ...byte) []byte)
+
 	// Free release a buffer.
 	Free([]byte)
 	// HandleFree registers buffer releaser.
@@ -214,6 +219,7 @@ type handler struct {
 	beforeRecv func(net.Conn) error
 	beforeSend func(net.Conn) error
 	malloc     func(int) []byte
+	append     func([]byte, ...byte) []byte
 	free       func([]byte)
 
 	wrapReader func(conn net.Conn) io.Reader
@@ -663,6 +669,17 @@ func (h *handler) HandleMalloc(f func(int) []byte) {
 	h.malloc = f
 }
 
+func (h *handler) Append(b []byte, more ...byte) []byte {
+	if h.append != nil {
+		return h.append(b, more...)
+	}
+	return append(b, more...)
+}
+
+func (h *handler) HandleAppend(f func(b []byte, more ...byte) []byte) {
+	h.append = f
+}
+
 func (h *handler) Free(b []byte) {
 	if h.free != nil {
 		h.free(b)
@@ -675,12 +692,9 @@ func (h *handler) HandleFree(f func([]byte)) {
 
 func (h *handler) EnablePool(enable bool) {
 	if enable {
-		h.HandleMalloc(func(size int) []byte {
-			return BufferPool.Malloc(size)
-		})
-		h.HandleFree(func(buf []byte) {
-			BufferPool.Free(buf)
-		})
+		h.HandleMalloc(DefaultAllocator.Malloc)
+		h.HandleAppend(DefaultAllocator.Append)
+		h.HandleFree(DefaultAllocator.Free)
 		h.HandleContextDone(func(ctx *Context) {
 			ctx.Release()
 		})
@@ -690,6 +704,9 @@ func (h *handler) EnablePool(enable bool) {
 	} else {
 		h.HandleMalloc(func(size int) []byte {
 			return make([]byte, size)
+		})
+		h.HandleAppend(func(b []byte, more ...byte) []byte {
+			return append(b, more...)
 		})
 		h.HandleFree(func(buf []byte) {})
 		h.HandleContextDone(func(ctx *Context) {})

@@ -47,7 +47,7 @@ func onEcho(ctx *arpc.Context) {
 func main() {
 	nlog.SetLogger(log.DefaultLogger)
 
-	arpc.BufferPool = mempool.DefaultMemPool
+	arpc.DefaultAllocator = mempool.DefaultMemPool
 
 	var err error
 	var maxStdOnline = 5
