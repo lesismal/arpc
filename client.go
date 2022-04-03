@@ -69,6 +69,11 @@ type Client struct {
 	// UserData interface{}
 }
 
+// SetState sets running state, should be used only for non-blocking conn.
+func (c *Client) SetState(running bool) {
+	c.running = running
+}
+
 // Get returns value for key.
 func (c *Client) Get(key interface{}) (interface{}, bool) {
 	c.mux.Lock()
@@ -86,20 +91,18 @@ func (c *Client) Set(key interface{}, value interface{}) {
 		return
 	}
 	c.mux.Lock()
-	defer c.mux.Unlock()
-	if c.running {
-		if c.values == nil {
-			c.values = map[interface{}]interface{}{}
-		}
-		c.values[key] = value
+	if c.values == nil {
+		c.values = map[interface{}]interface{}{}
 	}
+	c.values[key] = value
+	c.mux.Unlock()
 }
 
 // Delete deletes key-value pair
 func (c *Client) Delete(key interface{}) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
-	if c.running && c.values != nil {
+	if c.values != nil {
 		delete(c.values, key)
 	}
 }
