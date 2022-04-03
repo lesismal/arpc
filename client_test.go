@@ -161,28 +161,12 @@ func TestClient_Set(t *testing.T) {
 	value := "value"
 
 	c := &Client{}
-	c.Set(key, nil)
-	cv, ok := c.Get(key)
-	if ok {
-		t.Fatalf("Client.Get() failed: Get '%v', want nil", cv)
-	}
 
 	c.Set(key, value)
-	_, ok = c.Get(key)
-	if ok {
+	cv, ok := c.Get(key)
+	if !ok || cv != value {
 		t.Fatalf("Client.Get() failed: Get '%v', want nil", value)
 	}
-
-	c.running = true
-	c.Set(key, value)
-	cv, ok = c.Get(key)
-	if !ok {
-		t.Fatalf("Client.Get() failed: Get nil, want '%v'", value)
-	}
-	if cv != value {
-		t.Fatalf("Client.Get() failed: Get '%v', want '%v'", cv, value)
-	}
-
 }
 
 func TestClient_Delete(t *testing.T) {
