@@ -18,15 +18,17 @@ type Discovery struct {
 }
 
 func (ds *Discovery) init(done chan struct{}) {
+	doneWatch := make(chan struct{})
 	go util.Safe(func() {
-		ds.lazyInit(done)
+		ds.lazyInit(done, doneWatch)
 	})
-	ds.watch()
+	ds.watch(doneWatch)
 }
 
-func (ds *Discovery) lazyInit(done chan struct{}) {
+func (ds *Discovery) lazyInit(done, doneWatch chan struct{}) {
 	defer close(done)
 
+	<-doneWatch
 	time.Sleep(time.Second / 100)
 	resp, err := ds.client.Get(context.Background(), ds.prefix, clientv3.WithPrefix())
 	if err != nil {
@@ -40,8 +42,9 @@ func (ds *Discovery) lazyInit(done chan struct{}) {
 	}
 }
 
-func (ds *Discovery) watch() {
+func (ds *Discovery) watch(doneWatch chan struct{}) {
 	rch := ds.client.Watch(context.Background(), ds.prefix, clientv3.WithPrefix())
+	close(doneWatch)
 	log.Info("Discovery watching: %s", ds.prefix)
 	for wresp := range rch {
 		for _, ev := range wresp.Events {
