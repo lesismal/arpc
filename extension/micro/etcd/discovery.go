@@ -7,7 +7,7 @@ import (
 	"github.com/lesismal/arpc/extension/micro"
 	"github.com/lesismal/arpc/log"
 	"github.com/lesismal/arpc/util"
-	"go.etcd.io/etcd/client/v3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // Discovery .
@@ -17,12 +17,16 @@ type Discovery struct {
 	serviceManager micro.ServiceManager
 }
 
-func (ds *Discovery) init() {
-	go util.Safe(ds.lazyInit)
+func (ds *Discovery) init(done chan struct{}) {
+	go util.Safe(func() {
+		ds.lazyInit(done)
+	})
 	ds.watch()
 }
 
-func (ds *Discovery) lazyInit() {
+func (ds *Discovery) lazyInit(done chan struct{}) {
+	defer close(done)
+
 	time.Sleep(time.Second / 100)
 	resp, err := ds.client.Get(context.Background(), ds.prefix, clientv3.WithPrefix())
 	if err != nil {
@@ -77,7 +81,11 @@ func NewDiscovery(endpoints []string, prefix string, serviceManager micro.Servic
 		serviceManager: serviceManager,
 	}
 
-	go util.Safe(ds.init)
+	done := make(chan struct{})
+	go util.Safe(func() {
+		ds.init(done)
+	})
+	<-done
 
 	log.Info("NewDiscovery [%v] success", prefix)
 
