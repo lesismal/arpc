@@ -18,8 +18,11 @@ type Discovery struct {
 }
 
 func (ds *Discovery) init() {
-	go util.Safe(ds.lazyInit)
-	ds.watch()
+	util.Safe(ds.lazyInit)
+}
+
+func (ds *Discovery) watch() {
+	util.Safe(ds.lazyWatch)
 }
 
 func (ds *Discovery) lazyInit() {
@@ -36,7 +39,7 @@ func (ds *Discovery) lazyInit() {
 	}
 }
 
-func (ds *Discovery) watch() {
+func (ds *Discovery) lazyWatch() {
 	rch := ds.client.Watch(context.Background(), ds.prefix, clientv3.WithPrefix())
 	log.Info("Discovery watching: %s", ds.prefix)
 	for wresp := range rch {
@@ -77,7 +80,8 @@ func NewDiscovery(endpoints []string, prefix string, serviceManager micro.Servic
 		serviceManager: serviceManager,
 	}
 
-	go util.Safe(ds.init)
+	util.Safe(ds.init)
+	go util.Safe(ds.watch)
 
 	log.Info("NewDiscovery [%v] success", prefix)
 
