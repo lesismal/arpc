@@ -618,19 +618,17 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 				})
 			}
 		} else {
-			if cmd == CmdRequest {
-				if rh, ok = h.routes[""]; ok {
-					ctx := newContext(c, msg, rh.handlers)
-					ctx.Next()
-					h.OnContextDone(ctx)
-					return
-				}
+			if rh, ok = h.routes[""]; ok {
+				ctx := newContext(c, msg, rh.handlers)
+				ctx.Next()
+				h.OnContextDone(ctx)
 			}
 
-			ctx := newContext(c, msg, rh.handlers)
-			ctx.Error(ErrMethodNotFound)
-			h.OnContextDone(ctx)
-			log.Warn("%v OnMessage: invalid method: [%v], no handler", h.LogTag(), method)
+			if cmd == CmdRequest {
+				log.Warn("%v OnMessage: invalid Call with method: [%v], no handler", h.LogTag(), method)
+			} else {
+				log.Warn("%v OnMessage: invalid Notify with method: [%v], no handler", h.LogTag(), method)
+			}
 		}
 	case CmdResponse:
 		if !msg.IsAsync() {
@@ -655,6 +653,7 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 		}
 	default:
 		log.Warn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
+		c.Stop()
 	}
 }
 
