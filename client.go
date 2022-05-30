@@ -463,13 +463,11 @@ func (c *Client) Restart() error {
 
 // Stop stops a Client.
 func (c *Client) Stop() {
-	c.Handler.AsyncExecute(func() {
-		c.mux.Lock()
-		c.running = false
-		c.mux.Unlock()
+	c.mux.Lock()
+	c.running = false
+	c.mux.Unlock()
 
-		c.Conn.Close()
-	})
+	c.Conn.Close()
 }
 
 func (c *Client) closeAndClean() {

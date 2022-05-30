@@ -653,7 +653,7 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 		}
 	default:
 		log.Warn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
-		c.Stop()
+		go c.Stop()
 	}
 }
 
