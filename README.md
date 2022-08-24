@@ -5,7 +5,7 @@
 [![Mentioned in Awesome Go][3]][4] [![MIT licensed][5]][6] [![Build Status][7]][8] [![Go Report Card][9]][10] [![Coverage Statusd][11]][12]
 
 [1]: https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=green
-[2]: https://join.slack.com/t/arpcnbio/shared_invite/zt-vh3g1z2v-qqoDp1hQ45fJZqwPrSz4~Q
+[2]: https://join.slack.com/t/arpcnbio/shared_invite/zt-1esuz619h-SbKacrYHNdbkNmO9SV~X1A
 [3]: https://awesome.re/mentioned-badge-flat.svg
 [4]: https://github.com/avelino/awesome-go#distributed-systems
 [5]: https://img.shields.io/badge/license-MIT-blue.svg
