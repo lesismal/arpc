@@ -760,7 +760,7 @@ func NewHandler() Handler {
 		batchRecv:      true,
 		batchSend:      true,
 		asyncWrite:     true,
-		asyncResponse:  false,
+		asyncResponse:  true,
 		recvBufferSize: 8192,
 		sendQueueSize:  4096,
 		maxBodyLen:     DefaultMaxBodyLen,
