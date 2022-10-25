@@ -27,6 +27,12 @@ const (
 
 	// CmdNotify the other side should not response to a request message
 	CmdNotify byte = 3
+
+	// CmdPing .
+	CmdPing byte = 4
+
+	// CmdPong .
+	CmdPong byte = 5
 )
 
 const (
@@ -61,6 +67,14 @@ const (
 
 	// DefaultMaxBodyLen limits Message body length.
 	DefaultMaxBodyLen int = 1024*1024*64 - 16
+)
+
+var (
+	// PingMessage .
+	PingMessage = newMessage(CmdPing, "", nil, false, false, 0, nil, nil, nil)
+
+	// PongMessage .
+	PongMessage = newMessage(CmdPong, "", nil, false, false, 0, nil, nil, nil)
 )
 
 // Header defines Message head

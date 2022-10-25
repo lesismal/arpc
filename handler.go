@@ -560,7 +560,7 @@ func (h *handler) Recv(c *Client) (*Message, error) {
 		return nil, err
 	}
 
-	if message.Len() > HeadLen {
+	if message.Len() >= HeadLen {
 		_, err = io.ReadFull(c.Reader, message.Buffer[HeaderIndexBodyLenEnd:])
 	}
 
@@ -591,6 +591,14 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 
 func (h *handler) OnMessage(c *Client, msg *Message) {
 	defer util.Recover()
+
+	switch msg.Cmd() {
+	case CmdPing:
+		c.Pong()
+		return
+	case CmdPong:
+		return
+	}
 
 	for i := len(h.msgCoders) - 1; i >= 0; i-- {
 		msg = h.msgCoders[i].Decode(c, msg)
