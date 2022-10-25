@@ -81,6 +81,10 @@ func init() {
 	HandleDisconnected(func(*Client) {})
 	HandleDisconnected(func(*Client) {})
 	UseCoder(new(CoderTest))
+	ReadTimeout()
+	SetReadTimeout(time.Second * 60)
+	WriteTimeout()
+	SetWriteTimeout(time.Second * 5)
 	Use(nil)
 	Use(func(ctx *Context) {})
 	Handle("-", func(ctx *Context) {})
@@ -251,6 +255,7 @@ func testClientCallMethodString(c *Client, t *testing.T) {
 	// } else if rsp != req {
 	// 	t.Fatalf("Client.Call() error, returns '%v', want '%v'", rsp, req)
 	// }
+	c.Keepalive(time.Second)
 	if err = c.Call(methodCallString, &req, &rsp, time.Second, map[interface{}]interface{}{}); err != nil {
 		t.Fatalf("Client.Call() error = %v", err)
 	}
