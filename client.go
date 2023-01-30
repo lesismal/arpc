@@ -107,6 +107,29 @@ func (c *Client) Delete(key interface{}) {
 	}
 }
 
+// Ping .
+func (c *Client) Ping() {
+	c.Conn.Write(PingMessage.Buffer)
+}
+
+// Pong .
+func (c *Client) Pong() {
+	c.Conn.Write(PongMessage.Buffer)
+}
+
+// Ping .
+func (c *Client) Keepalive(interval time.Duration) {
+	if c.running {
+		if interval <= 0 {
+			interval = time.Second * 30
+		}
+		time.AfterFunc(interval, func() {
+			c.Ping()
+			c.Keepalive(interval)
+		})
+	}
+}
+
 // NewMessage creates a Message by client's seq, handler and codec.
 func (c *Client) NewMessage(cmd byte, method string, v interface{}, args ...interface{}) *Message {
 	if len(args) == 0 {
@@ -850,7 +873,6 @@ func (c *Client) batchSendLoop() {
 				}
 			}
 		}
-
 		if !c.reconnecting {
 			chLen = len(c.chSend)
 			coders = c.Handler.Coders()

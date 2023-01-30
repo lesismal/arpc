@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/lesismal/arpc/codec"
 	"github.com/lesismal/arpc/log"
@@ -126,6 +127,16 @@ type Handler interface {
 	// SetSendBufferSize sets client's send buffer size.
 	SetSendBufferSize(size int)
 
+	// ReadTimeout returns client's read timeout.
+	ReadTimeout() time.Duration
+	// SetReadTimeout sets client's read timeout.
+	SetReadTimeout(timeout time.Duration)
+
+	// WriteTimeout returns client's write timeout.
+	WriteTimeout() time.Duration
+	// SetWriteTimeout sets client's write timeout.
+	SetWriteTimeout(timeout time.Duration)
+
 	// SendQueueSize returns client's send queue channel capacity.
 	SendQueueSize() int
 	// SetSendQueueSize sets client's send queue channel capacity.
@@ -204,6 +215,8 @@ type handler struct {
 	asyncResponse     bool
 	recvBufferSize    int
 	sendBufferSize    int
+	readTimeout       time.Duration
+	writeTimeout      time.Duration
 	sendQueueSize     int
 	maxBodyLen        int
 	maxReconnectTimes int
@@ -438,6 +451,22 @@ func (h *handler) SetSendBufferSize(size int) {
 	h.sendBufferSize = size
 }
 
+func (h *handler) ReadTimeout() time.Duration {
+	return h.readTimeout
+}
+
+func (h *handler) SetReadTimeout(timeout time.Duration) {
+	h.readTimeout = timeout
+}
+
+func (h *handler) WriteTimeout() time.Duration {
+	return h.writeTimeout
+}
+
+func (h *handler) SetWriteTimeout(timeout time.Duration) {
+	h.writeTimeout = timeout
+}
+
 func (h *handler) SendQueueSize() int {
 	return h.sendQueueSize
 }
@@ -549,6 +578,9 @@ func (h *handler) Recv(c *Client) (*Message, error) {
 			return nil, err
 		}
 	}
+	if h.readTimeout > 0 {
+		c.Conn.SetReadDeadline(time.Now().Add(h.readTimeout))
+	}
 
 	_, err = io.ReadFull(c.Reader, c.Head[:])
 	if err != nil {
@@ -560,7 +592,7 @@ func (h *handler) Recv(c *Client) (*Message, error) {
 		return nil, err
 	}
 
-	if message.Len() > HeadLen {
+	if message.Len() >= HeadLen {
 		_, err = io.ReadFull(c.Reader, message.Buffer[HeaderIndexBodyLenEnd:])
 	}
 
@@ -573,6 +605,9 @@ func (h *handler) Send(conn net.Conn, buffer []byte) (int, error) {
 			return -1, err
 		}
 	}
+	if h.writeTimeout > 0 {
+		conn.SetWriteDeadline(time.Now().Add(h.writeTimeout))
+	}
 
 	n, err := conn.Write(buffer)
 	return n, err
@@ -584,6 +619,9 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 			return -1, err
 		}
 	}
+	if h.writeTimeout > 0 {
+		conn.SetWriteDeadline(time.Now().Add(h.writeTimeout))
+	}
 
 	n64, err := buffers.WriteTo(conn)
 	return int(n64), err
@@ -591,6 +629,14 @@ func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
 
 func (h *handler) OnMessage(c *Client, msg *Message) {
 	defer util.Recover()
+
+	switch msg.Cmd() {
+	case CmdPing:
+		c.Pong()
+		return
+	case CmdPong:
+		return
+	}
 
 	for i := len(h.msgCoders) - 1; i >= 0; i-- {
 		msg = h.msgCoders[i].Decode(c, msg)
@@ -872,6 +918,26 @@ func SendBufferSize() int {
 // SetSendBufferSize sets default client's read buffer size.
 func SetSendBufferSize(size int) {
 	DefaultHandler.SetSendBufferSize(size)
+}
+
+// ReadTimeout returns client's read timeout.
+func ReadTimeout() time.Duration {
+	return DefaultHandler.ReadTimeout()
+}
+
+// SetReadTimeout sets client's read timeout.
+func SetReadTimeout(timeout time.Duration) {
+	DefaultHandler.SetReadTimeout(timeout)
+}
+
+// WriteTimeout returns client's write timeout.
+func WriteTimeout() time.Duration {
+	return DefaultHandler.WriteTimeout()
+}
+
+// SetWriteTimeout sets client's write timeout.
+func SetWriteTimeout(timeout time.Duration) {
+	DefaultHandler.SetWriteTimeout(timeout)
 }
 
 // SendQueueSize returns default client's send queue channel capacity.
