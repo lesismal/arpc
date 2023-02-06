@@ -110,7 +110,7 @@ func (s *Server) ForEachWithFilter(h func(*Client), filter func(*Client) bool) {
 
 // Stop stops service.
 func (s *Server) Stop() error {
-	defer log.Info("%v %v Stop", s.Handler.LogTag(), s.Listener.Addr())
+	defer log.Info("%v \"%v\" Stop", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -124,7 +124,7 @@ func (s *Server) Stop() error {
 
 // Shutdown shutdown service.
 func (s *Server) Shutdown(ctx context.Context) error {
-	defer log.Info("%v %v Shutdown", s.Handler.LogTag(), s.Listener.Addr())
+	defer log.Info("%v \"%v\" Shutdown", s.Handler.LogTag(), s.Listener.Addr())
 	s.running = false
 	s.Listener.Close()
 	select {
@@ -201,7 +201,7 @@ func (s *Server) runLoop() error {
 				conn.Close()
 				s.subLoad()
 			}
-		} else {
+		} else if s.running {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				log.Error("%v Accept error: %v; retrying...", s.Handler.LogTag(), err)
 				time.Sleep(time.Second / 20)
