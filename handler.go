@@ -83,8 +83,12 @@ type Handler interface {
 
 	// BeforeRecv registers handler which will be called before Recv.
 	BeforeRecv(h func(net.Conn) error)
+	// BeforeRecvHandler returns the handler which will be called before Recv.
+	BeforeRecvHandler() func(net.Conn) error
 	// BeforeSend registers handler which will be called before Send.
 	BeforeSend(h func(net.Conn) error)
+	// BeforeSendHandler returns the handler which will be called before Send.
+	BeforeSendHandler() func(net.Conn) error
 
 	// BatchRecv returns BatchRecv flag.
 	BatchRecv() bool
@@ -113,9 +117,9 @@ type Handler interface {
 	// Recv reads a message from a client.
 	Recv(c *Client) (*Message, error)
 	// Send writes buffer data to a connection.
-	Send(c net.Conn, buffer []byte) (int, error)
-	// SendN writes multiple buffer data to a connection.
-	SendN(conn net.Conn, buffers net.Buffers) (int, error)
+	Send(c net.Conn, writer *bufio.Writer, buffer []byte) (int, error)
+	// // SendN writes multiple buffer data to a connection.
+	// SendN(conn net.Conn, buffers net.Buffers) (int, error)
 
 	// RecvBufferSize returns client's recv buffer size.
 	RecvBufferSize() int
@@ -388,8 +392,16 @@ func (h *handler) BeforeRecv(hb func(net.Conn) error) {
 	h.beforeRecv = hb
 }
 
+func (h *handler) BeforeRecvHandler() func(net.Conn) error {
+	return h.beforeRecv
+}
+
 func (h *handler) BeforeSend(hs func(net.Conn) error) {
 	h.beforeSend = hs
+}
+
+func (h *handler) BeforeSendHandler() func(net.Conn) error {
+	return h.beforeSend
 }
 
 func (h *handler) BatchRecv() bool {
@@ -599,33 +611,24 @@ func (h *handler) Recv(c *Client) (*Message, error) {
 	return message, err
 }
 
-func (h *handler) Send(conn net.Conn, buffer []byte) (int, error) {
-	if h.beforeSend != nil {
-		if err := h.beforeSend(conn); err != nil {
-			return -1, err
-		}
-	}
-	if h.writeTimeout > 0 {
-		conn.SetWriteDeadline(time.Now().Add(h.writeTimeout))
-	}
-
-	n, err := conn.Write(buffer)
+func (h *handler) Send(conn net.Conn, writer *bufio.Writer, buffer []byte) (int, error) {
+	n, err := writer.Write(buffer)
 	return n, err
 }
 
-func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
-	if h.beforeSend != nil {
-		if err := h.beforeSend(conn); err != nil {
-			return -1, err
-		}
-	}
-	if h.writeTimeout > 0 {
-		conn.SetWriteDeadline(time.Now().Add(h.writeTimeout))
-	}
+// func (h *handler) SendN(conn net.Conn, buffers net.Buffers) (int, error) {
+// 	if h.beforeSend != nil {
+// 		if err := h.beforeSend(conn); err != nil {
+// 			return -1, err
+// 		}
+// 	}
+// 	if h.writeTimeout > 0 {
+// 		conn.SetWriteDeadline(time.Now().Add(h.writeTimeout))
+// 	}
 
-	n64, err := buffers.WriteTo(conn)
-	return int(n64), err
-}
+// 	n64, err := buffers.WriteTo(conn)
+// 	return int(n64), err
+// }
 
 func (h *handler) OnMessage(c *Client, msg *Message) {
 	defer util.Recover()
@@ -687,10 +690,13 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 				log.Warn("%v OnMessage: session not exist or expired", h.LogTag())
 			}
 		} else {
-			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
+			ah, ok := c.getAndDeleteAsyncHandler(msg.Seq())
 			if ok {
 				ctx := newContext(c, msg, nil)
-				handler(ctx)
+				if ah.t != nil {
+					ah.t.Stop()
+				}
+				ah.h(ctx)
 				h.OnContextDone(ctx)
 			} else {
 				h.OnSessionMiss(c, msg)

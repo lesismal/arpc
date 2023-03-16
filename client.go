@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"net"
@@ -38,6 +39,29 @@ func newSession(seq uint64) *rpcSession {
 	return &rpcSession{seq: seq, done: make(chan *Message, 1)}
 }
 
+var (
+	emptyAsyncHandler = asyncHandler{}
+	asyncHandlerPool  = sync.Pool{
+		New: func() interface{} {
+			return &asyncHandler{}
+		},
+	}
+)
+
+type asyncHandler struct {
+	h HandlerFunc
+	t *time.Timer
+}
+
+func getAsyncHandler() *asyncHandler {
+	return asyncHandlerPool.Get().(*asyncHandler)
+}
+
+func putAsyncHandler(h *asyncHandler) {
+	*h = emptyAsyncHandler
+	asyncHandlerPool.Put(h)
+}
+
 // Client represents an arpc Client.
 // There may be multiple outstanding Calls or Notifys associated
 // with a single Client, and a Client may be used by
@@ -47,6 +71,7 @@ type Client struct {
 	seq uint64
 
 	Conn    net.Conn
+	Writer  *bufio.Writer
 	Codec   codec.Codec
 	Handler Handler
 	Reader  io.Reader
@@ -58,9 +83,13 @@ type Client struct {
 
 	mux             sync.Mutex
 	sessionMap      map[uint64]*rpcSession
-	asyncHandlerMap map[uint64]HandlerFunc
+	asyncHandlerMap map[uint64]*asyncHandler
+	sendMux         sync.Mutex
+	sendQueue       []*Message
+	// chSend    chan *Message
+	sendQueueHead *job
+	sendQueueTail *job
 
-	chSend  chan *Message
 	chClose chan util.Empty
 
 	onStop func(*Client)
@@ -160,27 +189,23 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		c.deleteSession(seq)
 	}()
 
+	coders := c.Handler.Coders()
+	for j := 0; j < len(coders); j++ {
+		msg = coders[j].Encode(c, msg)
+	}
+
 	if c.Handler.AsyncWrite() {
-		select {
-		case c.chSend <- msg:
-		case <-timer.C:
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
-			return ErrClientTimeout
-		case <-c.chClose:
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
-			return ErrClientStopped
+		err := c.sendAsync(msg)
+		if err != nil {
+			return err
 		}
 	} else {
 		if !c.reconnecting {
-			coders := c.Handler.Coders()
-			for j := 0; j < len(coders); j++ {
-				msg = coders[j].Encode(c, msg)
-			}
-			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			_, err := c.Handler.Send(c.Conn, c.Writer, msg.Buffer)
 			if err != nil {
 				c.Conn.Close()
+			} else {
+				c.Writer.Flush()
 			}
 			c.Handler.OnMessageDone(c, msg)
 			return err
@@ -216,27 +241,23 @@ func (c *Client) CallWith(ctx context.Context, method string, req interface{}, r
 	c.addSession(seq, sess)
 	defer c.deleteSession(seq)
 
+	coders := c.Handler.Coders()
+	for j := 0; j < len(coders); j++ {
+		msg = coders[j].Encode(c, msg)
+	}
+
 	if c.Handler.AsyncWrite() {
-		select {
-		case c.chSend <- msg:
-		case <-ctx.Done():
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
-			return ErrClientTimeout
-		case <-c.chClose:
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
-			return ErrClientStopped
+		err := c.sendAsync(msg)
+		if err != nil {
+			return err
 		}
 	} else {
 		if !c.reconnecting {
-			coders := c.Handler.Coders()
-			for j := 0; j < len(coders); j++ {
-				msg = coders[j].Encode(c, msg)
-			}
-			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			_, err := c.Handler.Send(c.Conn, c.Writer, msg.Buffer)
 			if err != nil {
 				c.Conn.Close()
+			} else {
+				c.Writer.Flush()
 			}
 			c.Handler.OnMessageDone(c, msg)
 			return err
@@ -268,35 +289,31 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 		return err
 	}
 
-	var timer *time.Timer
-
 	msg := c.newRequestMessage(CmdRequest, method, req, false, true, args...)
 	seq := msg.Seq()
+	coders := c.Handler.Coders()
+	for j := 0; j < len(coders); j++ {
+		msg = coders[j].Encode(c, msg)
+	}
+
+	var timer *time.Timer
 	if handler != nil {
-		c.addAsyncHandler(seq, handler)
+		if timeout <= 0 {
+			timeout = time.Second * 10
+		}
 		timer = time.AfterFunc(timeout, func() { c.deleteAsyncHandler(seq) })
-		defer timer.Stop()
-	} else if timeout > 0 {
-		timer = time.NewTimer(timeout)
-		defer timer.Stop()
+		c.addAsyncHandler(seq, handler, timer)
 	}
 
 	if c.Handler.AsyncWrite() {
-		switch timeout {
-		case TimeZero:
-			err = c.pushMessage(msg, nil)
-		default:
-			err = c.pushMessage(msg, timer)
-		}
+		err = c.sendAsync(msg)
 	} else {
 		if !c.reconnecting {
-			coders := c.Handler.Coders()
-			for j := 0; j < len(coders); j++ {
-				msg = coders[j].Encode(c, msg)
-			}
-			_, err = c.Handler.Send(c.Conn, msg.Buffer)
+			_, err = c.Handler.Send(c.Conn, c.Writer, msg.Buffer)
 			if err != nil {
 				c.Conn.Close()
+			} else {
+				c.Writer.Flush()
 			}
 			c.Handler.OnMessageDone(c, msg)
 		} else {
@@ -305,8 +322,13 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 		}
 	}
 
-	if err != nil && handler != nil {
-		c.deleteAsyncHandler(seq)
+	if err != nil {
+		if handler != nil {
+			c.deleteAsyncHandler(seq)
+		}
+		if timer != nil {
+			timer.Stop()
+		}
 	}
 
 	return err
@@ -315,82 +337,52 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 // Notify makes a notify with timeout.
 // A notify does not need a response from the server.
 func (c *Client) Notify(method string, data interface{}, timeout time.Duration, args ...interface{}) error {
-	err := c.checkNotifyArgs(method, timeout)
-	if err != nil {
-		return err
-	}
+	return c.NotifyWith(nil, method, data, args...)
+}
 
-	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
-
-	if c.Handler.AsyncWrite() {
-		switch timeout {
-		case TimeZero:
-			err = c.pushMessage(msg, nil)
-		default:
-			timer := time.NewTimer(timeout)
-			defer timer.Stop()
-			err = c.pushMessage(msg, timer)
-		}
-	} else {
-		if !c.reconnecting {
-			coders := c.Handler.Coders()
-			for j := 0; j < len(coders); j++ {
-				msg = coders[j].Encode(c, msg)
-			}
-			_, err = c.Handler.Send(c.Conn, msg.Buffer)
-			if err != nil {
-				c.Conn.Close()
-			}
-			c.Handler.OnMessageDone(c, msg)
-		} else {
-			c.dropMessage(msg)
-			err = ErrClientReconnecting
-		}
-	}
-
-	return err
+func (c *Client) NotifyContext(ctx context.Context, method string, data interface{}, args ...interface{}) error {
+	return c.NotifyWith(ctx, method, data, args...)
 }
 
 // NotifyWith use context to make rpc notify.
 // A notify does not need a response from the server.
 func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}, args ...interface{}) error {
-	if err := c.checkStateAndMethod(method); err != nil {
+	err := c.checkStateAndMethod(method)
+	if err != nil {
 		return err
 	}
 
-	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
-
-	if c.Handler.AsyncWrite() {
+	if ctx != nil {
 		select {
-		case c.chSend <- msg:
 		case <-ctx.Done():
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
 			return ErrClientTimeout
-		case <-c.chClose:
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
-			return ErrClientStopped
-		}
-	} else {
-		if !c.reconnecting {
-			coders := c.Handler.Coders()
-			for j := 0; j < len(coders); j++ {
-				msg = coders[j].Encode(c, msg)
-			}
-			_, err := c.Handler.Send(c.Conn, msg.Buffer)
-			if err != nil {
-				c.Conn.Close()
-			}
-			c.Handler.OnMessageDone(c, msg)
-			return err
-		} else {
-			c.dropMessage(msg)
-			return ErrClientReconnecting
+		default:
 		}
 	}
 
-	return nil
+	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
+	coders := c.Handler.Coders()
+	for j := 0; j < len(coders); j++ {
+		msg = coders[j].Encode(c, msg)
+	}
+
+	if c.Handler.AsyncWrite() {
+		return c.sendAsync(msg)
+	}
+
+	if !c.reconnecting {
+		_, err := c.Handler.Send(c.Conn, c.Writer, msg.Buffer)
+		if err != nil {
+			c.Conn.Close()
+		} else {
+			c.Writer.Flush()
+		}
+		c.Handler.OnMessageDone(c, msg)
+		return err
+	}
+
+	c.dropMessage(msg)
+	return ErrClientReconnecting
 }
 
 // PushMsg pushes a msg to Client's send queue with timeout.
@@ -401,85 +393,132 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 		return err
 	}
 
-	if !c.Handler.AsyncWrite() {
-		if !c.reconnecting {
-			coders := c.Handler.Coders()
-			for j := 0; j < len(coders); j++ {
-				msg = coders[j].Encode(c, msg)
-			}
-			_, err := c.Handler.Send(c.Conn, msg.Buffer)
-			if err != nil {
-				c.Conn.Close()
-			}
-			c.Handler.OnMessageDone(c, msg)
-			return err
-		} else {
-			c.dropMessage(msg)
-			return ErrClientReconnecting
-		}
+	coders := c.Handler.Coders()
+	for j := 0; j < len(coders); j++ {
+		msg = coders[j].Encode(c, msg)
 	}
 
-	if timeout < 0 {
-		timeout = TimeForever
+	if c.Handler.AsyncWrite() {
+		return c.sendAsync(msg)
 	}
 
-	switch timeout {
-	case TimeZero:
-		select {
-		case c.chSend <- msg:
-		default:
-			c.Handler.OnOverstock(c, msg)
-			return ErrClientOverstock
-		}
-	case TimeForever:
-		select {
-		case c.chSend <- msg:
-		case <-c.chClose:
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
-			return ErrClientStopped
-		}
-	default:
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-		err = c.pushMessage(msg, timer)
+	if !c.reconnecting {
+		c.dropMessage(msg)
+		return ErrClientReconnecting
 	}
-
+	_, err = c.Handler.Send(c.Conn, c.Writer, msg.Buffer)
+	if err != nil {
+		c.Conn.Close()
+	} else {
+		c.Writer.Flush()
+	}
+	c.Handler.OnMessageDone(c, msg)
 	return err
 }
 
-// Restart stops and restarts a Client.
-func (c *Client) Restart() error {
-	c.Stop()
+// // Restart stops and restarts a Client.
+// func (c *Client) Restart() error {
+// 	c.Stop()
+
+// 	c.mux.Lock()
+// 	defer c.mux.Unlock()
+// 	if !c.running {
+// 		conn, err := c.Dialer()
+// 		if err != nil {
+// 			return err
+// 		}
+
+// 		preConn := c.Conn
+// 		c.Conn = conn
+
+// 		// c.chSend = make(chan *Message, c.Handler.SendQueueSize())
+// 		c.chClose = make(chan util.Empty)
+// 		c.sessionMap = make(map[uint64]*rpcSession)
+// 		c.asyncHandlerMap = make(map[uint64]*asyncHandler)
+// 		c.values = map[interface{}]interface{}{}
+
+// 		c.initReader()
+// 		// if c.Handler.AsyncWrite() {
+// 		// 	go util.Safe(c.sendLoop)
+// 		// }
+// 		go util.Safe(c.recvLoop)
+
+// 		c.running = true
+// 		c.reconnecting = false
+
+// 		log.Info("%v\t[%v] Restarted to [%v]", c.Handler.LogTag(), preConn.RemoteAddr(), conn.RemoteAddr())
+// 	}
+
+// 	return nil
+// }
+
+func (c *Client) sendAsync(msg *Message) error {
+	if c.reconnecting {
+		c.Handler.OnMessageDone(c, msg)
+		return ErrClientReconnecting
+	}
+	if !c.running {
+		c.Handler.OnMessageDone(c, msg)
+		return ErrClientStopped
+	}
+
+	if msg == nil {
+		return nil
+	}
+
+	jo := getJob()
+	jo.msg = msg
 
 	c.mux.Lock()
-	defer c.mux.Unlock()
-	if !c.running {
-		conn, err := c.Dialer()
-		if err != nil {
-			return err
-		}
-
-		preConn := c.Conn
-		c.Conn = conn
-
-		c.chSend = make(chan *Message, c.Handler.SendQueueSize())
-		c.chClose = make(chan util.Empty)
-		c.sessionMap = make(map[uint64]*rpcSession)
-		c.asyncHandlerMap = make(map[uint64]HandlerFunc)
-		c.values = map[interface{}]interface{}{}
-
-		c.initReader()
-		if c.Handler.AsyncWrite() {
-			go util.Safe(c.sendLoop)
-		}
-		go util.Safe(c.recvLoop)
-
-		c.running = true
-		c.reconnecting = false
-
-		log.Info("%v\t[%v] Restarted to [%v]", c.Handler.LogTag(), preConn.RemoteAddr(), conn.RemoteAddr())
+	if c.sendQueueHead != nil {
+		c.sendQueueTail.next = jo
+		c.sendQueueTail = jo
+		c.mux.Unlock()
+		return nil
 	}
+
+	c.sendQueueHead = jo
+	c.sendQueueTail = jo
+	c.mux.Unlock()
+
+	go func() {
+		defer c.Writer.Flush()
+
+		if bfSend := c.Handler.BeforeSendHandler(); bfSend != nil {
+			if err := bfSend(c.Conn); err != nil {
+				return
+			}
+		}
+		if writeTimeout := c.Handler.WriteTimeout(); writeTimeout > 0 {
+			c.Conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+		}
+		next := jo
+		for {
+			msg = next.msg
+			c.Handler.Send(c.Conn, c.Writer, msg.Buffer)
+			c.Handler.OnMessageDone(c, msg)
+			c.mux.Lock()
+			if !c.running {
+				next = c.sendQueueHead
+				for next != nil {
+					putJob(next)
+					next = next.next
+				}
+				c.sendQueueHead = nil
+				c.sendQueueTail = nil
+				return
+			}
+			c.sendQueueHead = next.next
+			putJob(next)
+			next = c.sendQueueHead
+			if next == nil {
+				c.sendQueueTail = nil
+				c.mux.Unlock()
+				return
+			}
+			c.mux.Unlock()
+		}
+	}()
 
 	return nil
 }
@@ -499,9 +538,9 @@ func (c *Client) closeAndClean() {
 	c.mux.Unlock()
 
 	c.Conn.Close()
-	if c.chSend != nil {
-		close(c.chClose)
-	}
+	// if c.chSend != nil {
+	// 	close(c.chClose)
+	// }
 	if c.onStop != nil {
 		c.onStop(c)
 	}
@@ -564,30 +603,22 @@ func (c *Client) checkStateAndMethod(method string) error {
 	return checkMethod(method)
 }
 
-func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
-	if timer == nil {
-		select {
-		case c.chSend <- msg:
-		case <-c.chClose:
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
-			return ErrClientStopped
-		default:
-			c.Handler.OnOverstock(c, msg)
-			return ErrClientOverstock
-		}
-	} else {
-		select {
-		case c.chSend <- msg:
-		case <-timer.C:
-			// c.Handler.OnOverstock(c, msg)
-			c.Handler.OnMessageDone(c, msg)
-			return ErrClientTimeout
-		case <-c.chClose:
-			c.Handler.OnMessageDone(c, msg)
-			// c.Handler.OnOverstock(c, msg)
-			return ErrClientStopped
-		}
+func (c *Client) pushMessage(msg *Message) error {
+	c.sendMux.Lock()
+	defer c.sendMux.Unlock()
+
+	if len(c.sendQueue) >= c.Handler.SendQueueSize() {
+		c.Handler.OnOverstock(c, msg)
+		return ErrClientOverstock
+	}
+
+	c.sendQueue = append(c.sendQueue, msg)
+
+	head := c.sendQueue[0]
+	if head == msg {
+		go func() {
+
+		}()
 	}
 	return nil
 }
@@ -672,10 +703,13 @@ func (c *Client) dropMessage(msg *Message) {
 	}
 }
 
-func (c *Client) addAsyncHandler(seq uint64, h HandlerFunc) {
+func (c *Client) addAsyncHandler(seq uint64, h HandlerFunc, t *time.Timer) {
 	c.mux.Lock()
 	if c.running {
-		c.asyncHandlerMap[seq] = h
+		ah := getAsyncHandler()
+		ah.h = h
+		ah.t = t
+		c.asyncHandlerMap[seq] = ah
 	}
 	c.mux.Unlock()
 }
@@ -686,7 +720,7 @@ func (c *Client) deleteAsyncHandler(seq uint64) {
 	c.mux.Unlock()
 }
 
-func (c *Client) getAndDeleteAsyncHandler(seq uint64) (HandlerFunc, bool) {
+func (c *Client) getAndDeleteAsyncHandler(seq uint64) (*asyncHandler, bool) {
 	c.mux.Lock()
 	handler, ok := c.asyncHandlerMap[seq]
 	if ok {
@@ -701,7 +735,19 @@ func (c *Client) getAndDeleteAsyncHandler(seq uint64) (HandlerFunc, bool) {
 
 func (c *Client) clearAsyncHandler() {
 	c.mux.Lock()
-	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
+	c.mux.Unlock()
+}
+
+func (c *Client) clearSendQueue() {
+	c.mux.Lock()
+	next := c.sendQueueHead
+	for next != nil {
+		putJob(next)
+		next = next.next
+	}
+	c.sendQueueHead = nil
+	c.sendQueueTail = nil
 	c.mux.Unlock()
 }
 
@@ -711,9 +757,9 @@ func (c *Client) run() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		if c.Handler.AsyncWrite() {
-			go util.Safe(c.sendLoop)
-		}
+		// if c.Handler.AsyncWrite() {
+		// 	go util.Safe(c.sendLoop)
+		// }
 		go util.Safe(c.recvLoop)
 	}
 }
@@ -724,9 +770,9 @@ func (c *Client) runWebsocket() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		if c.Handler.AsyncWrite() {
-			go util.Safe(c.sendLoop)
-		}
+		// if c.Handler.AsyncWrite() {
+		// 	go util.Safe(c.sendLoop)
+		// }
 		c.Conn.(WebsocketConn).HandleWebsocket(c.recvLoop)
 	}
 }
@@ -778,6 +824,7 @@ func (c *Client) recvLoop() {
 			c.Conn.Close()
 			c.clearSession()
 			c.clearAsyncHandler()
+			c.clearSendQueue()
 
 			// if c.running {
 			// 	log.Info("%v\t%v\tReconnect Start", c.Handler.LogTag(), addr)
@@ -807,125 +854,125 @@ func (c *Client) recvLoop() {
 	}
 }
 
-func (c *Client) sendLoop() {
-	addr := c.Conn.RemoteAddr().String()
-	log.Debug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
-	defer log.Debug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), addr)
+// func (c *Client) sendLoop() {
+// 	addr := c.Conn.RemoteAddr().String()
+// 	log.Debug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
+// 	defer log.Debug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), addr)
 
-	if c.Handler.BatchSend() {
-		c.batchSendLoop()
-	} else {
-		c.normalSendLoop()
-	}
-}
+// 	if c.Handler.BatchSend() {
+// 		c.batchSendLoop()
+// 	} else {
+// 		c.normalSendLoop()
+// 	}
+// }
 
-func (c *Client) normalSendLoop() {
-	var msg *Message
-	var coders []MessageCoder
-	for {
-		select {
-		case msg = <-c.chSend:
-			if !c.reconnecting {
-				coders = c.Handler.Coders()
-				for j := 0; j < len(coders); j++ {
-					msg = coders[j].Encode(c, msg)
-				}
-				if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
-					c.Conn.Close()
-				}
-				c.Handler.OnMessageDone(c, msg)
-			} else {
-				c.dropMessage(msg)
-			}
-		case <-c.chClose:
-			// clear msg in send queue
-			for {
-				select {
-				case msg := <-c.chSend:
-					c.Handler.OnMessageDone(c, msg)
-				default:
-					return
-				}
-			}
-		}
-	}
-}
+// func (c *Client) normalSendLoop() {
+// 	var msg *Message
+// 	var coders []MessageCoder
+// 	for {
+// 		select {
+// 		case msg = <-c.chSend:
+// 			if !c.reconnecting {
+// 				coders = c.Handler.Coders()
+// 				for j := 0; j < len(coders); j++ {
+// 					msg = coders[j].Encode(c, msg)
+// 				}
+// 				if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
+// 					c.Conn.Close()
+// 				}
+// 				c.Handler.OnMessageDone(c, msg)
+// 			} else {
+// 				c.dropMessage(msg)
+// 			}
+// 		case <-c.chClose:
+// 			// clear msg in send queue
+// 			for {
+// 				select {
+// 				case msg := <-c.chSend:
+// 					c.Handler.OnMessageDone(c, msg)
+// 				default:
+// 					return
+// 				}
+// 			}
+// 		}
+// 	}
+// }
 
-func (c *Client) batchSendLoop() {
-	var msg *Message
-	var chLen int
-	var coders []MessageCoder
-	var buffer = c.Handler.Malloc(2048)[0:0]
-	var sendBufferSize = c.Handler.SendBufferSize()
-	defer c.Handler.Free(buffer)
+// func (c *Client) batchSendLoop() {
+// 	var msg *Message
+// 	var chLen int
+// 	var coders []MessageCoder
+// 	var buffer = c.Handler.Malloc(2048)[0:0]
+// 	var sendBufferSize = c.Handler.SendBufferSize()
+// 	defer c.Handler.Free(buffer)
 
-	for {
-		select {
-		case msg = <-c.chSend:
-		case <-c.chClose:
-			// clear msg in send queue
-			for {
-				select {
-				case msg := <-c.chSend:
-					c.Handler.OnMessageDone(c, msg)
-				default:
-					return
-				}
-			}
-		}
-		if !c.reconnecting {
-			chLen = len(c.chSend)
-			coders = c.Handler.Coders()
-			for i := 0; i < chLen && len(buffer) < sendBufferSize; i++ {
-				if len(buffer) == 0 {
-					for j := 0; j < len(coders); j++ {
-						msg = coders[j].Encode(c, msg)
-					}
-					buffer = c.Handler.Append(buffer, msg.Buffer...)
-					c.Handler.OnMessageDone(c, msg)
-				}
-				msg = <-c.chSend
-				for j := 0; j < len(coders); j++ {
-					msg = coders[j].Encode(c, msg)
-				}
-				buffer = c.Handler.Append(buffer, msg.Buffer...)
-				c.Handler.OnMessageDone(c, msg)
-			}
-			if len(buffer) == 0 {
-				for j := 0; j < len(coders); j++ {
-					msg = coders[j].Encode(c, msg)
-				}
-				_, err := c.Handler.Send(c.Conn, msg.Buffer)
-				if err != nil {
-					c.Conn.Close()
-				}
-				c.Handler.OnMessageDone(c, msg)
-			} else {
-				if _, err := c.Handler.Send(c.Conn, buffer); err != nil {
-					c.Conn.Close()
-				}
-				buffer = buffer[0:0]
-			}
-		} else {
-			c.dropMessage(msg)
-		}
-	}
-}
+// 	for {
+// 		select {
+// 		case msg = <-c.chSend:
+// 		case <-c.chClose:
+// 			// clear msg in send queue
+// 			for {
+// 				select {
+// 				case msg := <-c.chSend:
+// 					c.Handler.OnMessageDone(c, msg)
+// 				default:
+// 					return
+// 				}
+// 			}
+// 		}
+// 		if !c.reconnecting {
+// 			chLen = len(c.chSend)
+// 			coders = c.Handler.Coders()
+// 			for i := 0; i < chLen && len(buffer) < sendBufferSize; i++ {
+// 				if len(buffer) == 0 {
+// 					for j := 0; j < len(coders); j++ {
+// 						msg = coders[j].Encode(c, msg)
+// 					}
+// 					buffer = c.Handler.Append(buffer, msg.Buffer...)
+// 					c.Handler.OnMessageDone(c, msg)
+// 				}
+// 				msg = <-c.chSend
+// 				for j := 0; j < len(coders); j++ {
+// 					msg = coders[j].Encode(c, msg)
+// 				}
+// 				buffer = c.Handler.Append(buffer, msg.Buffer...)
+// 				c.Handler.OnMessageDone(c, msg)
+// 			}
+// 			if len(buffer) == 0 {
+// 				for j := 0; j < len(coders); j++ {
+// 					msg = coders[j].Encode(c, msg)
+// 				}
+// 				_, err := c.Handler.Send(c.Conn, msg.Buffer)
+// 				if err != nil {
+// 					c.Conn.Close()
+// 				}
+// 				c.Handler.OnMessageDone(c, msg)
+// 			} else {
+// 				if _, err := c.Handler.Send(c.Conn, buffer); err != nil {
+// 					c.Conn.Close()
+// 				}
+// 				buffer = buffer[0:0]
+// 			}
+// 		} else {
+// 			c.dropMessage(msg)
+// 		}
+// 	}
+// }
 
 func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop func(*Client)) *Client {
 	log.Info("%v\t%v\tConnected", handler.LogTag(), conn.RemoteAddr())
 
 	c := &Client{}
 	c.Conn = conn
+	c.Writer = bufio.NewWriterSize(conn, handler.SendBufferSize())
 	c.Codec = codec
 	c.Handler = handler
 	c.Head = make([]byte, 4)
-	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
+	// c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
-	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
 	c.onStop = onStop
-
 	if _, ok := conn.(WebsocketConn); !ok {
 		c.run()
 	} else {
@@ -954,14 +1001,15 @@ func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 
 	c := &Client{}
 	c.Conn = conn
+	c.Writer = bufio.NewWriterSize(conn, handler.SendBufferSize())
 	c.Codec = codec.DefaultCodec
 	c.Handler = handler
 	c.Dialer = dialer
 	c.Head = make([]byte, 4)
-	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
+	// c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
-	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
 
 	c.run()
 
