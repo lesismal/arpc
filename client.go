@@ -206,7 +206,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 // CallWith uses context to make rpc call.
 // CallWith blocks to wait for a response from the server until it times out.
 func (c *Client) CallWith(ctx context.Context, method string, req interface{}, rsp interface{}, args ...interface{}) error {
-	return c.CallWith(ctx, method, req, rsp, args...)
+	return c.CallContext(ctx, method, req, rsp, args...)
 }
 
 // CallContext uses context to make rpc call.
@@ -360,7 +360,7 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration, 
 // NotifyWith use context to make rpc notify.
 // A notify does not need a response from the server.
 func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}, args ...interface{}) error {
-	return c.NotifyWith(ctx, method, data, args...)
+	return c.NotifyContext(ctx, method, data, args...)
 }
 
 // NotifyContext use context to make rpc notify.
