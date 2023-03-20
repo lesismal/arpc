@@ -17,17 +17,18 @@ var (
 	testServer           *Server
 	testClientServerAddr = "localhost:11000"
 
-	methodCallString   = "/callstring"
-	methodCallBytes    = "/callbytes"
-	methodCallStruct   = "/callstruct"
-	methodCallWith     = "/callwith"
-	methodCallAsync    = "/callasync"
-	methodNotify       = "/notify"
-	methodNotifyWith   = "/notifywith"
-	methodCallError    = "/callerror"
-	methodCallNotFound = "/notfound"
-	methodCallTimeout  = "/timeout"
-	methodInvalidLong  = `1234567890
+	methodCallString       = "/callstring"
+	methodCallBytes        = "/callbytes"
+	methodCallStruct       = "/callstruct"
+	methodCallWith         = "/callwith"
+	methodCallAsync        = "/callasync"
+	methodCallAsyncTimeout = "/callasynctimeout"
+	methodNotify           = "/notify"
+	methodNotifyWith       = "/notifywith"
+	methodCallError        = "/callerror"
+	methodCallNotFound     = "/notfound"
+	methodCallTimeout      = "/timeout"
+	methodInvalidLong      = `1234567890
 						1234567890
 						1234567890
 						1234567890
@@ -130,6 +131,10 @@ func initServer() {
 		ctx.WriteWithTimeout(ctx.Message.Data(), time.Second)
 	}, true)
 	testServer.Handler.Handle(methodCallAsync, func(ctx *Context) {
+		ctx.Write(ctx.Message.Data())
+	}, true)
+	testServer.Handler.Handle(methodCallAsyncTimeout, func(ctx *Context) {
+		time.Sleep(time.Second / 5)
 		ctx.Write(ctx.Message.Data())
 	}, true)
 	testServer.Handler.Handle(methodNotify, func(ctx *Context) {
@@ -503,9 +508,9 @@ func TestClient_CallAsync(t *testing.T) {
 	testClientCallAsyncDisconnected(c, t)
 }
 
-func getAsyncHandler() (func(*Context), chan struct{}) {
+func makeAsyncHandler() (func(*Context, error), chan struct{}) {
 	done := make(chan struct{}, 1)
-	asyncHandler := func(*Context) {
+	asyncHandler := func(*Context, error) {
 		done <- struct{}{}
 	}
 	return asyncHandler, done
@@ -516,7 +521,7 @@ func testClientCallAsyncMethodString(c *Client, t *testing.T) {
 		err error
 		req = "hello"
 	)
-	asyncHandler, done := getAsyncHandler()
+	asyncHandler, done := makeAsyncHandler()
 	if err = c.CallAsync(methodCallAsync, req, asyncHandler, time.Second); err != nil {
 		t.Fatalf("Client.CallAsync() error = %v", err)
 	}
@@ -525,10 +530,7 @@ func testClientCallAsyncMethodString(c *Client, t *testing.T) {
 		t.Fatalf("Client.CallAsync() error = %v", err)
 	}
 	<-done
-	if err = c.CallAsync(methodCallAsync, &req, nil, time.Second); err != nil {
-		t.Fatalf("Client.CallAsync() error = %v", err)
-	}
-	if err = c.CallAsync(methodCallAsync, req, nil, 0); err != nil {
+	if err = c.CallAsync(methodCallAsync, &req, func(*Context, error) {}, time.Second); err != nil {
 		t.Fatalf("Client.CallAsync() error = %v", err)
 	}
 }
@@ -538,7 +540,7 @@ func testClientCallAsyncMethodBytes(c *Client, t *testing.T) {
 		err error
 		req = []byte{1}
 	)
-	asyncHandler, done := getAsyncHandler()
+	asyncHandler, done := makeAsyncHandler()
 	if err = c.CallAsync(methodCallAsync, req, asyncHandler, time.Second); err != nil {
 		t.Fatalf("Client.CallAsync() error = %v", err)
 	}
@@ -547,7 +549,7 @@ func testClientCallAsyncMethodBytes(c *Client, t *testing.T) {
 		t.Fatalf("Client.CallAsync() error = %v", err)
 	}
 	<-done
-	if err = c.CallAsync(methodCallAsync, &req, nil, time.Second); err != nil {
+	if err = c.CallAsync(methodCallAsync, &req, func(*Context, error) {}, time.Second); err != nil {
 		t.Fatalf("Client.CallAsync() error = %v", err)
 	}
 }
@@ -557,7 +559,7 @@ func testClientCallAsyncMethodStruct(c *Client, t *testing.T) {
 		err error
 		req = MessageTest{A: 3, B: "4"}
 	)
-	asyncHandler, done := getAsyncHandler()
+	asyncHandler, done := makeAsyncHandler()
 	if err = c.CallAsync(methodCallAsync, &req, asyncHandler, time.Second); err != nil {
 		t.Fatalf("Client.CallAsync() error = %v", err)
 	}
@@ -570,37 +572,49 @@ func testClientCallAsyncMethodStruct(c *Client, t *testing.T) {
 
 func testClientCallAsyncError(c *Client, t *testing.T) {
 	var err error
-	asyncHandler, _ := getAsyncHandler()
+	asyncHandler, _ := makeAsyncHandler()
 	if err = c.CallAsync(methodCallAsync, "", asyncHandler, -1); err == nil {
 		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
 	} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
 		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
 	}
-	if err = c.CallAsync(methodCallAsync, "", nil, -1); err == nil {
-		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutLessThanZero.Error())
-	} else if err.Error() != ErrClientInvalidTimeoutLessThanZero.Error() {
-		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutLessThanZero.Error())
-	}
-
-	asyncHandler, _ = getAsyncHandler()
+	asyncHandler, _ = makeAsyncHandler()
 	if err = c.CallAsync(methodCallAsync, "", asyncHandler, 0); err == nil {
-		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutZeroWithNonNilCallback.Error())
-	} else if err.Error() != ErrClientInvalidTimeoutZeroWithNonNilCallback.Error() {
-		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZeroWithNonNilCallback.Error())
+		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientInvalidTimeoutZero.Error())
+	} else if err.Error() != ErrClientInvalidTimeoutZero.Error() {
+		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientInvalidTimeoutZero.Error())
 	}
 
 	invalidMethodErrString := fmt.Sprintf("invalid method length: %v, should <= %v", len(methodInvalidLong), MaxMethodLen)
-	if err = c.CallAsync(methodInvalidLong, "", nil, time.Second); err == nil {
+	if err = c.CallAsync(methodInvalidLong, "", func(*Context, error) {}, time.Second); err == nil {
 		t.Fatalf("Client.CallAsync() error is nil, want %v", invalidMethodErrString)
 	} else if err.Error() != invalidMethodErrString {
 		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), invalidMethodErrString)
+	}
+	done := make(chan error)
+	if err = c.CallAsync(methodCallAsyncTimeout, "", func(ctx *Context, err error) {
+		done <- err
+	}, time.Second/10); err != nil {
+		t.Fatalf("Client.CallAsync() error is %v, want %v", err, nil)
+	}
+	err = <-done
+	if err == nil {
+		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrTimeout)
+	} else if err != ErrTimeout {
+		t.Fatalf("Client.CallAsync() error is %v, want %v", err, ErrTimeout)
+	}
+	time.Sleep(time.Second / 5)
+	select {
+	case err = <-done:
+		t.Fatalf("Client.CallAsync() callback twice: %v", err)
+	default:
 	}
 }
 
 func testClientCallAsyncDisconnected(c *Client, t *testing.T) {
 	var err error
 	c.Stop()
-	if err = c.CallAsync(methodCallAsync, "", nil, time.Second); err == nil {
+	if err = c.CallAsync(methodCallAsync, "", func(*Context, error) {}, time.Second); err == nil {
 		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientStopped)
 	} else if err.Error() != ErrClientStopped.Error() {
 		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientStopped.Error())
@@ -609,7 +623,7 @@ func testClientCallAsyncDisconnected(c *Client, t *testing.T) {
 	c.Restart()
 	testServer.Stop()
 	time.Sleep(time.Second / 10)
-	if err = c.CallAsync(methodCallAsync, "", nil, time.Second); err == nil {
+	if err = c.CallAsync(methodCallAsync, "", func(*Context, error) {}, time.Second); err == nil {
 		t.Fatalf("Client.CallAsync() error is nil, want %v", ErrClientReconnecting)
 	} else if err.Error() != ErrClientReconnecting.Error() {
 		t.Fatalf("Client.CallAsync() error, returns '%v', want '%v'", err.Error(), ErrClientReconnecting.Error())

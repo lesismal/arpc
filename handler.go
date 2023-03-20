@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/lesismal/arpc/codec"
@@ -22,6 +23,35 @@ var DefaultHandler Handler = NewHandler()
 
 // HandlerFunc defines message handler of arpc middleware and method/router.
 type HandlerFunc func(*Context)
+
+// AsyncHandlerFunc defines callback of Client.CallAsync.
+type AsyncHandlerFunc func(*Context, error)
+
+type asyncHandler struct {
+	timer   *time.Timer
+	handler AsyncHandlerFunc
+}
+
+var (
+	emptyAsyncHandler = asyncHandler{}
+	asyncHandlerPool  = sync.Pool{
+		New: func() interface{} {
+			return &asyncHandler{}
+		},
+	}
+)
+
+func getAsyncHandler(t *time.Timer, h AsyncHandlerFunc) *asyncHandler {
+	ah := asyncHandlerPool.Get().(*asyncHandler)
+	ah.timer = t
+	ah.handler = h
+	return ah
+}
+
+func putAsyncHandler(ah *asyncHandler) {
+	*ah = emptyAsyncHandler
+	asyncHandlerPool.Put(ah)
+}
 
 // routerHandler saves all middleware and method/router handler funcs
 // for every method by register order,
@@ -687,10 +717,14 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 				log.Warn("%v OnMessage: session not exist or expired", h.LogTag())
 			}
 		} else {
-			handler, ok := c.getAndDeleteAsyncHandler(msg.Seq())
+			ah, ok := c.getAndDeleteAsyncHandler(msg.Seq())
 			if ok {
+				if ah.timer != nil {
+					ah.timer.Stop()
+				}
 				ctx := newContext(c, msg, nil)
-				handler(ctx)
+				ah.handler(ctx, msg.Error())
+				putAsyncHandler(ah)
 				h.OnContextDone(ctx)
 			} else {
 				h.OnSessionMiss(c, msg)

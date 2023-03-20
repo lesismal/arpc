@@ -31,6 +31,9 @@ var (
 
 	// ErrClientInvalidPoolDialers represents an error of empty dialer array.
 	ErrClientInvalidPoolDialers = errors.New("invalid dialers: empty array")
+
+	// ErrClientInvalidAsyncHandler represents an error of invalid(nil) async handler.
+	ErrClientInvalidAsyncHandler = errors.New("invalid async handler: should not be nil")
 )
 
 // message error

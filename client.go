@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/lesismal/arpc/codec"
 	"github.com/lesismal/arpc/log"
@@ -58,7 +59,7 @@ type Client struct {
 
 	mux             sync.Mutex
 	sessionMap      map[uint64]*rpcSession
-	asyncHandlerMap map[uint64]HandlerFunc
+	asyncHandlerMap map[uint64]*asyncHandler
 
 	chSend  chan *Message
 	chClose chan util.Empty
@@ -268,32 +269,34 @@ func (c *Client) CallContext(ctx context.Context, method string, req interface{}
 // CallAsync makes an asynchronous rpc call with timeout.
 // CallAsync will not block waiting for the server's response,
 // But the handler will be called if the response arrives before the timeout.
-func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, timeout time.Duration, args ...interface{}) error {
+func (c *Client) CallAsync(method string, req interface{}, handler AsyncHandlerFunc, timeout time.Duration, args ...interface{}) error {
 	err := c.checkCallAsyncArgs(method, handler, timeout)
 	if err != nil {
 		return err
 	}
 
-	var timer *time.Timer
-
 	msg := c.newRequestMessage(CmdRequest, method, req, false, true, args...)
 	seq := msg.Seq()
-	if handler != nil {
-		c.addAsyncHandler(seq, handler)
-		timer = time.AfterFunc(timeout, func() { c.deleteAsyncHandler(seq) })
-		defer timer.Stop()
-	} else if timeout > 0 {
-		timer = time.NewTimer(timeout)
-		defer timer.Stop()
-	}
+
+	chTimer := make(chan time.Time, 1)
+	timerC := *(*<-chan time.Time)(unsafe.Pointer(&chTimer))
+	timer := &time.Timer{C: timerC}
+	timerCallback := time.AfterFunc(timeout, func() {
+		ah, ok := c.getAndDeleteAsyncHandler(seq)
+		if ok {
+			if ah.timer != nil {
+				ah.timer.Stop()
+			}
+			ah.handler(nil, ErrTimeout)
+			putAsyncHandler(ah)
+		}
+		chTimer <- time.Now()
+	})
+	ah := getAsyncHandler(timerCallback, handler)
+	c.addAsyncHandler(seq, ah)
 
 	if c.Handler.AsyncWrite() {
-		switch timeout {
-		case TimeZero:
-			err = c.pushMessage(msg, nil)
-		default:
-			err = c.pushMessage(msg, timer)
-		}
+		err = c.pushMessage(msg, timer)
 	} else {
 		if !c.reconnecting {
 			coders := c.Handler.Coders()
@@ -313,6 +316,7 @@ func (c *Client) CallAsync(method string, req interface{}, handler HandlerFunc, 
 
 	if err != nil && handler != nil {
 		c.deleteAsyncHandler(seq)
+		timerCallback.Stop()
 	}
 
 	return err
@@ -478,7 +482,7 @@ func (c *Client) Restart() error {
 		c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 		c.chClose = make(chan util.Empty)
 		c.sessionMap = make(map[uint64]*rpcSession)
-		c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+		c.asyncHandlerMap = make(map[uint64]*asyncHandler)
 		c.values = map[interface{}]interface{}{}
 
 		c.initReader()
@@ -544,16 +548,18 @@ func (c *Client) checkCallArgs(method string, timeout time.Duration) error {
 	return nil
 }
 
-func (c *Client) checkCallAsyncArgs(method string, handler HandlerFunc, timeout time.Duration) error {
+func (c *Client) checkCallAsyncArgs(method string, handler AsyncHandlerFunc, timeout time.Duration) error {
 	if err := c.checkStateAndMethod(method); err != nil {
 		return err
 	}
-
+	if timeout == 0 {
+		return ErrClientInvalidTimeoutZero
+	}
 	if timeout < 0 {
 		return ErrClientInvalidTimeoutLessThanZero
 	}
-	if timeout == 0 && handler != nil {
-		return ErrClientInvalidTimeoutZeroWithNonNilCallback
+	if handler == nil {
+		return ErrClientInvalidAsyncHandler
 	}
 	return nil
 }
@@ -684,23 +690,27 @@ func (c *Client) dropMessage(msg *Message) {
 	}
 }
 
-func (c *Client) addAsyncHandler(seq uint64, h HandlerFunc) {
+func (c *Client) addAsyncHandler(seq uint64, ah *asyncHandler) {
 	c.mux.Lock()
 	if c.running {
-		c.asyncHandlerMap[seq] = h
+		c.asyncHandlerMap[seq] = ah
 	}
 	c.mux.Unlock()
 }
 
 func (c *Client) deleteAsyncHandler(seq uint64) {
 	c.mux.Lock()
-	delete(c.asyncHandlerMap, seq)
+	ah, ok := c.asyncHandlerMap[seq]
+	if ok {
+		delete(c.asyncHandlerMap, seq)
+		putAsyncHandler(ah)
+	}
 	c.mux.Unlock()
 }
 
-func (c *Client) getAndDeleteAsyncHandler(seq uint64) (HandlerFunc, bool) {
+func (c *Client) getAndDeleteAsyncHandler(seq uint64) (*asyncHandler, bool) {
 	c.mux.Lock()
-	handler, ok := c.asyncHandlerMap[seq]
+	ah, ok := c.asyncHandlerMap[seq]
 	if ok {
 		delete(c.asyncHandlerMap, seq)
 		c.mux.Unlock()
@@ -708,13 +718,23 @@ func (c *Client) getAndDeleteAsyncHandler(seq uint64) (HandlerFunc, bool) {
 		c.mux.Unlock()
 	}
 
-	return handler, ok
+	return ah, ok
 }
 
 func (c *Client) clearAsyncHandler() {
 	c.mux.Lock()
-	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+	handlers := c.asyncHandlerMap
+	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
 	c.mux.Unlock()
+	for _, ah := range handlers {
+		if ah.timer != nil {
+			ah.timer.Stop()
+		}
+		c.Handler.AsyncExecute(func() {
+			ah.handler(nil, ErrClientReconnecting)
+			putAsyncHandler(ah)
+		})
+	}
 }
 
 func (c *Client) run() {
@@ -935,7 +955,7 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
-	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
 	c.onStop = onStop
 
 	if _, ok := conn.(WebsocketConn); !ok {
@@ -973,7 +993,7 @@ func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 	c.chClose = make(chan util.Empty)
 	c.sessionMap = make(map[uint64]*rpcSession)
-	c.asyncHandlerMap = make(map[uint64]HandlerFunc)
+	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
 
 	c.run()
 
