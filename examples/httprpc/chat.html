@@ -21,6 +21,7 @@
             }
 
             var client = new ArpcClient("ws://localhost:8888/ws/rpc", null, "http://localhost:8888/http/rpc", null, true);
+            client.keepalive(5000);
             client.onOpen = function () {
                 client.call("/ws/echo", `/ws/echo data`, 5000).then(function (reply) {
                     console.log("[/ws/echo] response from server:", reply.data, reply.err);
