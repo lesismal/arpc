@@ -21,6 +21,7 @@
             }
 
             var client = new ArpcClient("ws://localhost:8888/ws");
+            client.keepalive(5000);
 
             client.onOpen = function () {
                 var item = document.createElement("div");
