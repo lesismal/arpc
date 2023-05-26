@@ -18,11 +18,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"time"
 
 	"github.com/lesismal/arpc"
@@ -37,9 +37,11 @@ import (
 var (
 	psServer *pubsub.Server
 
-	executePool = taskpool.NewMixedPool(1024*4, 1, 1024*runtime.NumCPU())
+	executePool = taskpool.New(1024*4, 1024)
 
 	keepaliveTime = 60 * time.Second
+
+	upgrader = newUpgrader()
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
@@ -48,13 +50,11 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	// 	return
 	// }
 
-	upgrader := newUpgrader()
-	conn, err := upgrader.Upgrade(w, r, nil)
+	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		conn.Close()
+		wsConn.Close()
 		return
 	}
-	wsConn := conn.(*websocket.Conn)
 	wsConn.SetReadDeadline(time.Now().Add(keepaliveTime))
 }
 
@@ -109,6 +109,10 @@ func main() {
 
 type WebsocketConn struct {
 	*websocket.Conn
+}
+
+func (c *WebsocketConn) Read(buf []byte) (int, error) {
+	return -1, errors.New("unsupported")
 }
 
 func (c *WebsocketConn) Write(data []byte) (int, error) {

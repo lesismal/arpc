@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -24,9 +25,11 @@ var (
 
 // Listener .
 type Listener struct {
-	addr        net.Addr
-	upgrader    *websocket.Upgrader
-	acceptQueue chan net.Conn
+	addr     net.Addr
+	upgrader *websocket.Upgrader
+	chAccept chan net.Conn
+	chClose  chan struct{}
+	closed   uint32
 }
 
 // Handler .
@@ -36,22 +39,20 @@ func (ln *Listener) Handler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
-	defer c.Close()
 
 	wsc := &Conn{Conn: c, chHandler: make(chan func(), 1)}
-	ln.acceptQueue <- wsc
-	timeout := time.NewTimer(time.Second)
 	select {
-	case handler := <-wsc.chHandler:
-		timeout.Stop()
-		handler()
-	case <-timeout.C:
+	case ln.chAccept <- wsc:
+	case <-ln.chClose:
 	}
+
 }
 
 // Close .
 func (ln *Listener) Close() error {
-	close(ln.acceptQueue)
+	if atomic.CompareAndSwapUint32(&ln.closed, 0, 1) {
+		close(ln.chClose)
+	}
 	return nil
 }
 
@@ -62,7 +63,7 @@ func (ln *Listener) Addr() net.Addr {
 
 // Accept .
 func (ln *Listener) Accept() (net.Conn, error) {
-	c := <-ln.acceptQueue
+	c := <-ln.chAccept
 	if c != nil {
 		return c, nil
 	}
@@ -139,9 +140,10 @@ func Listen(addr string, upgrader *websocket.Upgrader) (net.Listener, error) {
 		}
 	}
 	ln := &Listener{
-		addr:        tcpAddr,
-		upgrader:    upgrader,
-		acceptQueue: make(chan net.Conn, 4096),
+		addr:     tcpAddr,
+		upgrader: upgrader,
+		chAccept: make(chan net.Conn, 4096),
+		chClose:  make(chan struct{}),
 	}
 	return ln, nil
 }
