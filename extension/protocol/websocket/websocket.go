@@ -44,6 +44,7 @@ func (ln *Listener) Handler(w http.ResponseWriter, r *http.Request) {
 	select {
 	case ln.chAccept <- wsc:
 	case <-ln.chClose:
+		c.Close()
 	}
 
 }
