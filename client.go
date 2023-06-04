@@ -750,19 +750,6 @@ func (c *Client) run() {
 	}
 }
 
-func (c *Client) runWebsocket() {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	if !c.running {
-		c.running = true
-		c.initReader()
-		if c.Handler.AsyncWrite() {
-			go util.Safe(c.sendLoop)
-		}
-		c.Conn.(WebsocketConn).HandleWebsocket(c.recvLoop)
-	}
-}
-
 func (c *Client) initReader() {
 	if c.Handler.BatchRecv() {
 		c.Reader = c.Handler.WrapReader(c.Conn)
@@ -958,11 +945,7 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
 	c.onStop = onStop
 
-	if _, ok := conn.(WebsocketConn); !ok {
-		c.run()
-	} else {
-		c.runWebsocket()
-	}
+	c.run()
 
 	return c
 }
