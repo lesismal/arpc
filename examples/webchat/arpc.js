@@ -306,7 +306,7 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
             client.ws = new SockJS(this.url);
         }
 
-        // 消息类型,不设置则默认为'text'
+        // if not set this to `arraybuffer`, it will be 'text' by default.
         client.ws.binaryType = 'arraybuffer';
 
         client.state = _SOCK_STATE_CONNECTING;
