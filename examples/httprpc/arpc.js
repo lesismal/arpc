@@ -103,6 +103,8 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         if (typeof (cb) == 'function') {
             session.resolve = cb;
         }
+
+        var seq = this._nextSequence();
         this.sessionMap[seq] = session;
 
         if (timeout > 0) {
@@ -111,7 +113,7 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
                 session.resolve({ data: null, err: "timeout" });
             }, timeout);
         }
-        this.write(_CmdRequest, method, request, this.seqNum, this._onMessage, isHttp);
+        this.write(_CmdRequest, method, request, seq, this._onMessage, isHttp);
         return p;
     }
 
@@ -125,7 +127,8 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         if (this.state == _SOCK_STATE_CONNECTING) {
             return _ErrReconnecting;
         }
-        this.write(_CmdNotify, method, notify, function () { }, isHttp);
+        var seq = this._nextSequence();
+        this.write(_CmdNotify, method, notify, seq, function () { }, isHttp);
     }
     this.ping = function () {
         if (client.state == _SOCK_STATE_CLOSED) {
@@ -134,7 +137,8 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         if (client.state == _SOCK_STATE_CONNECTING) {
             return _ErrReconnecting;
         }
-        client.write(_CmdPing, "", null, function () { });
+        var seq = this._nextSequence();
+        client.write(_CmdPing, "", null, seq, function () { });
     }
     this.pong = function () {
         if (client.state == _SOCK_STATE_CLOSED) {
@@ -143,16 +147,17 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         if (client.state == _SOCK_STATE_CONNECTING) {
             return _ErrReconnecting;
         }
-        client.write(_CmdPong, "", null, function () { });
+        var seq = this._nextSequence();
+        client.write(_CmdPong, "", null, seq, function () { });
     }
     this.keepalive = function (timeout) {
         if (this._keepaliveInited) return;
         this._keepaliveInited = true;
         if (!timeout) timeout = 1000 * 30;
-        setInterval(this.ping, timeout);
+        setInterval(this.ping.bind(this), timeout);
     }
 
-    this.write = function (cmd, method, arg, cb, isHttp) {
+    this.write = function (cmd, method, arg, seqNum, cb, isHttp) {
         var buffer;
         if (arg) {
             var data = this.codec.Marshal(arg);
@@ -172,9 +177,8 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         }
         buffer[_HeaderIndexCmd] = cmd & 0xFF;
         buffer[_HeaderIndexMethodLen] = method.length & 0xFF;
-        this.seqNum++;
         for (var i = _HeaderIndexSeqBegin; i < _HeaderIndexSeqBegin + 4; i++) {
-            buffer[i] = (this.seqNum >> ((i - _HeaderIndexSeqBegin) * 8)) & 0xFF;
+            buffer[i] = (seqNum >> ((i - _HeaderIndexSeqBegin) * 8)) & 0xFF;
         }
         var methodBuffer = new TextEncoder("utf-8").encode(method);
         for (var i = 0; i < methodBuffer.length; i++) {
@@ -218,6 +222,10 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
             r.send(data);
         });
         return p;
+    }
+
+    this._nextSequence = function () {
+        return this.seqNum++;
     }
 
     this._onMessage = function (event) {
