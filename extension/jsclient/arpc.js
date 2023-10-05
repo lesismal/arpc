@@ -149,7 +149,7 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         if (this._keepaliveInited) return;
         this._keepaliveInited = true;
         if (!timeout) timeout = 1000 * 30;
-        setInterval(this.ping, timeout);
+        setInterval(this.ping.bind(this), timeout);
     }
 
     this.write = function (cmd, method, arg, cb, isHttp) {
