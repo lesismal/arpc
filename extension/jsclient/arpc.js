@@ -6,6 +6,8 @@ var _CmdNone = 0;
 var _CmdRequest = 1;
 var _CmdResponse = 2;
 var _CmdNotify = 3;
+var _CmdPing = 4;
+var _CmdPong = 5;
 
 var _HeaderIndexBodyLenBegin = 0;
 var _HeaderIndexBodyLenEnd = 4;
@@ -79,17 +81,21 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
     }
     this.call = function (method, request, timeout, cb, isHttp) {
         if (this.state == _SOCK_STATE_CLOSED) {
+            if (typeof (cb) == 'function') {
+                cb({ data: null, err: _ErrClosed });
+            }
             return new Promise(function (resolve, reject) {
                 resolve({ data: null, err: _ErrClosed });
             });
         }
         if (this.state == _SOCK_STATE_CONNECTING) {
+            if (typeof (cb) == 'function') {
+                cb({ data: null, err: _ErrReconnecting });
+            }
             return new Promise(function (resolve, reject) {
                 resolve({ data: null, err: _ErrReconnecting });
             });
         }
-        this.seqNum++;
-        var seq = this.seqNum;
         var session = {};
         var p = new Promise(function (resolve, reject) {
             session.resolve = resolve;
@@ -105,41 +111,7 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
                 session.resolve({ data: null, err: "timeout" });
             }, timeout);
         }
-
-        var buffer;
-        if (request) {
-            var data = this.codec.Marshal(request);
-            if (data) {
-                buffer = new Uint8Array(16 + method.length + data.length);
-                for (var i = 0; i < data.length; i++) {
-                    buffer[16 + method.length + i] = data[i];
-                }
-            }
-        } else {
-            buffer = new Uint8Array(16 + method.length);
-        }
-        var bodyLen = buffer.length - 16;
-        for (var i = _HeaderIndexBodyLenBegin; i < _HeaderIndexBodyLenEnd; i++) {
-            buffer[i] = (bodyLen >> ((i - _HeaderIndexBodyLenBegin) * 8)) & 0xFF;
-        }
-
-        buffer[_HeaderIndexCmd] = _CmdRequest & 0xFF;
-        buffer[_HeaderIndexMethodLen] = method.length & 0xFF;
-        for (var i = _HeaderIndexSeqBegin; i < _HeaderIndexSeqBegin + 4; i++) {
-            buffer[i] = (seq >> ((i - _HeaderIndexSeqBegin) * 8)) & 0xFF;
-        }
-
-        var methodBuffer = new TextEncoder("utf-8").encode(method);
-        for (var i = 0; i < methodBuffer.length; i++) {
-            buffer[16 + i] = methodBuffer[i];
-        }
-
-        if (!isHttp) {
-            this.ws.send(buffer);
-        } else {
-            this.request(buffer, this._onMessage);
-        }
-
+        this.write(_CmdRequest, method, request, this.seqNum, this._onMessage, isHttp);
         return p;
     }
 
@@ -153,10 +125,37 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         if (this.state == _SOCK_STATE_CONNECTING) {
             return _ErrReconnecting;
         }
-        this.seqNum++;
+        this.write(_CmdNotify, method, notify, function () { }, isHttp);
+    }
+    this.ping = function () {
+        if (client.state == _SOCK_STATE_CLOSED) {
+            return _ErrClosed;
+        }
+        if (client.state == _SOCK_STATE_CONNECTING) {
+            return _ErrReconnecting;
+        }
+        client.write(_CmdPing, "", null, function () { });
+    }
+    this.pong = function () {
+        if (client.state == _SOCK_STATE_CLOSED) {
+            return _ErrClosed;
+        }
+        if (client.state == _SOCK_STATE_CONNECTING) {
+            return _ErrReconnecting;
+        }
+        client.write(_CmdPong, "", null, function () { });
+    }
+    this.keepalive = function (timeout) {
+        if (this._keepaliveInited) return;
+        this._keepaliveInited = true;
+        if (!timeout) timeout = 1000 * 30;
+        setInterval(this.ping, timeout);
+    }
+
+    this.write = function (cmd, method, arg, cb, isHttp) {
         var buffer;
-        if (notify) {
-            var data = this.codec.Marshal(notify);
+        if (arg) {
+            var data = this.codec.Marshal(arg);
             if (data) {
                 buffer = new Uint8Array(16 + method.length + data.length);
                 for (var i = 0; i < data.length; i++) {
@@ -166,25 +165,25 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         } else {
             buffer = new Uint8Array(16 + method.length);
         }
+
         var bodyLen = buffer.length - 16;
         for (var i = _HeaderIndexBodyLenBegin; i < _HeaderIndexBodyLenEnd; i++) {
             buffer[i] = (bodyLen >> ((i - _HeaderIndexBodyLenBegin) * 8)) & 0xFF;
         }
-        buffer[_HeaderIndexCmd] = _CmdNotify & 0xFF;
+        buffer[_HeaderIndexCmd] = cmd & 0xFF;
         buffer[_HeaderIndexMethodLen] = method.length & 0xFF;
+        this.seqNum++;
         for (var i = _HeaderIndexSeqBegin; i < _HeaderIndexSeqBegin + 4; i++) {
             buffer[i] = (this.seqNum >> ((i - _HeaderIndexSeqBegin) * 8)) & 0xFF;
         }
-
         var methodBuffer = new TextEncoder("utf-8").encode(method);
         for (var i = 0; i < methodBuffer.length; i++) {
             buffer[16 + i] = methodBuffer[i];
         }
-
         if (!isHttp) {
             this.ws.send(buffer);
         } else {
-            this.request(buffer, function () { });
+            this.request(buffer, cb);
         }
     }
 
@@ -242,6 +241,14 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
                 var seq = 0;
                 for (var i = offset + _HeaderIndexSeqBegin; i < offset + _HeaderIndexSeqBegin + 4; i++) {
                     seq |= headArr[i] << (i - offset - _HeaderIndexSeqBegin);
+                }
+
+                switch (cmd) {
+                    case _CmdPing:
+                        client.pong();
+                        return;
+                    case _CmdPong:
+                        return;
                 }
 
                 if (methodLen == 0) {
