@@ -149,7 +149,7 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
         if (this._keepaliveInited) return;
         this._keepaliveInited = true;
         if (!timeout) timeout = 1000 * 30;
-        setInterval(this.ping, timeout);
+        this.keepaliveIntervalID = setInterval(this.ping, timeout);
     }
 
     this.write = function(cmd, method, arg, cb, isHttp) {
@@ -190,6 +190,9 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
     this.shutdown = function() {
         this.ws.close();
         this.state = _SOCK_STATE_CLOSED;
+        if (!!this.keepaliveIntervalID) {
+            clearInterval(this.keepaliveIntervalID);
+        }
     }
 
     this.request = function(data, cb) {
@@ -246,9 +249,9 @@ function ArpcClient(url, codec, httpUrl, httpMethod) {
                 switch (cmd) {
                     case _CmdPing:
                         client.pong();
-                        continue;
+                        return;
                     case _CmdPong:
-                        continue;
+                        return;
                 }
 
                 if (methodLen == 0) {
