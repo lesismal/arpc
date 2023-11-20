@@ -28,7 +28,7 @@ var (
 	stdSvr  = arpc.NewServer()
 	nbioSvr = nbio.NewGopher(nbio.Config{})
 
-	pool = taskpool.NewMixedPool(1024*8, 1, 1024*8)
+	pool = taskpool.New(1024*8, 1024)
 
 	method = "/echo"
 )
