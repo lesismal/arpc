@@ -150,8 +150,15 @@ func Listen(addr string, upgrader *websocket.Upgrader) (net.Listener, error) {
 }
 
 // Dial wraps websocket dial
-func Dial(url string) (net.Conn, error) {
-	c, _, err := websocket.DefaultDialer.Dial(url, nil)
+func Dial(url string, args ...interface{}) (net.Conn, error) {
+	dialer := websocket.DefaultDialer
+	if len(args) > 0 {
+		d, ok := args[0].(*websocket.Dialer)
+		if ok {
+			dialer = d
+		}
+	}
+	c, _, err := dialer.Dial(url, nil)
 	if err != nil {
 		return nil, err
 	}
