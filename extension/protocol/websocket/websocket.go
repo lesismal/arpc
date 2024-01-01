@@ -46,7 +46,6 @@ func (ln *Listener) Handler(w http.ResponseWriter, r *http.Request) {
 	case <-ln.chClose:
 		c.Close()
 	}
-
 }
 
 // Close .
@@ -64,9 +63,10 @@ func (ln *Listener) Addr() net.Addr {
 
 // Accept .
 func (ln *Listener) Accept() (net.Conn, error) {
-	c := <-ln.chAccept
-	if c != nil {
+	select {
+	case c := <-ln.chAccept:
 		return c, nil
+	case <-ln.chClose:
 	}
 	return nil, ErrClosed
 }
