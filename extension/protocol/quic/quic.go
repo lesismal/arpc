@@ -10,32 +10,32 @@ import (
 	"net"
 	"time"
 
-	quic "github.com/lucas-clemente/quic-go"
+	quic "github.com/quic-go/quic-go"
 )
 
 // Listener wraps quick.Listener to net.Listener
 type Listener struct {
-	quic.Listener
+	*quic.Listener
 }
 
 // Accept waits for and returns the next connection to the listener.
 func (ln *Listener) Accept() (net.Conn, error) {
-	session, err := ln.Listener.Accept(context.Background())
+	conn, err := ln.Listener.Accept(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
-	stream, err := session.AcceptStream(context.Background())
+	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
-	return &Conn{session, stream}, err
+	return &Conn{conn, stream}, err
 }
 
 // Conn wraps quick.Session to net.Conn
 type Conn struct {
-	quic.Session
+	quic.Connection
 	quic.Stream
 }
 
@@ -59,7 +59,7 @@ func Dial(addr string, tlsConf *tls.Config, quicConf *quic.Config, timeout time.
 		defer cancel()
 	}
 
-	session, err := quic.DialAddr(addr, tlsConf, quicConf)
+	session, err := quic.DialAddr(ctx, addr, tlsConf, quicConf)
 	if err != nil {
 		return nil, err
 	}

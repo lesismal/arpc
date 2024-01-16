@@ -77,29 +77,32 @@ func main() {
 		go func() {
 			ticker := time.NewTicker(time.Second)
 			for i := 0; true; i++ {
-				select {
-				case <-ticker.C:
-					req := &HelloReq{Msg: fmt.Sprintf("[%v] %v", client.Conn.LocalAddr(), i)}
-					rsp := &HelloRsp{}
-					err := client.CallAsync(method, req, func(ctx *arpc.Context) {
-						err := ctx.Bind(rsp)
-						if err != nil || rsp.Msg != req.Msg {
-							log.Printf("CallAsync failed: %v", err)
-							atomic.AddUint64(&failedTotal, 1)
-						} else {
-							//log.Printf("Call Response: \"%v\"", rsp.Msg)
-							atomic.AddUint64(&qpsSec, 1)
-							atomic.AddUint64(&asyncTimes, 1)
-						}
-					}, time.Second*5)
-					if err != nil {
-						log.Printf("CallAsync failed: %v", err)
+				<-ticker.C
+				req := &HelloReq{Msg: fmt.Sprintf("[%v] %v", client.Conn.LocalAddr(), i)}
+				rsp := &HelloRsp{}
+				err := client.CallAsync(method, req, func(ctx *arpc.Context, er error) {
+					if er != nil {
+						log.Printf("CallAsync failed: %v", er)
+						atomic.AddUint64(&failedTotal, 1)
+						return
+					}
+					er = ctx.Bind(rsp)
+					if er != nil || rsp.Msg != req.Msg {
+						log.Printf("CallAsync failed: %v", er)
 						atomic.AddUint64(&failedTotal, 1)
 					} else {
 						//log.Printf("Call Response: \"%v\"", rsp.Msg)
 						atomic.AddUint64(&qpsSec, 1)
 						atomic.AddUint64(&asyncTimes, 1)
 					}
+				}, time.Second*5)
+				if err != nil {
+					log.Printf("CallAsync failed: %v", err)
+					atomic.AddUint64(&failedTotal, 1)
+				} else {
+					//log.Printf("Call Response: \"%v\"", rsp.Msg)
+					atomic.AddUint64(&qpsSec, 1)
+					atomic.AddUint64(&asyncTimes, 1)
 				}
 			}
 		}()
