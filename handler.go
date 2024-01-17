@@ -791,39 +791,32 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 		local := !msg.IsStreamLocal()
 		done := msg.IsStreamDone()
 		method := msg.method()
-
-		sh, ok := h.streams[method]
-		if ok {
-			var stream *Stream
-			stream, ok = c.getAndPushMsg(id, local, done, msg)
-			if !ok {
-				if !local {
-					stream = c.newStream(msg.method(), id, false)
-					stream.onMessage(msg)
-					f := func() {
-						sh.handler(stream)
-						if done {
-							stream.done()
-						}
+		stream, ok := c.getAndPushMsg(id, local, done, msg)
+		if !ok {
+			sh, ok := h.streams[method]
+			if ok && !local {
+				stream = c.newStream(msg.method(), id, false)
+				stream.onMessage(msg)
+				f := func() {
+					sh.handler(stream)
+					if done {
+						stream.done()
 					}
-					if !sh.async {
-						f()
-					} else {
-						h.AsyncExecute(f)
-					}
+				}
+				if !sh.async {
+					f()
 				} else {
-					h.onMessageDone(c, msg)
-					log.Warn("%v OnMessage: invalid Stream with method: [%v], no handler", h.LogTag(), method)
+					h.AsyncExecute(f)
 				}
 			} else {
-				stream.onMessage(msg)
-				if done {
-					stream.done()
-				}
+				h.onMessageDone(c, msg)
+				log.Warn("%v OnMessage: invalid Stream with method: [%v], no handler", h.LogTag(), method)
 			}
 		} else {
-			h.onMessageDone(c, msg)
-			log.Warn("%v OnMessage: invalid Stream with method: [%v], no handler", h.LogTag(), method)
+			stream.onMessage(msg)
+			if done {
+				stream.done()
+			}
 		}
 	default:
 		log.Warn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())

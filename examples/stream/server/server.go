@@ -47,13 +47,13 @@ func OnHello(ctx *arpc.Context) {
 		str := ""
 		err := stream.Recv(&str)
 		if err == io.EOF {
-			log.Println("[server] stream_server_to_client closed with:", stream.Id(), str)
+			log.Printf("[server] [stream id: %v] stream_server_to_client closed", stream.Id())
 			break
 		}
 		if err != nil {
 			panic(err)
 		}
-		log.Println("[server] stream_server_to_client:", stream.Id(), str)
+		log.Printf("[server] [stream id: %v] stream_server_to_client: %v", stream.Id(), str)
 	}
 }
 
@@ -67,13 +67,13 @@ func OnStream(stream *arpc.Stream) {
 			if err != nil {
 				panic(err)
 			}
-			log.Println("[server] stream_client_to_server closed with:", str)
+			log.Printf("[server] [stream id: %v] stream_client_to_server closed", stream.Id())
 			break
 		}
 		if err != nil {
 			panic(err)
 		}
-		log.Println("[server] stream_client_to_server:", str)
+		log.Printf("[server] [stream id: %v] stream_client_to_server: [%v]", stream.Id(), str)
 		err = stream.Send(&str)
 		if err != nil {
 			panic(err)

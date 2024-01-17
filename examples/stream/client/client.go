@@ -41,54 +41,34 @@ func main() {
 		log.Println("NewClient failed:", err)
 		return
 	}
+	defer client.Stop()
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	client.Handler.HandleStream("/stream_server_to_client", func(stream *arpc.Stream) {
 		defer wg.Done()
 		defer stream.Close()
-		str := ""
 		for {
+			str := ""
 			err := stream.Recv(&str)
 			if err == io.EOF {
 				err = stream.Close()
 				if err != nil {
 					panic(err)
 				}
-				log.Println("[client] stream_server_to_client closed with:", str)
+				log.Printf("[client] [stream id: %v] stream_server_to_client closed", stream.Id())
 				break
 			}
 			if err != nil {
 				panic(err)
 			}
-			log.Println("[client] stream_server_to_client:", str)
-			str := ""
+			log.Printf("[client] [stream id: %v] stream_server_to_client: %v", stream.Id(), str)
 			err = stream.Send(&str)
 			if err != nil {
 				panic(err)
 			}
 		}
 	})
-
-	stream := client.NewStream("/stream_client_to_server")
-	defer stream.Close()
-	for i := 0; i < 3; i++ {
-		err := stream.Send(fmt.Sprintf("stream data %v", i))
-		if err != nil {
-			panic(err)
-		}
-		str := ""
-		err = stream.Recv(&str)
-		if err != nil {
-			panic(err)
-		}
-	}
-	err = stream.SendAndClose(fmt.Sprintf("stream data %v", 3))
-	if err != nil {
-		panic(err)
-	}
-
-	defer client.Stop()
 
 	data := make([]byte, 10)
 	rand.Read(data)
@@ -102,4 +82,33 @@ func main() {
 	}
 
 	wg.Wait()
+	time.Sleep(time.Second)
+
+	stream := client.NewStream("/stream_client_to_server")
+	defer stream.Close()
+	go func() {
+		for i := 0; i < 3; i++ {
+			err := stream.Send(fmt.Sprintf("stream data %v", i))
+			if err != nil {
+				panic(err)
+			}
+		}
+		err = stream.SendAndClose(fmt.Sprintf("stream data %v", 3))
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	for {
+		str := ""
+		err = stream.Recv(&str)
+		if err == io.EOF {
+			log.Printf("[client] [stream id: %v] stream_client_to_server closed", stream.Id())
+			break
+		}
+		if err != nil {
+			panic(err)
+		}
+		log.Printf("[client] [stream id: %v] stream_client_to_server: %v", stream.Id(), str)
+	}
 }
