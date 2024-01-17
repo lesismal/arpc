@@ -60,6 +60,8 @@ type Client struct {
 	mux             sync.Mutex
 	sessionMap      map[uint64]*rpcSession
 	asyncHandlerMap map[uint64]*asyncHandler
+	streamLocalMap  map[uint64]*Stream
+	streamRemoteMap map[uint64]*Stream
 
 	chSend  chan *Message
 	chClose chan util.Empty
@@ -483,6 +485,8 @@ func (c *Client) Restart() error {
 		c.chClose = make(chan util.Empty)
 		c.sessionMap = make(map[uint64]*rpcSession)
 		c.asyncHandlerMap = make(map[uint64]*asyncHandler)
+		c.streamLocalMap = make(map[uint64]*Stream)
+		c.streamRemoteMap = make(map[uint64]*Stream)
 		c.values = map[interface{}]interface{}{}
 
 		c.initReader()
@@ -521,6 +525,7 @@ func (c *Client) closeAndClean() {
 	if c.onStop != nil {
 		c.onStop(c)
 	}
+
 	c.Handler.OnDisconnected(c)
 }
 
@@ -737,6 +742,67 @@ func (c *Client) clearAsyncHandler() {
 	}
 }
 
+func (c *Client) addStream(id uint64, local bool, stream *Stream) {
+	c.mux.Lock()
+	if c.running {
+		var streamMap map[uint64]*Stream
+		if local {
+			streamMap = c.streamLocalMap
+		} else {
+			streamMap = c.streamRemoteMap
+		}
+		streamMap[id] = stream
+	}
+	c.mux.Unlock()
+}
+
+func (c *Client) deleteStream(id uint64, local bool) {
+	c.mux.Lock()
+	if c.running {
+		var streamMap map[uint64]*Stream
+		if local {
+			streamMap = c.streamLocalMap
+		} else {
+			streamMap = c.streamRemoteMap
+		}
+		delete(streamMap, id)
+	}
+	c.mux.Unlock()
+}
+
+func (c *Client) getAndPushMsg(id uint64, local, done bool, msg *Message) (stream *Stream, ok bool) {
+	c.mux.Lock()
+	if c.running {
+		var streamMap map[uint64]*Stream
+		if local {
+			streamMap = c.streamLocalMap
+		} else {
+			streamMap = c.streamRemoteMap
+		}
+		stream, ok = streamMap[id]
+		if ok && done {
+			delete(streamMap, id)
+		}
+	}
+	c.mux.Unlock()
+	return stream, ok
+}
+
+func (c *Client) clearStream() {
+	c.mux.Lock()
+	streamLocalMap := c.streamLocalMap
+	streamRemoteMap := c.streamRemoteMap
+	c.streamLocalMap = make(map[uint64]*Stream)
+	c.streamRemoteMap = make(map[uint64]*Stream)
+	c.mux.Unlock()
+	for _, stream := range streamLocalMap {
+		stream.Close()
+	}
+	for _, stream := range streamRemoteMap {
+		stream.Close()
+	}
+}
+
 func (c *Client) run() {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -797,6 +863,7 @@ func (c *Client) recvLoop() {
 			c.Conn.Close()
 			c.clearSession()
 			c.clearAsyncHandler()
+			c.clearStream()
 
 			// if c.running {
 			// 	log.Info("%v\t%v\tReconnect Start", c.Handler.LogTag(), addr)

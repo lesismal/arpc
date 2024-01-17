@@ -21,8 +21,11 @@ import (
 // DefaultHandler is the default Handler used by arpc
 var DefaultHandler Handler = NewHandler()
 
-// HandlerFunc defines message handler of arpc middleware and method/router.
+// HandlerFunc defines message handler.
 type HandlerFunc func(*Context)
+
+// StreamHandlerFunc defines stream handler.
+type StreamHandlerFunc func(*Stream)
 
 // AsyncHandlerFunc defines callback of Client.CallAsync.
 type AsyncHandlerFunc func(*Context, error)
@@ -59,6 +62,14 @@ func putAsyncHandler(ah *asyncHandler) {
 type routerHandler struct {
 	async    bool
 	handlers []HandlerFunc
+}
+
+// streamHandler saves all stream handler and middleware funcs.
+// for every method by register order,
+// all the funcs will be called one by one for every message.
+type streamHandler struct {
+	async   bool
+	handler StreamHandlerFunc
 }
 
 // Handler defines net message handler interface.
@@ -172,6 +183,11 @@ type Handler interface {
 	// SetSendQueueSize sets client's send queue channel capacity.
 	SetSendQueueSize(size int)
 
+	// StreamQueueSize returns stream queue channel capacity.
+	StreamQueueSize() int
+	// SetStreamQueueSize sets stream queue channel capacity.
+	SetStreamQueueSize(size int)
+
 	// MaxBodyLen returns max body length of a message.
 	MaxBodyLen() int
 	// SetMaxBodyLen sets max body length of a message.
@@ -197,6 +213,9 @@ type Handler interface {
 	// HandleNotFound registers "" method/router handler,
 	// It will be called when mothod/router is not found.
 	HandleNotFound(h HandlerFunc)
+
+	// HandleStream registers method/router stream handler.
+	HandleStream(m string, h StreamHandlerFunc, args ...interface{})
 
 	// OnMessage finds method/router middlewares and handler, then call them one by one.
 	OnMessage(c *Client, m *Message)
@@ -248,6 +267,7 @@ type handler struct {
 	readTimeout       time.Duration
 	writeTimeout      time.Duration
 	sendQueueSize     int
+	streamQueueSize   int
 	maxBodyLen        int
 	maxReconnectTimes int
 
@@ -267,10 +287,12 @@ type handler struct {
 
 	wrapReader func(conn net.Conn) io.Reader
 
-	middles   []HandlerFunc
-	msgCoders []MessageCoder
+	routes  map[string]*routerHandler
+	streams map[string]*streamHandler
 
-	routes map[string]*routerHandler
+	middles       []HandlerFunc
+	streamMiddles []StreamHandlerFunc
+	msgCoders     []MessageCoder
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -505,6 +527,14 @@ func (h *handler) SetSendQueueSize(size int) {
 	h.sendQueueSize = size
 }
 
+func (h *handler) StreamQueueSize() int {
+	return h.streamQueueSize
+}
+
+func (h *handler) SetStreamQueueSize(size int) {
+	h.streamQueueSize = size
+}
+
 func (h *handler) MaxBodyLen() int {
 	return h.maxBodyLen
 }
@@ -595,6 +625,31 @@ func (h *handler) handle(method string, cb HandlerFunc, args ...interface{}) {
 		ctx.Next()
 	}
 	h.routes[method] = rh
+}
+
+func (h *handler) HandleStream(method string, cb StreamHandlerFunc, args ...interface{}) {
+	if h.streams == nil {
+		h.streams = map[string]*streamHandler{}
+	}
+	if len(method) > MaxMethodLen {
+		panic(fmt.Errorf("invalid method length %v(> MaxMethodLen %v)", len(method), MaxMethodLen))
+	}
+
+	if _, ok := h.streams[method]; ok && method != "" {
+		panic(fmt.Errorf("stream handler exist for method %v ", method))
+	}
+
+	async := h.AsyncResponse()
+	if len(args) > 0 {
+		if bv, ok := args[0].(bool); ok {
+			async = bv
+		}
+	}
+	rh := &streamHandler{
+		async:   async,
+		handler: cb,
+	}
+	h.streams[method] = rh
 }
 
 func (h *handler) Recv(c *Client) (*Message, error) {
@@ -731,6 +786,30 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 				log.Warn("%v OnMessage: async handler not exist or expired", h.LogTag())
 			}
 		}
+	case CmdStream:
+		f := func() {
+			id := msg.Seq()
+			local := !msg.IsStreamLocal()
+			done := !msg.IsStreamDone()
+			stream, ok := c.getAndPushMsg(id, local, done, msg)
+			if !ok && !local {
+				stream = c.newStream(msg.method(), false)
+				ok = true
+			}
+			if ok {
+				stream.onMessage(msg)
+				if done {
+					stream.done()
+				}
+			} else {
+				h.onMessageDone(c, msg)
+			}
+		}
+		if msg.IsAsync() {
+			h.AsyncExecute(f)
+		} else {
+			f()
+		}
 	default:
 		log.Warn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())
 		go c.Stop()
@@ -836,14 +915,15 @@ func (h *handler) AsyncExecute(f func()) {
 // NewHandler returns a default Handler implementation.
 func NewHandler() Handler {
 	h := &handler{
-		logtag:         "[ARPC CLI]",
-		batchRecv:      true,
-		batchSend:      true,
-		asyncWrite:     true,
-		asyncResponse:  true,
-		recvBufferSize: 8192,
-		sendQueueSize:  4096,
-		maxBodyLen:     DefaultMaxBodyLen,
+		logtag:          "[ARPC CLI]",
+		batchRecv:       true,
+		batchSend:       true,
+		asyncWrite:      true,
+		asyncResponse:   true,
+		recvBufferSize:  8192,
+		sendQueueSize:   4096,
+		streamQueueSize: 4,
+		maxBodyLen:      DefaultMaxBodyLen,
 	}
 	h.wrapReader = func(conn net.Conn) io.Reader {
 		return bufio.NewReaderSize(conn, h.recvBufferSize)
@@ -982,6 +1062,16 @@ func SendQueueSize() int {
 // SetSendQueueSize sets default client's send queue channel capacity.
 func SetSendQueueSize(size int) {
 	DefaultHandler.SetSendQueueSize(size)
+}
+
+// StreamQueueSize returns default stream queue channel capacity.
+func StreamQueueSize() int {
+	return DefaultHandler.StreamQueueSize()
+}
+
+// SetStreamQueueSize sets default stream queue channel capacity.
+func SetStreamQueueSize(size int) {
+	DefaultHandler.SetStreamQueueSize(size)
 }
 
 func MaxBodyLen() int {
