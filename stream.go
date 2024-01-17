@@ -1,7 +1,6 @@
 package arpc
 
 import (
-	"encoding/binary"
 	"io"
 	"sync/atomic"
 
@@ -95,13 +94,13 @@ func (s *Stream) send(v interface{}, done bool, args ...interface{}) error {
 	}
 
 	data := util.ValueToBytes(c.Codec, v)
-	buf := c.Handler.Malloc(8 + len(data))
-	binary.LittleEndian.PutUint64(buf, s.id)
-	copy(buf[8:], data)
-	msg := s.newMessage(buf, args...)
+	// buf := c.Handler.Malloc(8 + len(data))
+	// binary.LittleEndian.PutUint64(buf, s.id)
+	// copy(buf[8:], data)
+	msg := s.newMessage(data, args...)
 	msg.SetStreamLocal(s.local)
 	msg.SetStreamDone(done)
-	c.Handler.Free(buf)
+	// c.Handler.Free(buf)
 
 	if c.Handler.AsyncWrite() {
 		select {
