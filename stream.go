@@ -18,6 +18,10 @@ type Stream struct {
 	local       bool
 }
 
+func (s *Stream) Id() uint64 {
+	return s.id
+}
+
 func (s *Stream) isCreatedByLocal() bool {
 	return s.local
 }
@@ -43,7 +47,7 @@ func (s *Stream) done() {
 func (s *Stream) Recv(v interface{}) error {
 	select {
 	case msg, ok := <-s.chData:
-		if !ok {
+		if !ok || msg == nil {
 			return io.EOF
 		}
 		data := msg.Data()
@@ -51,7 +55,7 @@ func (s *Stream) Recv(v interface{}) error {
 			s.cli.Handler.OnMessageDone(s.cli, msg)
 			return io.EOF
 		}
-		err := s.cli.Codec.Unmarshal(data, v)
+		err := util.BytesToValue(s.cli.Codec, data, v)
 		s.cli.Handler.OnMessageDone(s.cli, msg)
 		return err
 	case <-s.cli.chClose:
@@ -185,7 +189,7 @@ func (s *Stream) send(v interface{}, done bool, args ...interface{}) error {
 func (s *Stream) Close(args ...interface{}) error {
 	var err error
 	if atomic.CompareAndSwapInt32(&s.stateClosed, 0, 1) {
-		defer s.done()
+		// defer s.done()
 		err = s.send([]byte{}, true, args...)
 		s.cli.deleteStream(s.id, s.local)
 		n := len(s.chData)
@@ -212,12 +216,15 @@ func (s *Stream) SendAndClose(v interface{}, args ...interface{}) error {
 
 // NewStream creates a stream.
 func (client *Client) NewStream(method string) *Stream {
-	return client.newStream(method, true)
+	return client.newStream(method, 0, true)
 }
 
-func (client *Client) newStream(method string, local bool) *Stream {
+func (client *Client) newStream(method string, id uint64, local bool) *Stream {
+	if id == 0 {
+		id = atomic.AddUint64(&client.seq, 1)
+	}
 	stream := &Stream{
-		id:     atomic.AddUint64(&client.seq, 1),
+		id:     id,
 		cli:    client,
 		method: method,
 		chData: make(chan *Message, client.Handler.StreamQueueSize()),

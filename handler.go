@@ -787,28 +787,43 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 			}
 		}
 	case CmdStream:
-		f := func() {
-			id := msg.Seq()
-			local := !msg.IsStreamLocal()
-			done := !msg.IsStreamDone()
-			stream, ok := c.getAndPushMsg(id, local, done, msg)
-			if !ok && !local {
-				stream = c.newStream(msg.method(), false)
-				ok = true
-			}
-			if ok {
+		id := msg.Seq()
+		local := !msg.IsStreamLocal()
+		done := msg.IsStreamDone()
+		method := msg.method()
+
+		sh, ok := h.streams[method]
+		if ok {
+			var stream *Stream
+			stream, ok = c.getAndPushMsg(id, local, done, msg)
+			if !ok {
+				if !local {
+					stream = c.newStream(msg.method(), id, false)
+					stream.onMessage(msg)
+					f := func() {
+						sh.handler(stream)
+						if done {
+							stream.done()
+						}
+					}
+					if !sh.async {
+						f()
+					} else {
+						h.AsyncExecute(f)
+					}
+				} else {
+					h.onMessageDone(c, msg)
+					log.Warn("%v OnMessage: invalid Stream with method: [%v], no handler", h.LogTag(), method)
+				}
+			} else {
 				stream.onMessage(msg)
 				if done {
 					stream.done()
 				}
-			} else {
-				h.onMessageDone(c, msg)
 			}
-		}
-		if msg.IsAsync() {
-			h.AsyncExecute(f)
 		} else {
-			f()
+			h.onMessageDone(c, msg)
+			log.Warn("%v OnMessage: invalid Stream with method: [%v], no handler", h.LogTag(), method)
 		}
 	default:
 		log.Warn("%v OnMessage: invalid cmd [%v]", h.LogTag(), msg.Cmd())

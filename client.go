@@ -1001,16 +1001,20 @@ func (c *Client) batchSendLoop() {
 func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop func(*Client)) *Client {
 	log.Info("%v\t%v\tConnected", handler.LogTag(), conn.RemoteAddr())
 
-	c := &Client{}
-	c.Conn = conn
-	c.Codec = codec
-	c.Handler = handler
-	c.Head = make([]byte, 4)
-	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
-	c.chClose = make(chan util.Empty)
-	c.sessionMap = make(map[uint64]*rpcSession)
-	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
-	c.onStop = onStop
+	c := &Client{
+		seq:             1,
+		Conn:            conn,
+		Codec:           codec,
+		Handler:         handler,
+		Head:            make([]byte, 4),
+		chSend:          make(chan *Message, handler.SendQueueSize()),
+		chClose:         make(chan util.Empty),
+		sessionMap:      make(map[uint64]*rpcSession),
+		asyncHandlerMap: make(map[uint64]*asyncHandler),
+		streamLocalMap:  make(map[uint64]*Stream),
+		streamRemoteMap: make(map[uint64]*Stream),
+		onStop:          onStop,
+	}
 
 	c.run()
 
@@ -1034,16 +1038,20 @@ func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 		handler = DefaultHandler.Clone()
 	}
 
-	c := &Client{}
-	c.Conn = conn
-	c.Codec = codec.DefaultCodec
-	c.Handler = handler
-	c.Dialer = dialer
-	c.Head = make([]byte, 4)
-	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
-	c.chClose = make(chan util.Empty)
-	c.sessionMap = make(map[uint64]*rpcSession)
-	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
+	c := &Client{
+		seq:             1,
+		Conn:            conn,
+		Codec:           codec.DefaultCodec,
+		Handler:         handler,
+		Dialer:          dialer,
+		Head:            make([]byte, 4),
+		chSend:          make(chan *Message, handler.SendQueueSize()),
+		chClose:         make(chan util.Empty),
+		sessionMap:      make(map[uint64]*rpcSession),
+		asyncHandlerMap: make(map[uint64]*asyncHandler),
+		streamLocalMap:  make(map[uint64]*Stream),
+		streamRemoteMap: make(map[uint64]*Stream),
+	}
 
 	c.run()
 
