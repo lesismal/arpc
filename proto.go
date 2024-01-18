@@ -61,10 +61,10 @@ const (
 	HeaderFlagMaskAsync byte = 0x02
 
 	HeaderStreamLocalBitIndex = 7
-	HeaderStreamDoneBitIndex  = 6
+	HeaderStreamEOFBitIndex   = 6
 	HeaderStreamLocalBit      = byte(0x1) << HeaderStreamLocalBitIndex
-	HeaderStreamDoneBit       = byte(0x1) << HeaderStreamDoneBitIndex
-	HeaderStreamFlagBitMask   = HeaderStreamLocalBit | HeaderStreamDoneBit
+	HeaderStreamEOFBit        = byte(0x1) << HeaderStreamEOFBitIndex
+	HeaderStreamFlagBitMask   = HeaderStreamLocalBit | HeaderStreamEOFBit
 	HeaderCmdBitMask          = ^HeaderStreamFlagBitMask
 )
 
@@ -204,17 +204,17 @@ func (m *Message) SetStreamLocal(local bool) {
 	}
 }
 
-// IsStream represents whether it's a stream's last message and the stream is done and closed.
-func (m *Message) IsStreamDone() bool {
-	return m.Buffer[HeaderIndexCmd]&HeaderStreamDoneBit > 0
+// IsStream represents whether it's a stream's last message and the stream is EOF and closed.
+func (m *Message) IsStreamEOF() bool {
+	return m.Buffer[HeaderIndexCmd]&HeaderStreamEOFBit > 0
 }
 
-// SetStream sets the flag for a stream's last message and mark the stream is done and closed.
-func (m *Message) SetStreamDone(done bool) {
-	if done {
-		m.Buffer[HeaderIndexCmd] |= HeaderStreamDoneBit
+// SetStream sets the flag for a stream's last message and mark the stream is EOF and closed.
+func (m *Message) SetStreamEOF(eof bool) {
+	if eof {
+		m.Buffer[HeaderIndexCmd] |= HeaderStreamEOFBit
 	} else {
-		m.Buffer[HeaderIndexCmd] &= (^HeaderStreamDoneBit)
+		m.Buffer[HeaderIndexCmd] &= (^HeaderStreamEOFBit)
 	}
 }
 

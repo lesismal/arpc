@@ -47,15 +47,12 @@ func main() {
 	wg.Add(1)
 	client.Handler.HandleStream("/stream_server_to_client", func(stream *arpc.Stream) {
 		defer wg.Done()
-		defer stream.Close()
+		defer stream.CloseRecv()
 		for {
 			str := ""
 			err := stream.Recv(&str)
 			if err == io.EOF {
-				err = stream.Close()
-				if err != nil {
-					panic(err)
-				}
+				stream.CloseSend()
 				log.Printf("[client] [stream id: %v] stream_server_to_client closed", stream.Id())
 				break
 			}
@@ -85,7 +82,7 @@ func main() {
 	time.Sleep(time.Second)
 
 	stream := client.NewStream("/stream_client_to_server")
-	defer stream.Close()
+	defer stream.CloseRecv()
 	go func() {
 		for i := 0; i < 3; i++ {
 			err := stream.Send(fmt.Sprintf("stream data %v", i))

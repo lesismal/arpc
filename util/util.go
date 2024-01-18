@@ -85,7 +85,8 @@ func BytesToValue(codec acodec.Codec, data []byte, v interface{}) error {
 	if v != nil {
 		switch vt := v.(type) {
 		case *[]byte:
-			*vt = data
+			*vt = make([]byte, len(data))
+			copy(*vt, data)
 		case *string:
 			*vt = string(data)
 		case *error:

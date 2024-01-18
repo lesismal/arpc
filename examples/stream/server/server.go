@@ -30,6 +30,7 @@ func OnHello(ctx *arpc.Context) {
 	ctx.Write(&HelloRsp{Msg: req.Msg})
 
 	stream := ctx.Client.NewStream("/stream_server_to_client")
+	defer stream.CloseRecv()
 	go func() {
 		for i := 0; i < 3; i++ {
 			err := stream.Send(fmt.Sprintf("stream data %v", i))
@@ -58,15 +59,12 @@ func OnHello(ctx *arpc.Context) {
 }
 
 func OnStream(stream *arpc.Stream) {
-	defer stream.Close()
+	defer stream.CloseRecv()
 	for {
 		str := ""
 		err := stream.Recv(&str)
 		if err == io.EOF {
-			err = stream.Close()
-			if err != nil {
-				panic(err)
-			}
+			stream.CloseSend()
 			log.Printf("[server] [stream id: %v] stream_client_to_server closed", stream.Id())
 			break
 		}

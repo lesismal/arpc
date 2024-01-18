@@ -796,10 +796,12 @@ func (c *Client) clearStream() {
 	c.streamRemoteMap = make(map[uint64]*Stream)
 	c.mux.Unlock()
 	for _, stream := range streamLocalMap {
-		stream.Close()
+		stream.CloseSend()
+		stream.CloseRecv()
 	}
 	for _, stream := range streamRemoteMap {
-		stream.Close()
+		stream.CloseSend()
+		stream.CloseRecv()
 	}
 }
 

@@ -789,24 +789,21 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 	case CmdStream:
 		id := msg.Seq()
 		local := !msg.IsStreamLocal()
-		done := msg.IsStreamDone()
+		eof := msg.IsStreamEOF()
 		method := msg.method()
-		stream, ok := c.getAndPushMsg(id, local, done, msg)
+		stream, ok := c.getAndPushMsg(id, local, eof, msg)
 		if !ok {
 			sh, ok := h.streams[method]
 			if ok && !local {
 				stream = c.newStream(msg.method(), id, false)
 				stream.onMessage(msg)
-				f := func() {
-					sh.handler(stream)
-					if done {
-						stream.done()
-					}
+				if eof {
+					stream.CloseRecv()
 				}
 				if !sh.async {
-					f()
+					sh.handler(stream)
 				} else {
-					h.AsyncExecute(f)
+					h.AsyncExecute(func() { sh.handler(stream) })
 				}
 			} else {
 				h.onMessageDone(c, msg)
@@ -814,8 +811,8 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 			}
 		} else {
 			stream.onMessage(msg)
-			if done {
-				stream.done()
+			if eof {
+				stream.CloseRecv()
 			}
 		}
 	default:
