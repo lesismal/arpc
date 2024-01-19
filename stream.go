@@ -51,6 +51,10 @@ func (s *Stream) CloseRecv() {
 	}
 }
 
+func (s *Stream) CloseRecvContext(ctx context.Context) {
+	s.CloseRecv()
+}
+
 func (s *Stream) CloseSend() {
 	go s.CloseSendContext(context.Background())
 }
