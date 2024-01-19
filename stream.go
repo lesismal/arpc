@@ -47,7 +47,7 @@ func (s *Stream) onMessage(msg *Message) {
 func (s *Stream) CloseRecv() {
 	if atomic.CompareAndSwapInt32(&s.stateRecv, 0, 1) {
 		close(s.chData)
-		s.close()
+		s.halfClose()
 	}
 }
 
@@ -63,7 +63,7 @@ func (s *Stream) CloseSendContext(ctx context.Context) {
 	if atomic.CompareAndSwapInt32(&s.stateSend, 0, 1) {
 		eof := true
 		s.send(ctx, []byte{}, eof)
-		s.close()
+		s.halfClose()
 	}
 }
 
@@ -156,7 +156,7 @@ func (s *Stream) send(ctx context.Context, v interface{}, eof bool, args ...inte
 	msg.SetStreamEOF(eof)
 
 	if eof && atomic.CompareAndSwapInt32(&s.stateSend, 0, 1) {
-		s.close()
+		s.halfClose()
 	}
 
 	if c.Handler.AsyncWrite() {
@@ -190,19 +190,9 @@ func (s *Stream) send(ctx context.Context, v interface{}, eof bool, args ...inte
 	return nil
 }
 
-func (s *Stream) close() {
-	// When cnt == 2, both recv and send are closed, then need to clear this stream
+func (s *Stream) halfClose() {
 	if atomic.AddInt32(&s.stateCloseCnt, 1) == 2 {
 		s.cli.deleteStream(s.id, s.local)
-		// n := len(s.chData)
-		// for i := 0; i < n; i++ {
-		// 	select {
-		// 	case msg := <-s.chData:
-		// 		s.cli.Handler.OnMessageDone(s.cli, msg)
-		// 	default:
-		// 		return
-		// 	}
-		// }
 	}
 }
 
