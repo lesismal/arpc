@@ -491,6 +491,7 @@ func (c *Client) Restart() error {
 
 		c.initReader()
 		if c.Handler.AsyncWrite() {
+			c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 			go util.Safe(c.sendLoop)
 		}
 		go util.Safe(c.recvLoop)
@@ -1009,13 +1010,15 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 		Codec:           codec,
 		Handler:         handler,
 		Head:            make([]byte, 4),
-		chSend:          make(chan *Message, handler.SendQueueSize()),
 		chClose:         make(chan util.Empty),
 		sessionMap:      make(map[uint64]*rpcSession),
 		asyncHandlerMap: make(map[uint64]*asyncHandler),
 		streamLocalMap:  make(map[uint64]*Stream),
 		streamRemoteMap: make(map[uint64]*Stream),
 		onStop:          onStop,
+	}
+	if c.Handler.AsyncWrite() {
+		c.chSend = make(chan *Message, handler.SendQueueSize())
 	}
 
 	c.run()
@@ -1047,12 +1050,14 @@ func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 		Handler:         handler,
 		Dialer:          dialer,
 		Head:            make([]byte, 4),
-		chSend:          make(chan *Message, handler.SendQueueSize()),
 		chClose:         make(chan util.Empty),
 		sessionMap:      make(map[uint64]*rpcSession),
 		asyncHandlerMap: make(map[uint64]*asyncHandler),
 		streamLocalMap:  make(map[uint64]*Stream),
 		streamRemoteMap: make(map[uint64]*Stream),
+	}
+	if c.Handler.AsyncWrite() {
+		c.chSend = make(chan *Message, handler.SendQueueSize())
 	}
 
 	c.run()
