@@ -176,7 +176,7 @@ func onMessage(c *websocket.Conn, mt websocket.MessageType, data []byte) {
 		data = session.cache
 	}
 
-	recieved := false
+	received := false
 	for {
 		if len(data)-start < arpc.HeadLen {
 			goto Exit
@@ -192,11 +192,11 @@ func onMessage(c *websocket.Conn, mt websocket.MessageType, data []byte) {
 		start += total
 		msg := psServer.Handler.NewMessageWithBuffer(buffer)
 		psServer.Handler.OnMessage(session.Client, msg)
-		recieved = true
+		received = true
 	}
 
 Exit:
-	if recieved {
+	if received {
 		c.SetReadDeadline(time.Now().Add(keepaliveTime))
 	}
 	if session.cache != nil {
