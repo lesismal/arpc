@@ -791,7 +791,7 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 		local := !msg.IsStreamLocal()
 		eof := msg.IsStreamEOF()
 		method := msg.method()
-		stream, ok := c.getAndPushMsg(id, local, eof, msg)
+		stream, ok := c.getStreamAndPushMsg(id, local, eof)
 		if !ok {
 			sh, ok := h.streams[method]
 			if ok && !local {

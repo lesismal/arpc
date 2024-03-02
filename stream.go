@@ -24,10 +24,6 @@ func (s *Stream) Id() uint64 {
 	return s.id
 }
 
-func (s *Stream) isCreatedByLocal() bool {
-	return s.local
-}
-
 func (s *Stream) onMessage(msg *Message) {
 	if len(msg.Data()) == 0 {
 		return

@@ -771,7 +771,7 @@ func (c *Client) deleteStream(id uint64, local bool) {
 	c.mux.Unlock()
 }
 
-func (c *Client) getAndPushMsg(id uint64, local, done bool, msg *Message) (stream *Stream, ok bool) {
+func (c *Client) getStreamAndPushMsg(id uint64, local, done bool) (stream *Stream, ok bool) {
 	c.mux.Lock()
 	if c.running {
 		var streamMap map[uint64]*Stream
