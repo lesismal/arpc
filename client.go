@@ -182,11 +182,11 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 				msg = coders[j].Encode(c, msg)
 			}
 			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			c.Handler.OnMessageDone(c, msg)
 			if err != nil {
 				c.Conn.Close()
+				return err
 			}
-			c.Handler.OnMessageDone(c, msg)
-			return err
 		} else {
 			c.dropMessage(msg)
 			return ErrClientReconnecting
@@ -244,11 +244,11 @@ func (c *Client) CallContext(ctx context.Context, method string, req interface{}
 				msg = coders[j].Encode(c, msg)
 			}
 			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			c.Handler.OnMessageDone(c, msg)
 			if err != nil {
 				c.Conn.Close()
+				return err
 			}
-			c.Handler.OnMessageDone(c, msg)
-			return err
 		} else {
 			c.dropMessage(msg)
 			return ErrClientReconnecting
