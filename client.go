@@ -60,6 +60,8 @@ type Client struct {
 	mux             sync.Mutex
 	sessionMap      map[uint64]*rpcSession
 	asyncHandlerMap map[uint64]*asyncHandler
+	streamLocalMap  map[uint64]*Stream
+	streamRemoteMap map[uint64]*Stream
 
 	chSend  chan *Message
 	chClose chan util.Empty
@@ -180,11 +182,11 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 				msg = coders[j].Encode(c, msg)
 			}
 			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			c.Handler.OnMessageDone(c, msg)
 			if err != nil {
 				c.Conn.Close()
+				return err
 			}
-			c.Handler.OnMessageDone(c, msg)
-			return err
 		} else {
 			c.dropMessage(msg)
 			return ErrClientReconnecting
@@ -242,11 +244,11 @@ func (c *Client) CallContext(ctx context.Context, method string, req interface{}
 				msg = coders[j].Encode(c, msg)
 			}
 			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			c.Handler.OnMessageDone(c, msg)
 			if err != nil {
 				c.Conn.Close()
+				return err
 			}
-			c.Handler.OnMessageDone(c, msg)
-			return err
 		} else {
 			c.dropMessage(msg)
 			return ErrClientReconnecting
@@ -483,10 +485,13 @@ func (c *Client) Restart() error {
 		c.chClose = make(chan util.Empty)
 		c.sessionMap = make(map[uint64]*rpcSession)
 		c.asyncHandlerMap = make(map[uint64]*asyncHandler)
+		c.streamLocalMap = make(map[uint64]*Stream)
+		c.streamRemoteMap = make(map[uint64]*Stream)
 		c.values = map[interface{}]interface{}{}
 
 		c.initReader()
 		if c.Handler.AsyncWrite() {
+			c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 			go util.Safe(c.sendLoop)
 		}
 		go util.Safe(c.recvLoop)
@@ -521,6 +526,7 @@ func (c *Client) closeAndClean() {
 	if c.onStop != nil {
 		c.onStop(c)
 	}
+
 	c.Handler.OnDisconnected(c)
 }
 
@@ -737,6 +743,69 @@ func (c *Client) clearAsyncHandler() {
 	}
 }
 
+func (c *Client) addStream(id uint64, local bool, stream *Stream) {
+	c.mux.Lock()
+	if c.running {
+		var streamMap map[uint64]*Stream
+		if local {
+			streamMap = c.streamLocalMap
+		} else {
+			streamMap = c.streamRemoteMap
+		}
+		streamMap[id] = stream
+	}
+	c.mux.Unlock()
+}
+
+func (c *Client) deleteStream(id uint64, local bool) {
+	c.mux.Lock()
+	if c.running {
+		var streamMap map[uint64]*Stream
+		if local {
+			streamMap = c.streamLocalMap
+		} else {
+			streamMap = c.streamRemoteMap
+		}
+		delete(streamMap, id)
+	}
+	c.mux.Unlock()
+}
+
+func (c *Client) getStreamAndPushMsg(id uint64, local, done bool) (stream *Stream, ok bool) {
+	c.mux.Lock()
+	if c.running {
+		var streamMap map[uint64]*Stream
+		if local {
+			streamMap = c.streamLocalMap
+		} else {
+			streamMap = c.streamRemoteMap
+		}
+		stream, ok = streamMap[id]
+		if ok && done {
+			delete(streamMap, id)
+		}
+	}
+	c.mux.Unlock()
+	return stream, ok
+}
+
+func (c *Client) clearStream() {
+	c.mux.Lock()
+	streamLocalMap := c.streamLocalMap
+	streamRemoteMap := c.streamRemoteMap
+	c.streamLocalMap = make(map[uint64]*Stream)
+	c.streamRemoteMap = make(map[uint64]*Stream)
+	c.mux.Unlock()
+	for _, stream := range streamLocalMap {
+		stream.CloseSend()
+		stream.CloseRecv()
+	}
+	for _, stream := range streamRemoteMap {
+		stream.CloseSend()
+		stream.CloseRecv()
+	}
+}
+
 func (c *Client) run() {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -797,6 +866,7 @@ func (c *Client) recvLoop() {
 			c.Conn.Close()
 			c.clearSession()
 			c.clearAsyncHandler()
+			c.clearStream()
 
 			// if c.running {
 			// 	log.Info("%v\t%v\tReconnect Start", c.Handler.LogTag(), addr)
@@ -934,16 +1004,22 @@ func (c *Client) batchSendLoop() {
 func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop func(*Client)) *Client {
 	log.Info("%v\t%v\tConnected", handler.LogTag(), conn.RemoteAddr())
 
-	c := &Client{}
-	c.Conn = conn
-	c.Codec = codec
-	c.Handler = handler
-	c.Head = make([]byte, 4)
-	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
-	c.chClose = make(chan util.Empty)
-	c.sessionMap = make(map[uint64]*rpcSession)
-	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
-	c.onStop = onStop
+	c := &Client{
+		seq:             1,
+		Conn:            conn,
+		Codec:           codec,
+		Handler:         handler,
+		Head:            make([]byte, 4),
+		chClose:         make(chan util.Empty),
+		sessionMap:      make(map[uint64]*rpcSession),
+		asyncHandlerMap: make(map[uint64]*asyncHandler),
+		streamLocalMap:  make(map[uint64]*Stream),
+		streamRemoteMap: make(map[uint64]*Stream),
+		onStop:          onStop,
+	}
+	if c.Handler.AsyncWrite() {
+		c.chSend = make(chan *Message, handler.SendQueueSize())
+	}
 
 	c.run()
 
@@ -967,16 +1043,22 @@ func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 		handler = DefaultHandler.Clone()
 	}
 
-	c := &Client{}
-	c.Conn = conn
-	c.Codec = codec.DefaultCodec
-	c.Handler = handler
-	c.Dialer = dialer
-	c.Head = make([]byte, 4)
-	c.chSend = make(chan *Message, c.Handler.SendQueueSize())
-	c.chClose = make(chan util.Empty)
-	c.sessionMap = make(map[uint64]*rpcSession)
-	c.asyncHandlerMap = make(map[uint64]*asyncHandler)
+	c := &Client{
+		seq:             1,
+		Conn:            conn,
+		Codec:           codec.DefaultCodec,
+		Handler:         handler,
+		Dialer:          dialer,
+		Head:            make([]byte, 4),
+		chClose:         make(chan util.Empty),
+		sessionMap:      make(map[uint64]*rpcSession),
+		asyncHandlerMap: make(map[uint64]*asyncHandler),
+		streamLocalMap:  make(map[uint64]*Stream),
+		streamRemoteMap: make(map[uint64]*Stream),
+	}
+	if c.Handler.AsyncWrite() {
+		c.chSend = make(chan *Message, handler.SendQueueSize())
+	}
 
 	c.run()
 

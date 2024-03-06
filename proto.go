@@ -33,6 +33,9 @@ const (
 
 	// CmdPong .
 	CmdPong byte = 5
+
+	// CmdStream .
+	CmdStream byte = 6
 )
 
 const (
@@ -56,6 +59,13 @@ const (
 	HeaderFlagMaskError byte = 0x01
 	// HeaderFlagMaskAsync .
 	HeaderFlagMaskAsync byte = 0x02
+
+	HeaderStreamLocalBitIndex = 7
+	HeaderStreamEOFBitIndex   = 6
+	HeaderStreamLocalBit      = byte(0x1) << HeaderStreamLocalBitIndex
+	HeaderStreamEOFBit        = byte(0x1) << HeaderStreamEOFBitIndex
+	HeaderStreamFlagBitMask   = HeaderStreamLocalBit | HeaderStreamEOFBit
+	HeaderCmdBitMask          = ^HeaderStreamFlagBitMask
 )
 
 const (
@@ -158,12 +168,54 @@ func (m *Message) Len() int {
 
 // Cmd returns cmd.
 func (m *Message) Cmd() byte {
-	return m.Buffer[HeaderIndexCmd]
+	return m.Buffer[HeaderIndexCmd] & HeaderCmdBitMask
 }
 
 // SetCmd sets cmd.
 func (m *Message) SetCmd(cmd byte) {
-	m.Buffer[HeaderIndexCmd] = cmd
+	m.Buffer[HeaderIndexCmd] = (m.Buffer[HeaderIndexCmd] & HeaderStreamFlagBitMask) | cmd
+}
+
+// // IsStream represents whether it's a stream message.
+// func (m *Message) IsStream() bool {
+// 	return m.Buffer[HeaderIndexCmd]&HeaderStreamBit > 0
+// }
+
+// // SetStream sets the flag for a stream message.
+// func (m *Message) SetStream(isStream bool) {
+// 	if isStream {
+// 		m.Buffer[HeaderIndexCmd] |= HeaderStreamBit
+// 	} else {
+// 		m.Buffer[HeaderIndexCmd] &= (^HeaderStreamBit)
+// 	}
+// }
+
+// IsStream represents whether it's a stream message.
+func (m *Message) IsStreamLocal() bool {
+	return m.Buffer[HeaderIndexCmd]&HeaderStreamLocalBit > 0
+}
+
+// SetStream sets the flag for a stream message.
+func (m *Message) SetStreamLocal(local bool) {
+	if local {
+		m.Buffer[HeaderIndexCmd] |= HeaderStreamLocalBit
+	} else {
+		m.Buffer[HeaderIndexCmd] &= (^HeaderStreamLocalBit)
+	}
+}
+
+// IsStream represents whether it's a stream's last message and the stream is EOF and closed.
+func (m *Message) IsStreamEOF() bool {
+	return m.Buffer[HeaderIndexCmd]&HeaderStreamEOFBit > 0
+}
+
+// SetStream sets the flag for a stream's last message and mark the stream is EOF and closed.
+func (m *Message) SetStreamEOF(eof bool) {
+	if eof {
+		m.Buffer[HeaderIndexCmd] |= HeaderStreamEOFBit
+	} else {
+		m.Buffer[HeaderIndexCmd] &= (^HeaderStreamEOFBit)
+	}
 }
 
 // IsError returns error flag.

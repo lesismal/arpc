@@ -54,6 +54,12 @@ var (
 	ErrContextResponseToNotify = errors.New("should not response to a context with notify message")
 )
 
+// stream errors
+var (
+	// ErrStreamClosedSend represents an error of stream closed send.
+	ErrStreamClosedSend = errors.New("stream has closed send")
+)
+
 // general errors
 var (
 	// ErrTimeout represents an error of timeout.

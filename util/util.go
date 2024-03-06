@@ -5,6 +5,7 @@
 package util
 
 import (
+	"errors"
 	"runtime"
 	"unsafe"
 
@@ -76,4 +77,29 @@ func ValueToBytes(codec acodec.Codec, v interface{}) []byte {
 	}
 
 	return data
+}
+
+// BytesToValue converts []byte to values
+func BytesToValue(codec acodec.Codec, data []byte, v interface{}) error {
+	var err error
+	if v != nil {
+		switch vt := v.(type) {
+		case *[]byte:
+			*vt = make([]byte, len(data))
+			copy(*vt, data)
+		case *string:
+			*vt = string(data)
+		case *error:
+			*vt = errors.New(string(data))
+		default:
+			if codec == nil {
+				codec = acodec.DefaultCodec
+			}
+			err = codec.Unmarshal(data, vt)
+			if err != nil {
+				log.Error("ValueToBytes: %v", err)
+			}
+		}
+	}
+	return err
 }
