@@ -290,9 +290,8 @@ type handler struct {
 	routes  map[string]*routerHandler
 	streams map[string]*streamHandler
 
-	middles       []HandlerFunc
-	streamMiddles []StreamHandlerFunc
-	msgCoders     []MessageCoder
+	middles   []HandlerFunc
+	msgCoders []MessageCoder
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -334,16 +333,7 @@ func (h *handler) SetLogTag(tag string) {
 }
 
 func (h *handler) HandleConnected(onConnected func(*Client)) {
-	if onConnected == nil {
-		return
-	}
-	pre := h.onConnected
-	h.onConnected = func(c *Client) {
-		if pre != nil {
-			pre(c)
-		}
-		onConnected(c)
-	}
+	h.onConnected = onConnected
 }
 
 func (h *handler) OnConnected(c *Client) {
@@ -353,16 +343,7 @@ func (h *handler) OnConnected(c *Client) {
 }
 
 func (h *handler) HandleDisconnected(onDisConnected func(*Client)) {
-	if onDisConnected == nil {
-		return
-	}
-	pre := h.onDisConnected
-	h.onDisConnected = func(c *Client) {
-		if pre != nil {
-			pre(c)
-		}
-		onDisConnected(c)
-	}
+	h.onDisConnected = onDisConnected
 }
 
 func (h *handler) OnDisconnected(c *Client) {
@@ -381,7 +362,9 @@ func (h *handler) SetMaxReconnectTimes(n int) {
 
 func (h *handler) HandleOverstock(onOverstock func(c *Client, m *Message)) {
 	h.onOverstock = func(c *Client, m *Message) {
-		onOverstock(c, m)
+		if onOverstock != nil {
+			onOverstock(c, m)
+		}
 		h.OnMessageDone(c, m)
 	}
 }
@@ -394,7 +377,9 @@ func (h *handler) OnOverstock(c *Client, m *Message) {
 
 func (h *handler) HandleMessageDropped(onMessageDropped func(c *Client, m *Message)) {
 	h.onMessageDropped = func(c *Client, m *Message) {
-		onMessageDropped(c, m)
+		if onMessageDropped != nil {
+			onMessageDropped(c, m)
+		}
 		h.OnMessageDone(c, m)
 	}
 }
@@ -933,6 +918,11 @@ func NewHandler() Handler {
 	h.wrapReader = func(conn net.Conn) io.Reader {
 		return bufio.NewReaderSize(conn, h.recvBufferSize)
 	}
+	h.HandleConnected(func(cli *Client) {
+		if tcpConn, ok := cli.Conn.(*net.TCPConn); ok {
+			tcpConn.SetNoDelay(false)
+		}
+	})
 	ctx, cancel := context.WithCancel(context.Background())
 	h.ctx = ctx
 	h.cancel = cancel
