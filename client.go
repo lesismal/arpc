@@ -743,20 +743,6 @@ func (c *Client) clearAsyncHandler() {
 	}
 }
 
-func (c *Client) addStream(id uint64, local bool, stream *Stream) {
-	c.mux.Lock()
-	if c.running {
-		var streamMap map[uint64]*Stream
-		if local {
-			streamMap = c.streamLocalMap
-		} else {
-			streamMap = c.streamRemoteMap
-		}
-		streamMap[id] = stream
-	}
-	c.mux.Unlock()
-}
-
 func (c *Client) deleteStream(id uint64, local bool) {
 	c.mux.Lock()
 	if c.running {
