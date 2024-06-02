@@ -25,14 +25,19 @@ type Context struct {
 	Client  *Client
 	Message *Message
 
-	index    int
-	handlers []HandlerFunc
+	index       int
+	handlers    []HandlerFunc
+	responseErr interface{}
 }
 
 func (ctx *Context) Release() {
 	ctx.Message.Release()
 	*ctx = emptyContext
 	contextPool.Put(ctx)
+}
+
+func (ctx *Context) ResponseError() interface{} {
+	return ctx.responseErr
 }
 
 // Get returns value for key.
@@ -153,6 +158,10 @@ func (ctx *Context) write(v interface{}, isError bool, timeout time.Duration) er
 	if _, ok := v.(error); ok {
 		isError = true
 	}
+	if isError {
+		ctx.responseErr = v
+	}
+
 	rsp := newMessage(CmdResponse, req.method(), v, isError, req.IsAsync(), req.Seq(), cli.Handler, cli.Codec, ctx.Message.values)
 	return cli.PushMsg(rsp, timeout)
 }

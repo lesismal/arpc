@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/lesismal/arpc/codec"
@@ -108,5 +109,17 @@ func TestContext_Value(t *testing.T) {
 	ctx.Set("key", "value")
 	if value := ctx.Value("key"); value != "value" {
 		t.Fatalf("Context.Value() value != 'value', have %v", value)
+	}
+}
+
+func TestContext_ResponseError(t *testing.T) {
+	ctx := &Context{
+		Client:  &Client{Handler: DefaultHandler},
+		Message: newMessage(CmdRequest, "test", nil, false, false, 0, DefaultHandler, codec.DefaultCodec, nil),
+	}
+	err := errors.New("test err")
+	ctx.Error(err)
+	if ctx.ResponseError() != err {
+		t.Fatalf("Context.ResponseError() != 'test err'")
 	}
 }
