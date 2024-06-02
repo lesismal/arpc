@@ -7,6 +7,13 @@ import (
 	"github.com/lesismal/arpc/log"
 )
 
+var (
+	cmdName = map[byte]string{
+		arpc.CmdRequest: "request",
+		arpc.CmdNotify:  "notify",
+	}
+)
+
 // Logger returns the logger middleware.
 func Logger() arpc.HandlerFunc {
 	return func(ctx *arpc.Context) {
@@ -21,12 +28,15 @@ func Logger() arpc.HandlerFunc {
 
 		switch cmd {
 		case arpc.CmdRequest, arpc.CmdNotify:
-			log.Info("'%v',\t%v,\t%v ms cost", method, addr, cost)
-			break
+			err := ctx.ResponseError()
+			if err == nil {
+				log.Info("[%v | %v] from %v success, %v ms cost", cmdName[cmd], method, addr, cost)
+			} else {
+				log.Info("[%v | %v], from %v error: [%v], %v ms cost", cmdName[cmd], method, addr, err, cost)
+			}
 		default:
 			log.Error("invalid cmd: %d,\tdropped", cmd)
 			ctx.Done()
-			break
 		}
 	}
 }
