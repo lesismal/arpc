@@ -317,6 +317,15 @@ func (h *handler) Clone() Handler {
 		cp.routes[k] = rh
 	}
 
+	cp.streams = map[string]*streamHandler{}
+	for k, v := range h.streams {
+		sh := &streamHandler{
+			async:   v.async,
+			handler: v.handler,
+		}
+		cp.streams[k] = sh
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cp.ctx = ctx
 	cp.cancel = cancel
