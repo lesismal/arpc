@@ -1117,6 +1117,11 @@ func HandleMalloc(f func(int) []byte) {
 	DefaultHandler.HandleMalloc(f)
 }
 
+// HandleFree registers buffer releaser.
+func HandleFree(f func([]byte)) {
+	DefaultHandler.HandleFree(f)
+}
+
 // EnablePool registers handlers for pool operation for Context and Message and Message.Buffer
 func EnablePool(enable bool) {
 	DefaultHandler.EnablePool(enable)

@@ -170,5 +170,6 @@ func TestSetHandler(t *testing.T) {
 	Handle("nothing", func(*Context) {}, true)
 	HandleNotFound(func(*Context) {})
 	HandleMalloc(func(int) []byte { return nil })
+	HandleFree(func([]byte) {})
 	SetHandler(d)
 }
