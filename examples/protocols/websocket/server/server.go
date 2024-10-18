@@ -8,20 +8,25 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofiber/fiber/v3"
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/extension/protocol/websocket"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
-var useGinListener = flag.Bool("gin", true, "use gin listener")
+var handlerType = flag.String("h", "fiber", "use std/gin/fiber listener")
 
 func main() {
 	flag.Parse()
 
 	var ln net.Listener
 
-	if *useGinListener {
+	switch *handlerType {
+	case "gin":
 		ln = ginListener()
-	} else {
+	case "fiber":
+		ln = fberListener()
+	default:
 		ln = stdListener()
 	}
 
@@ -58,6 +63,32 @@ func ginListener() net.Listener {
 	})
 	go func() {
 		err := router.Run("localhost:8888")
+		if err != nil {
+			log.Fatalf("router.Run failed: %v", err)
+		}
+	}()
+	return ln
+}
+
+type arpcHTTPHandler struct {
+	ln *websocket.Listener
+}
+
+func (ah *arpcHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ah.ln.Handler(w, r)
+}
+
+func fberListener() net.Listener {
+	router := fiber.New()
+	ln, _ := websocket.Listen("localhost:8888", nil)
+	router.Get("/ws", func(c fiber.Ctx) error {
+		handler := fasthttpadaptor.NewFastHTTPHandler(&arpcHTTPHandler{ln: ln.(*websocket.Listener)})
+		handler(c.Context())
+		return nil
+
+	})
+	go func() {
+		err := router.Listen("localhost:8888")
 		if err != nil {
 			log.Fatalf("router.Run failed: %v", err)
 		}
