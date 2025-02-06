@@ -78,7 +78,13 @@
                 if (!msgInput.value) {
                     return false;
                 }
-                client.notify("/chat/user/say", msgInput.value);
+                client.call("/chat/user/say", msgInput.value).then(function (resp) {
+                    console.log("say success, resp:", resp.data, resp.err);
+                }).catch(function (err) {
+                    var item = document.createElement("div");
+                    item.innerText = err;
+                    appendLog(item);
+                });
                 msgInput.value = "";
                 return false;
             };

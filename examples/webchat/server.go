@@ -142,6 +142,7 @@ func NewServer(room *Room) *arpc.Server {
 				if err == nil {
 					room.Broadcast(msg)
 				}
+				ctx.Write(msg.Message)
 			}
 		}
 	})
