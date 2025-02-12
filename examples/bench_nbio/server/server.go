@@ -59,10 +59,10 @@ func onData(c *nbio.Conn, data []byte) {
 			return
 		}
 
-		buffer := mempool.Malloc(total)
-		session.Read(buffer)
+		pBuffer := mempool.Malloc(total)
+		session.Read(*pBuffer)
 
-		msg := handler.NewMessageWithBuffer(buffer)
+		msg := handler.NewMessageWithBuffer(pBuffer)
 		handler.OnMessage(session.Client, msg)
 	}
 }

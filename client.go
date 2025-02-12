@@ -112,12 +112,12 @@ func (c *Client) Delete(key interface{}) {
 
 // Ping .
 func (c *Client) Ping() {
-	c.Conn.Write(PingMessage.Buffer)
+	c.Conn.Write(*PingMessage.PBuffer)
 }
 
 // Pong .
 func (c *Client) Pong() {
-	c.Conn.Write(PongMessage.Buffer)
+	c.Conn.Write(*PongMessage.PBuffer)
 }
 
 // Ping .
@@ -181,7 +181,7 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			_, err := c.Handler.Send(c.Conn, *msg.PBuffer)
 			c.Handler.OnMessageDone(c, msg)
 			if err != nil {
 				c.Conn.Close()
@@ -243,7 +243,7 @@ func (c *Client) CallContext(ctx context.Context, method string, req interface{}
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			_, err := c.Handler.Send(c.Conn, msg.Buffer())
 			c.Handler.OnMessageDone(c, msg)
 			if err != nil {
 				c.Conn.Close()
@@ -305,7 +305,7 @@ func (c *Client) CallAsync(method string, req interface{}, handler AsyncHandlerF
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			_, err = c.Handler.Send(c.Conn, msg.Buffer)
+			_, err = c.Handler.Send(c.Conn, msg.Buffer())
 			if err != nil {
 				c.Conn.Close()
 			}
@@ -349,7 +349,7 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration, 
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			_, err = c.Handler.Send(c.Conn, msg.Buffer)
+			_, err = c.Handler.Send(c.Conn, msg.Buffer())
 			if err != nil {
 				c.Conn.Close()
 			}
@@ -396,7 +396,7 @@ func (c *Client) NotifyContext(ctx context.Context, method string, data interfac
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			_, err := c.Handler.Send(c.Conn, msg.Buffer())
 			if err != nil {
 				c.Conn.Close()
 			}
@@ -425,7 +425,7 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 			for j := 0; j < len(coders); j++ {
 				msg = coders[j].Encode(c, msg)
 			}
-			_, err := c.Handler.Send(c.Conn, msg.Buffer)
+			_, err := c.Handler.Send(c.Conn, msg.Buffer())
 			if err != nil {
 				c.Conn.Close()
 			}
@@ -905,7 +905,7 @@ func (c *Client) normalSendLoop() {
 				for j := 0; j < len(coders); j++ {
 					msg = coders[j].Encode(c, msg)
 				}
-				if _, err := c.Handler.Send(c.Conn, msg.Buffer); err != nil {
+				if _, err := c.Handler.Send(c.Conn, msg.Buffer()); err != nil {
 					c.Conn.Close()
 				}
 				c.Handler.OnMessageDone(c, msg)
@@ -930,9 +930,10 @@ func (c *Client) batchSendLoop() {
 	var msg *Message
 	var chLen int
 	var coders []MessageCoder
-	var buffer = c.Handler.Malloc(2048)[0:0]
+	var pBuffer = c.Handler.Malloc(2048)
+	*pBuffer = (*pBuffer)[0:0]
 	var sendBufferSize = c.Handler.SendBufferSize()
-	defer c.Handler.Free(buffer)
+	defer c.Handler.Free(pBuffer)
 
 	for {
 		select {
@@ -951,35 +952,35 @@ func (c *Client) batchSendLoop() {
 		if !c.reconnecting {
 			chLen = len(c.chSend)
 			coders = c.Handler.Coders()
-			for i := 0; i < chLen && len(buffer) < sendBufferSize; i++ {
-				if len(buffer) == 0 {
+			for i := 0; i < chLen && len(*pBuffer) < sendBufferSize; i++ {
+				if len(*pBuffer) == 0 {
 					for j := 0; j < len(coders); j++ {
 						msg = coders[j].Encode(c, msg)
 					}
-					buffer = c.Handler.Append(buffer, msg.Buffer...)
+					pBuffer = c.Handler.Append(pBuffer, msg.Buffer()...)
 					c.Handler.OnMessageDone(c, msg)
 				}
 				msg = <-c.chSend
 				for j := 0; j < len(coders); j++ {
 					msg = coders[j].Encode(c, msg)
 				}
-				buffer = c.Handler.Append(buffer, msg.Buffer...)
+				pBuffer = c.Handler.Append(pBuffer, msg.Buffer()...)
 				c.Handler.OnMessageDone(c, msg)
 			}
-			if len(buffer) == 0 {
+			if len(*pBuffer) == 0 {
 				for j := 0; j < len(coders); j++ {
 					msg = coders[j].Encode(c, msg)
 				}
-				_, err := c.Handler.Send(c.Conn, msg.Buffer)
+				_, err := c.Handler.Send(c.Conn, msg.Buffer())
 				if err != nil {
 					c.Conn.Close()
 				}
 				c.Handler.OnMessageDone(c, msg)
 			} else {
-				if _, err := c.Handler.Send(c.Conn, buffer); err != nil {
+				if _, err := c.Handler.Send(c.Conn, *pBuffer); err != nil {
 					c.Conn.Close()
 				}
-				buffer = buffer[0:0]
+				*pBuffer = (*pBuffer)[0:0]
 			}
 		} else {
 			c.dropMessage(msg)

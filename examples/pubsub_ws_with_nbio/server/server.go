@@ -126,7 +126,7 @@ func (c *WebsocketConn) Write(data []byte) (int, error) {
 // Session .
 type Session struct {
 	*arpc.Client
-	cache []byte
+	pCache *[]byte
 }
 
 func newUpgrader() *websocket.Upgrader {
@@ -154,9 +154,9 @@ func onClose(c *websocket.Conn, err error) {
 	}
 	session, ok := iSession.(*Session)
 	if ok {
-		if session.cache != nil {
-			mempool.Free(session.cache)
-			session.cache = nil
+		if session.pCache != nil {
+			mempool.Free(session.pCache)
+			session.pCache = nil
 		}
 		psServer.Handler.OnDisconnected(session.Client)
 	}
@@ -171,9 +171,9 @@ func onMessage(c *websocket.Conn, mt websocket.MessageType, data []byte) {
 
 	session := iSession.(*Session)
 	start := 0
-	if session.cache != nil {
-		session.cache = append(session.cache, data...)
-		data = session.cache
+	if session.pCache != nil {
+		session.pCache = mempool.Append(session.pCache, data...)
+		data = *session.pCache
 	}
 
 	received := false
@@ -187,10 +187,10 @@ func onMessage(c *websocket.Conn, mt websocket.MessageType, data []byte) {
 			goto Exit
 		}
 
-		buffer := mempool.Malloc(total)
-		copy(buffer, data[start:start+total])
+		pBuffer := mempool.Malloc(total)
+		copy(*pBuffer, data[start:start+total])
 		start += total
-		msg := psServer.Handler.NewMessageWithBuffer(buffer)
+		msg := psServer.Handler.NewMessageWithBuffer(pBuffer)
 		psServer.Handler.OnMessage(session.Client, msg)
 		received = true
 	}
@@ -199,20 +199,20 @@ Exit:
 	if received {
 		c.SetReadDeadline(time.Now().Add(keepaliveTime))
 	}
-	if session.cache != nil {
+	if session.pCache != nil {
 		if start == len(data) {
-			mempool.Free(data)
-			session.cache = nil
+			mempool.Free(session.pCache)
+			session.pCache = nil
 		} else {
-			left := mempool.Malloc(len(data) - start)
-			copy(left, data[start:])
-			mempool.Free(data)
-			session.cache = left
+			pLeft := mempool.Malloc(len(data) - start)
+			copy(*pLeft, data[start:])
+			mempool.Free(session.pCache)
+			session.pCache = pLeft
 		}
 	} else if start < len(data) {
-		left := mempool.Malloc(len(data) - start)
-		copy(left, data[start:])
-		mempool.Free(data)
-		session.cache = left
+		pLeft := mempool.Malloc(len(data) - start)
+		copy(*pLeft, data[start:])
+		mempool.Free(session.pCache)
+		session.pCache = pLeft
 	}
 }

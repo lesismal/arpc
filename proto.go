@@ -105,9 +105,9 @@ func (h Header) message(handler Handler) (*Message, error) {
 	// msg := &Message{Buffer: handler.Malloc(HeadLen + bodyLen)}
 	msg := messagePool.Get().(*Message)
 	msg.handler = handler
-	msg.Buffer = handler.Malloc(HeadLen + bodyLen)
+	msg.PBuffer = handler.Malloc(HeadLen + bodyLen)
 
-	binary.LittleEndian.PutUint32(msg.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
+	binary.LittleEndian.PutUint32((*msg.PBuffer)[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(bodyLen))
 	return msg, nil
 }
 
@@ -126,10 +126,15 @@ type Message struct {
 	// 64-aligned on 32-bit
 	ref int32
 
-	Buffer []byte
+	PBuffer *[]byte
 
 	handler Handler
 	values  map[interface{}]interface{}
+}
+
+// Retain increment the reference count and returns the current value.
+func (m *Message) Handler() Handler {
+	return m.handler
 }
 
 // Retain increment the reference count and returns the current value.
@@ -142,7 +147,7 @@ func (m *Message) Release() int32 {
 	n := atomic.AddInt32(&m.ref, -1)
 	if n == -1 {
 		if m.handler != nil {
-			m.handler.Free(m.Buffer)
+			m.handler.Free(m.PBuffer)
 		}
 		*m = emptyMessage
 		messagePool.Put(m)
@@ -152,7 +157,7 @@ func (m *Message) Release() int32 {
 
 // ResetAttrs resets reserved/cmd/flag/methodLen to 0.
 func (m *Message) ResetAttrs() {
-	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenEnd:HeaderIndexSeqBegin], 0)
+	binary.LittleEndian.PutUint32((*m.PBuffer)[HeaderIndexBodyLenEnd:HeaderIndexSeqBegin], 0)
 }
 
 // Payback put Message to the pool.
@@ -163,72 +168,75 @@ func (m *Message) Payback() {
 
 // Len returns total length of buffer.
 func (m *Message) Len() int {
-	return len(m.Buffer)
+	// if m.PBuffer == nil {
+	// 	return 0
+	// }
+	return len(*m.PBuffer)
 }
 
 // Cmd returns cmd.
 func (m *Message) Cmd() byte {
-	return m.Buffer[HeaderIndexCmd] & HeaderCmdBitMask
+	return (*m.PBuffer)[HeaderIndexCmd] & HeaderCmdBitMask
 }
 
 // SetCmd sets cmd.
 func (m *Message) SetCmd(cmd byte) {
-	m.Buffer[HeaderIndexCmd] = (m.Buffer[HeaderIndexCmd] & HeaderStreamFlagBitMask) | cmd
+	(*m.PBuffer)[HeaderIndexCmd] = ((*m.PBuffer)[HeaderIndexCmd] & HeaderStreamFlagBitMask) | cmd
 }
 
 // // IsStream represents whether it's a stream message.
 // func (m *Message) IsStream() bool {
-// 	return m.Buffer[HeaderIndexCmd]&HeaderStreamBit > 0
+// 	return (*m.PBuffer)[HeaderIndexCmd]&HeaderStreamBit > 0
 // }
 
 // // SetStream sets the flag for a stream message.
 // func (m *Message) SetStream(isStream bool) {
 // 	if isStream {
-// 		m.Buffer[HeaderIndexCmd] |= HeaderStreamBit
+// 		(*m.PBuffer)[HeaderIndexCmd] |= HeaderStreamBit
 // 	} else {
-// 		m.Buffer[HeaderIndexCmd] &= (^HeaderStreamBit)
+// 		(*m.PBuffer)[HeaderIndexCmd] &= (^HeaderStreamBit)
 // 	}
 // }
 
 // IsStream represents whether it's a stream message.
 func (m *Message) IsStreamLocal() bool {
-	return m.Buffer[HeaderIndexCmd]&HeaderStreamLocalBit > 0
+	return (*m.PBuffer)[HeaderIndexCmd]&HeaderStreamLocalBit > 0
 }
 
 // SetStream sets the flag for a stream message.
 func (m *Message) SetStreamLocal(local bool) {
 	if local {
-		m.Buffer[HeaderIndexCmd] |= HeaderStreamLocalBit
+		(*m.PBuffer)[HeaderIndexCmd] |= HeaderStreamLocalBit
 	} else {
-		m.Buffer[HeaderIndexCmd] &= (^HeaderStreamLocalBit)
+		(*m.PBuffer)[HeaderIndexCmd] &= (^HeaderStreamLocalBit)
 	}
 }
 
 // IsStream represents whether it's a stream's last message and the stream is EOF and closed.
 func (m *Message) IsStreamEOF() bool {
-	return m.Buffer[HeaderIndexCmd]&HeaderStreamEOFBit > 0
+	return (*m.PBuffer)[HeaderIndexCmd]&HeaderStreamEOFBit > 0
 }
 
 // SetStream sets the flag for a stream's last message and mark the stream is EOF and closed.
 func (m *Message) SetStreamEOF(eof bool) {
 	if eof {
-		m.Buffer[HeaderIndexCmd] |= HeaderStreamEOFBit
+		(*m.PBuffer)[HeaderIndexCmd] |= HeaderStreamEOFBit
 	} else {
-		m.Buffer[HeaderIndexCmd] &= (^HeaderStreamEOFBit)
+		(*m.PBuffer)[HeaderIndexCmd] &= (^HeaderStreamEOFBit)
 	}
 }
 
 // IsError returns error flag.
 func (m *Message) IsError() bool {
-	return m.Buffer[HeaderIndexFlag]&HeaderFlagMaskError > 0
+	return (*m.PBuffer)[HeaderIndexFlag]&HeaderFlagMaskError > 0
 }
 
 // SetError sets error flag.
 func (m *Message) SetError(isError bool) {
 	if isError {
-		m.Buffer[HeaderIndexFlag] |= HeaderFlagMaskError
+		(*m.PBuffer)[HeaderIndexFlag] |= HeaderFlagMaskError
 	} else {
-		m.Buffer[HeaderIndexFlag] &= ^HeaderFlagMaskError
+		(*m.PBuffer)[HeaderIndexFlag] &= ^HeaderFlagMaskError
 	}
 }
 
@@ -237,20 +245,20 @@ func (m *Message) Error() error {
 	if !m.IsError() {
 		return nil
 	}
-	return errors.New(string(m.Buffer[HeadLen+m.MethodLen():]))
+	return errors.New(string((*m.PBuffer)[HeadLen+m.MethodLen():]))
 }
 
 // IsAsync returns async flag.
 func (m *Message) IsAsync() bool {
-	return m.Buffer[HeaderIndexFlag]&HeaderFlagMaskAsync > 0
+	return (*m.PBuffer)[HeaderIndexFlag]&HeaderFlagMaskAsync > 0
 }
 
 // SetAsync sets async flag.
 func (m *Message) SetAsync(isAsync bool) {
 	if isAsync {
-		m.Buffer[HeaderIndexFlag] |= HeaderFlagMaskAsync
+		(*m.PBuffer)[HeaderIndexFlag] |= HeaderFlagMaskAsync
 	} else {
-		m.Buffer[HeaderIndexFlag] &= ^HeaderFlagMaskAsync
+		(*m.PBuffer)[HeaderIndexFlag] &= ^HeaderFlagMaskAsync
 	}
 }
 
@@ -264,16 +272,16 @@ func (m *Message) SetFlagBit(index int, value bool) error {
 	switch index {
 	case 0, 1, 2, 3, 4, 5, 6, 7:
 		if value {
-			m.Buffer[HeaderIndexReserved] |= (0x1 << index)
+			(*m.PBuffer)[HeaderIndexReserved] |= (0x1 << index)
 		} else {
-			m.Buffer[HeaderIndexReserved] &= (^(0x1 << index))
+			(*m.PBuffer)[HeaderIndexReserved] &= (^(0x1 << index))
 		}
 		return nil
 	// case 8, 9:
 	// 	if value {
-	// 		m.Buffer[HeaderIndexFlag] |= (0x1 << (index - 2))
+	// 		(*m.PBuffer)[HeaderIndexFlag] |= (0x1 << (index - 2))
 	// 	} else {
-	// 		m.Buffer[HeaderIndexFlag] &= (^(0x1 << (index - 2)))
+	// 		(*m.PBuffer)[HeaderIndexFlag] &= (^(0x1 << (index - 2)))
 	// 	}
 	// 	return nil
 	default:
@@ -286,9 +294,9 @@ func (m *Message) SetFlagBit(index int, value bool) error {
 func (m *Message) IsFlagBitSet(index int) bool {
 	switch index {
 	case 0, 1, 2, 3, 4, 5, 6, 7:
-		return (m.Buffer[HeaderIndexReserved] & (0x1 << index)) != 0
+		return ((*m.PBuffer)[HeaderIndexReserved] & (0x1 << index)) != 0
 	// case 8, 9:
-	// 	return (m.Buffer[HeaderIndexFlag] & (0x1 << (index - 2))) != 0
+	// 	return ((*m.PBuffer)[HeaderIndexFlag] & (0x1 << (index - 2))) != 0
 	default:
 		break
 	}
@@ -297,47 +305,58 @@ func (m *Message) IsFlagBitSet(index int) bool {
 
 // MethodLen returns method length.
 func (m *Message) MethodLen() int {
-	return int(m.Buffer[HeaderIndexMethodLen])
+	return int((*m.PBuffer)[HeaderIndexMethodLen])
 }
 
 // SetMethodLen sets method length.
 func (m *Message) SetMethodLen(l int) {
-	m.Buffer[HeaderIndexMethodLen] = byte(l)
+	(*m.PBuffer)[HeaderIndexMethodLen] = byte(l)
 }
 
 // Method returns method.
 func (m *Message) Method() string {
-	return string(m.Buffer[HeadLen : HeadLen+m.MethodLen()])
+	return string((*m.PBuffer)[HeadLen : HeadLen+m.MethodLen()])
 }
 
 func (m *Message) method() string {
-	return util.BytesToStr(m.Buffer[HeadLen : HeadLen+m.MethodLen()])
+	return util.BytesToStr((*m.PBuffer)[HeadLen : HeadLen+m.MethodLen()])
 }
 
 // BodyLen returns body length.
 func (m *Message) BodyLen() int {
-	return int(binary.LittleEndian.Uint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd]))
+	return int(binary.LittleEndian.Uint32((*m.PBuffer)[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd]))
 }
 
 // SetBodyLen sets body length.
 func (m *Message) SetBodyLen(l int) {
-	binary.LittleEndian.PutUint32(m.Buffer[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(l))
+	binary.LittleEndian.PutUint32((*m.PBuffer)[HeaderIndexBodyLenBegin:HeaderIndexBodyLenEnd], uint32(l))
 }
 
 // Seq returns sequence number.
 func (m *Message) Seq() uint64 {
-	return binary.LittleEndian.Uint64(m.Buffer[HeaderIndexSeqBegin:HeaderIndexSeqEnd])
+	return binary.LittleEndian.Uint64((*m.PBuffer)[HeaderIndexSeqBegin:HeaderIndexSeqEnd])
 }
 
 // SetSeq sets sequence number.
 func (m *Message) SetSeq(seq uint64) {
-	binary.LittleEndian.PutUint64(m.Buffer[HeaderIndexSeqBegin:HeaderIndexSeqEnd], seq)
+	binary.LittleEndian.PutUint64((*m.PBuffer)[HeaderIndexSeqBegin:HeaderIndexSeqEnd], seq)
 }
 
 // Data returns payload data after method.
 func (m *Message) Data() []byte {
+	if m.PBuffer == nil {
+		return nil
+	}
 	length := HeadLen + m.MethodLen()
-	return m.Buffer[length:]
+	return (*m.PBuffer)[length:]
+}
+
+// Buffer returns all message buffer, including head and data.
+func (m *Message) Buffer() []byte {
+	if m.PBuffer != nil {
+		return *m.PBuffer
+	}
+	return nil
 }
 
 // Get returns value for key.
@@ -384,7 +403,7 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 	msg = messagePool.Get().(*Message)
 	msg.values = values
 	msg.handler = h
-	msg.Buffer = h.Malloc(HeadLen + bodyLen)
+	msg.PBuffer = h.Malloc(HeadLen + bodyLen)
 
 	msg.ResetAttrs()
 	msg.SetCmd(cmd)
@@ -393,8 +412,8 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 	msg.SetMethodLen(len(method))
 	msg.SetBodyLen(bodyLen)
 	msg.SetSeq(seq)
-	copy(msg.Buffer[HeadLen:HeadLen+len(method)], method)
-	copy(msg.Buffer[HeadLen+len(method):], data)
+	copy((*msg.PBuffer)[HeadLen:HeadLen+len(method)], method)
+	copy((*msg.PBuffer)[HeadLen+len(method):], data)
 
 	return msg
 }

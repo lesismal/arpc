@@ -181,7 +181,7 @@ func (ctx *Context) writeDirectly(v interface{}, isError bool) error {
 		for j := 0; j < len(coders); j++ {
 			rsp = coders[j].Encode(cli, rsp)
 		}
-		_, err := cli.Handler.Send(cli.Conn, rsp.Buffer)
+		_, err := cli.Handler.Send(cli.Conn, rsp.Buffer())
 		if err != nil {
 			cli.Conn.Close()
 		}

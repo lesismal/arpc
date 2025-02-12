@@ -14,7 +14,7 @@ import (
 	"github.com/valyala/fasthttp/fasthttpadaptor"
 )
 
-var handlerType = flag.String("h", "fiber", "use std/gin/fiber listener")
+var handlerType = flag.String("h", "fiber", "use std/gin/fiber listener, fiber as default")
 
 func main() {
 	flag.Parse()
@@ -83,7 +83,7 @@ func fberListener() net.Listener {
 	ln, _ := websocket.Listen("localhost:8888", nil)
 	router.Get("/ws", func(c fiber.Ctx) error {
 		handler := fasthttpadaptor.NewFastHTTPHandler(&arpcHTTPHandler{ln: ln.(*websocket.Listener)})
-		handler(c.Context())
+		handler(c.RequestCtx())
 		return nil
 
 	})

@@ -48,15 +48,15 @@ var (
 type CoderTest int
 
 func (ct *CoderTest) Encode(cli *Client, msg *Message) *Message {
-	for i := 4; i < len(msg.Buffer); i++ {
-		msg.Buffer[i] ^= 0xFF
+	for i := 4; i < len(msg.Buffer()); i++ {
+		(*msg.PBuffer)[i] ^= 0xFF
 	}
 	return msg
 }
 
 func (ct *CoderTest) Decode(cli *Client, msg *Message) *Message {
-	for i := 4; i < len(msg.Buffer); i++ {
-		msg.Buffer[i] ^= 0xFF
+	for i := 4; i < len(*msg.PBuffer); i++ {
+		(*msg.PBuffer)[i] ^= 0xFF
 	}
 	return msg
 }

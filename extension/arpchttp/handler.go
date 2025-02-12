@@ -62,7 +62,7 @@ func Handler(nh arpc.Handler, codec codec.Codec) http.HandlerFunc {
 		}
 
 		client := &arpc.Client{Conn: &Conn{w}, Codec: codec, Handler: nh}
-		msg := nh.NewMessageWithBuffer(body)
+		msg := nh.NewMessageWithBuffer(&body)
 		nh.OnMessage(client, msg)
 	}
 }

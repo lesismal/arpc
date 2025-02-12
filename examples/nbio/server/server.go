@@ -122,7 +122,7 @@ func initNBIOServer(ln net.Listener) {
 // Session .
 type Session struct {
 	*arpc.Client
-	cache []byte
+	pCache *[]byte
 }
 
 func nbioOnOpen(c *nbio.Conn) {
@@ -141,9 +141,9 @@ func nbioOnClose(c *nbio.Conn, err error) {
 	}
 	c.MustExecute(func() {
 		session := iSession.(*Session)
-		if session.cache != nil {
-			mempool.Free(session.cache)
-			session.cache = nil
+		if session.pCache != nil {
+			mempool.Free(session.pCache)
+			session.pCache = nil
 		}
 	})
 }
@@ -158,9 +158,9 @@ func nbioOnData(c *nbio.Conn, data []byte) {
 	c.Execute(func() {
 		session := iSession.(*Session)
 		start := 0
-		if session.cache != nil {
-			session.cache = append(session.cache, data...)
-			data = session.cache
+		if session.pCache != nil {
+			session.pCache = mempool.Append(session.pCache, data...)
+			data = *session.pCache
 		}
 		for {
 			if len(data) < arpc.HeadLen {
@@ -172,31 +172,31 @@ func nbioOnData(c *nbio.Conn, data []byte) {
 				goto Exit
 			}
 
-			buffer := mempool.Malloc(total)
-			copy(buffer, data[start:start+total])
+			pBuffer := mempool.Malloc(total)
+			copy(*pBuffer, data[start:start+total])
 			start += total
-			msg := nbioHandler.NewMessageWithBuffer(buffer)
+			msg := nbioHandler.NewMessageWithBuffer(pBuffer)
 			pool.Go(func() {
 				nbioHandler.OnMessage(session.Client, msg)
 			})
 		}
 
 	Exit:
-		if session.cache != nil {
+		if session.pCache != nil {
 			if start == len(data) {
-				mempool.Free(data)
-				session.cache = nil
+				mempool.Free(session.pCache)
+				session.pCache = nil
 			} else {
-				left := mempool.Malloc(len(data) - start)
-				copy(left, data[start:])
-				mempool.Free(data)
-				session.cache = left
+				pLeft := mempool.Malloc(len(data) - start)
+				copy(*pLeft, data[start:])
+				mempool.Free(session.pCache)
+				session.pCache = pLeft
 			}
 		} else if start < len(data) {
-			left := mempool.Malloc(len(data) - start)
-			copy(left, data[start:])
-			mempool.Free(data)
-			session.cache = left
+			pLeft := mempool.Malloc(len(data) - start)
+			copy(*pLeft, data[start:])
+			mempool.Free(session.pCache)
+			session.pCache = pLeft
 		}
 	})
 }

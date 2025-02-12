@@ -3,7 +3,7 @@ package gzip
 import (
 	"bytes"
 	"compress/gzip"
-	"io/ioutil"
+	"io"
 
 	"github.com/lesismal/arpc"
 	"github.com/lesismal/arpc/extension/middleware/coder"
@@ -24,7 +24,7 @@ func gzipUnCompress(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer r.Close()
-	undatas, err := ioutil.ReadAll(r)
+	undatas, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
@@ -36,12 +36,12 @@ type Gzip int
 
 // Encode implements arpc MessageCoder.
 func (g *Gzip) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
-	if len(msg.Buffer) > int(*g) && !msg.IsFlagBitSet(coder.FlagBitGZip) {
-		buf := gzipCompress(msg.Buffer[arpc.HeaderIndexReserved+1:])
+	if len(*msg.PBuffer) > int(*g) && !msg.IsFlagBitSet(coder.FlagBitGZip) {
+		buf := gzipCompress((*msg.PBuffer)[arpc.HeaderIndexReserved+1:])
 		total := len(buf) + arpc.HeaderIndexReserved + 1
-		if total < len(msg.Buffer) {
-			copy(msg.Buffer[arpc.HeaderIndexReserved+1:], buf)
-			msg.Buffer = msg.Buffer[:total]
+		if total < len(*msg.PBuffer) {
+			copy((*msg.PBuffer)[arpc.HeaderIndexReserved+1:], buf)
+			*msg.PBuffer = (*msg.PBuffer)[:total]
 			msg.SetBodyLen(total - 16)
 			msg.SetFlagBit(coder.FlagBitGZip, true)
 		}
@@ -52,11 +52,12 @@ func (g *Gzip) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 // Decode implements arpc MessageCoder.
 func (g *Gzip) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message {
 	if msg.IsFlagBitSet(coder.FlagBitGZip) {
-		buf, err := gzipUnCompress(msg.Buffer[arpc.HeaderIndexReserved+1:])
+		buf, err := gzipUnCompress((*msg.PBuffer)[arpc.HeaderIndexReserved+1:])
 		if err == nil {
-			msg.Buffer = append(msg.Buffer[:arpc.HeaderIndexReserved+1], buf...)
+			*msg.PBuffer = (*msg.PBuffer)[:arpc.HeaderIndexReserved+1]
+			msg.PBuffer = msg.Handler().Append(msg.PBuffer, buf...)
 			msg.SetFlagBit(coder.FlagBitGZip, false)
-			msg.SetBodyLen(len(msg.Buffer) - 16)
+			msg.SetBodyLen(len(*msg.PBuffer) - 16)
 		}
 	}
 	return msg

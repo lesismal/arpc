@@ -23,13 +23,15 @@ func TestHeader_message(t *testing.T) {
 	if msg.BodyLen() != 10 {
 		t.Fatalf("Header.BodyLen() = %v, want %v", msg.BodyLen(), 10)
 	}
-	head := Header{msg.Buffer[0], msg.Buffer[1], msg.Buffer[2], msg.Buffer[3]}
+	buffer := *msg.PBuffer
+	head := Header{buffer[0], buffer[1], buffer[2], buffer[3]}
 	msg2, err := head.message(DefaultHandler)
 	if err != nil {
 		t.Fatalf("Header.message() error = %v", err)
 	}
-	if len(msg.Buffer) != len(msg2.Buffer) {
-		t.Fatalf("len(Header.message()) = %v, want %v", len(msg2.Buffer), len(msg.Buffer))
+	buffer2 := *msg2.PBuffer
+	if len(buffer) != len(buffer2) {
+		t.Fatalf("len(Header.message()) = %v, want %v", len(buffer2), len(buffer))
 	}
 
 	head[0], head[1], head[2], head[3] = 0xFF, 0xFF, 0xFF, 0xFF

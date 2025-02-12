@@ -1,360 +1,230 @@
-// Copyright 2020 lesismal. All rights reserved.
-// Use of this source code is governed by an MIT-style
-// license that can be found in the LICENSE file.
-
 package arpc
 
 import (
-	"fmt"
-	"runtime"
+	"encoding/json"
 	"sync"
-	"unsafe"
+	"sync/atomic"
 )
 
-type Allocator interface {
-	Malloc(size int) []byte
-	Realloc(buf []byte, size int) []byte
-	Append(buf []byte, more ...byte) []byte
-	AppendString(buf []byte, more string) []byte
-	Free(buf []byte)
-}
-
 // DefaultAllocator .
-var DefaultAllocator Allocator = New(64, 64)
+var DefaultAllocator = New(1024, 1024*1024*1024)
 
-// BufferPool .
-type BufferPool struct {
-	Debug bool
-	mux   sync.Mutex
-
-	smallSize int
-	bigSize   int
-	smallPool *sync.Pool
-	bigPool   *sync.Pool
-
-	allocCnt    uint64
-	freeCnt     uint64
-	allocStacks map[uintptr]string
+type Allocator interface {
+	Malloc(size int) *[]byte
+	Realloc(buf *[]byte, size int) *[]byte // deprecated.
+	Append(buf *[]byte, more ...byte) *[]byte
+	AppendString(buf *[]byte, more string) *[]byte
+	Free(buf *[]byte)
 }
 
-// New .
-func New(smallSize, bigSize int) Allocator {
-	if smallSize <= 0 {
-		smallSize = 64
-	}
-	if bigSize <= 0 {
-		bigSize = 64 * 1024
-	}
-	if bigSize < smallSize {
-		bigSize = smallSize
-	}
-
-	bp := &BufferPool{
-		smallSize:   smallSize,
-		bigSize:     bigSize,
-		allocStacks: map[uintptr]string{},
-		smallPool:   &sync.Pool{},
-		bigPool:     &sync.Pool{},
-		// Debug:       true,
-	}
-	bp.smallPool.New = func() interface{} {
-		buf := make([]byte, smallSize)
-		return &buf
-	}
-	bp.bigPool.New = func() interface{} {
-		buf := make([]byte, bigSize)
-		return &buf
-	}
-	if bigSize == smallSize {
-		bp.bigPool = bp.smallPool
-	}
-
-	return bp
+type DebugAllocator interface {
+	Allocator
+	String() string
+	SetDebug(bool)
 }
 
-// Malloc .
-func (bp *BufferPool) Malloc(size int) []byte {
-	pool := bp.smallPool
-	if size >= bp.bigSize {
-		pool = bp.bigPool
-	}
-
-	pbuf := pool.Get().(*[]byte)
-	need := size - cap(*pbuf)
-	if need > 0 {
-		*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, need)...)
-	}
-
-	if bp.Debug {
-		bp.mux.Lock()
-		defer bp.mux.Unlock()
-		ptr := getBufferPtr(*pbuf)
-		bp.addAllocStack(ptr)
-	}
-
-	return (*pbuf)[:size]
-}
-
-// Realloc .
-func (bp *BufferPool) Realloc(buf []byte, size int) []byte {
-	if size <= cap(buf) {
-		return buf[:size]
-	}
-
-	if !bp.Debug {
-		if cap(buf) < bp.bigSize && size >= bp.bigSize {
-			pbuf := bp.bigPool.Get().(*[]byte)
-			need := size - cap(*pbuf)
-			if need > 0 {
-				*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, need)...)
-			}
-			*pbuf = (*pbuf)[:size]
-			copy(*pbuf, buf)
-			bp.Free(buf)
-			return *pbuf
-		}
-		need := size - cap(buf)
-		if need > 0 {
-			buf = append(buf[:cap(buf)], make([]byte, need)...)
-		}
-		return buf[:size]
-	}
-
-	return bp.reallocDebug(buf, size)
-}
-
-func (bp *BufferPool) reallocDebug(buf []byte, size int) []byte {
-	if cap(buf) == 0 {
-		panic("realloc zero size buf")
-	}
-	if cap(buf) < bp.bigSize && size >= bp.bigSize {
-		pbuf := bp.bigPool.Get().(*[]byte)
-		need := size - cap(*pbuf)
-		if need > 0 {
-			*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, need)...)
-		}
-		*pbuf = (*pbuf)[:size]
-		copy(*pbuf, buf)
-		bp.Free(buf)
-		ptr := getBufferPtr(*pbuf)
-		bp.mux.Lock()
-		defer bp.mux.Unlock()
-		bp.addAllocStack(ptr)
-		return *pbuf
-	}
-	oldPtr := getBufferPtr(buf)
-	need := size - cap(buf)
-	if need > 0 {
-		buf = append(buf[:cap(buf)], make([]byte, need)...)
-	}
-	newPtr := getBufferPtr(buf)
-	if newPtr != oldPtr {
-		bp.mux.Lock()
-		defer bp.mux.Unlock()
-		bp.deleteAllocStack(oldPtr)
-		bp.addAllocStack(newPtr)
-	}
-
-	return (buf)[:size]
-}
-
-// Append .
-func (bp *BufferPool) Append(buf []byte, more ...byte) []byte {
-	return bp.AppendString(buf, *(*string)(unsafe.Pointer(&more)))
-}
-
-// AppendString .
-func (bp *BufferPool) AppendString(buf []byte, more string) []byte {
-	if !bp.Debug {
-		bl := len(buf)
-		total := bl + len(more)
-		if bl < bp.bigSize && total >= bp.bigSize {
-			pbuf := bp.bigPool.Get().(*[]byte)
-			need := total - cap(*pbuf)
-			if need > 0 {
-				*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, need)...)
-			}
-			*pbuf = (*pbuf)[:total]
-			copy(*pbuf, buf)
-			copy((*pbuf)[bl:], more)
-			bp.Free(buf)
-			return *pbuf
-		}
-		return append(buf, more...)
-	}
-	return bp.appendStringDebug(buf, more)
-}
-
-func (bp *BufferPool) appendStringDebug(buf []byte, more string) []byte {
-	if cap(buf) == 0 {
-		panic("append zero cap buf")
-	}
-	bl := len(buf)
-	total := bl + len(more)
-	if bl < bp.bigSize && total >= bp.bigSize {
-		pbuf := bp.bigPool.Get().(*[]byte)
-		need := total - cap(*pbuf)
-		if need > 0 {
-			*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, need)...)
-		}
-		*pbuf = (*pbuf)[:total]
-		copy(*pbuf, buf)
-		copy((*pbuf)[bl:], more)
-		bp.Free(buf)
-		ptr := getBufferPtr(*pbuf)
-		bp.mux.Lock()
-		defer bp.mux.Unlock()
-		bp.addAllocStack(ptr)
-		return *pbuf
-	}
-
-	oldPtr := getBufferPtr(buf)
-	buf = append(buf, more...)
-	newPtr := getBufferPtr(buf)
-	if newPtr != oldPtr {
-		bp.mux.Lock()
-		defer bp.mux.Unlock()
-		bp.deleteAllocStack(oldPtr)
-		bp.addAllocStack(newPtr)
-	}
-	return buf
-}
-
-// Free .
-func (bp *BufferPool) Free(buf []byte) {
-	size := cap(buf)
-	pool := bp.smallPool
-	if size >= bp.bigSize {
-		pool = bp.bigPool
-	}
-
-	if bp.Debug {
-		bp.mux.Lock()
-		defer bp.mux.Unlock()
-		ptr := getBufferPtr(buf)
-		bp.deleteAllocStack(ptr)
-	}
-
-	pool.Put(&buf)
-}
-
-func (bp *BufferPool) addAllocStack(ptr uintptr) {
-	bp.allocCnt++
-	bp.allocStacks[ptr] = getStack()
-}
-
-func (bp *BufferPool) deleteAllocStack(ptr uintptr) {
-	if _, ok := bp.allocStacks[ptr]; !ok {
-		panic("delete buffer which is not from pool")
-	}
-	bp.freeCnt++
-	delete(bp.allocStacks, ptr)
-}
-
-func (bp *BufferPool) LogDebugInfo() {
-	bp.mux.Lock()
-	defer bp.mux.Unlock()
-	fmt.Println("---------------------------------------------------------")
-	fmt.Println("BufferPool Debug Info:")
-	fmt.Println("---------------------------------------------------------")
-	for ptr, stack := range bp.allocStacks {
-		fmt.Println("ptr:", ptr)
-		fmt.Println("stack:\n", stack)
-		fmt.Println("---------------------------------------------------------")
-	}
-	// fmt.Println("---------------------------------------------------------")
-	// fmt.Println("Free")
-	// for s, n := range bp.freeStacks {
-	// 	fmt.Println("num:", n)
-	// 	fmt.Println("stack:\n", s)
-	// 	totalFree += n
-	// 	fmt.Println("---------------------------------------------------------")
-	// }
-	fmt.Println("Alloc Without Free:", bp.allocCnt-bp.freeCnt)
-	fmt.Println("TotalAlloc        :", bp.allocCnt)
-	fmt.Println("TotalFree         :", bp.freeCnt)
-	fmt.Println("---------------------------------------------------------")
-}
-
-// NativeAllocator definition.
-type NativeAllocator struct{}
-
-// Malloc .
-func (a *NativeAllocator) Malloc(size int) []byte {
-	return make([]byte, size)
-}
-
-// Realloc .
-func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
-	if size <= cap(buf) {
-		return buf[:size]
-	}
-	newBuf := make([]byte, size)
-	copy(newBuf, buf)
-	return newBuf
-}
-
-// Free .
-func (a *NativeAllocator) Free(buf []byte) {
-}
-
-// Malloc exports default package method.
-func Malloc(size int) []byte {
+//go:norace
+func Malloc(size int) *[]byte {
 	return DefaultAllocator.Malloc(size)
 }
 
-// Realloc exports default package method.
-func Realloc(buf []byte, size int) []byte {
-	return DefaultAllocator.Realloc(buf, size)
+//go:norace
+func Realloc(pbuf *[]byte, size int) *[]byte {
+	return DefaultAllocator.Realloc(pbuf, size)
 }
 
-// Append exports default package method.
-func Append(buf []byte, more ...byte) []byte {
-	return DefaultAllocator.Append(buf, more...)
+//go:norace
+func Append(pbuf *[]byte, more ...byte) *[]byte {
+	return DefaultAllocator.Append(pbuf, more...)
 }
 
-// AppendString exports default package method.
-func AppendString(buf []byte, more string) []byte {
-	return DefaultAllocator.AppendString(buf, more)
+//go:norace
+func AppendString(pbuf *[]byte, more string) *[]byte {
+	return DefaultAllocator.AppendString(pbuf, more)
 }
 
-// Free exports default package method.
-func Free(buf []byte) {
-	DefaultAllocator.Free(buf)
+//go:norace
+func Free(pbuf *[]byte) {
+	DefaultAllocator.Free(pbuf)
 }
 
-// SetDebug .
-func SetDebug(enable bool) {
-	bp, ok := DefaultAllocator.(*BufferPool)
-	if ok {
-		bp.Debug = enable
+type sizeMap struct {
+	MallocCount int64 `json:"MallocCount"`
+	FreeCount   int64 `json:"FreeCount"`
+	NeedFree    int64 `json:"NeedFree"`
+}
+
+type debugger struct {
+	mux         sync.Mutex
+	on          bool
+	MallocCount int64            `json:"MallocCount"`
+	FreeCount   int64            `json:"FreeCount"`
+	NeedFree    int64            `json:"NeedFree"`
+	SizeMap     map[int]*sizeMap `json:"SizeMap"`
+}
+
+//go:norace
+func (d *debugger) SetDebug(dbg bool) {
+	d.on = dbg
+}
+
+//go:norace
+func (d *debugger) incrMalloc(pbuf *[]byte) {
+	if d.on {
+		d.incrMallocSlow(pbuf)
 	}
 }
 
-// LogDebugInfo .
-func LogDebugInfo() {
-	bp, ok := DefaultAllocator.(*BufferPool)
-	if ok {
-		bp.LogDebugInfo()
+//go:norace
+func (d *debugger) incrMallocSlow(pbuf *[]byte) {
+	atomic.AddInt64(&d.MallocCount, 1)
+	atomic.AddInt64(&d.NeedFree, 1)
+	size := cap(*pbuf)
+	d.mux.Lock()
+	defer d.mux.Unlock()
+	if d.SizeMap == nil {
+		d.SizeMap = map[int]*sizeMap{}
 	}
-}
-
-func getBufferPtr(buf []byte) uintptr {
-	if cap(buf) == 0 {
-		panic("zero cap buffer")
-	}
-	return uintptr(unsafe.Pointer(&((buf)[:1][0])))
-}
-
-func getStack() string {
-	i := 2
-	str := ""
-	for ; i < 10; i++ {
-		pc, file, line, ok := runtime.Caller(i)
-		if !ok {
-			break
+	if v, ok := d.SizeMap[size]; ok {
+		v.MallocCount++
+		v.NeedFree++
+	} else {
+		d.SizeMap[size] = &sizeMap{
+			MallocCount: 1,
+			NeedFree:    1,
 		}
-		str += fmt.Sprintf("\tstack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
 	}
-	return str
+}
+
+//go:norace
+func (d *debugger) incrFree(pbuf *[]byte) {
+	if d.on {
+		d.incrFreeSlow(pbuf)
+	}
+}
+
+//go:norace
+func (d *debugger) incrFreeSlow(pbuf *[]byte) {
+	atomic.AddInt64(&d.FreeCount, 1)
+	atomic.AddInt64(&d.NeedFree, -1)
+	size := cap(*pbuf)
+	d.mux.Lock()
+	defer d.mux.Unlock()
+	if v, ok := d.SizeMap[size]; ok {
+		v.FreeCount++
+		v.NeedFree--
+	} else {
+		d.SizeMap[size] = &sizeMap{
+			MallocCount: 1,
+			NeedFree:    -1,
+		}
+	}
+}
+
+//go:norace
+func (d *debugger) String() string {
+	if d.on {
+		b, err := json.Marshal(d)
+		if err == nil {
+			return string(b)
+		}
+	}
+	return ""
+}
+
+// MemPool .
+type MemPool struct {
+	*debugger
+	bufSize  int
+	freeSize int
+	pool     *sync.Pool
+}
+
+// New .
+func New(bufSize, freeSize int) Allocator {
+	if bufSize <= 0 {
+		bufSize = 64
+	}
+	if freeSize <= 0 {
+		freeSize = 64 * 1024
+	}
+	if freeSize < bufSize {
+		freeSize = bufSize
+	}
+
+	mp := &MemPool{
+		debugger: &debugger{},
+		bufSize:  bufSize,
+		freeSize: freeSize,
+		pool:     &sync.Pool{},
+		// Debug:       true,
+	}
+	mp.pool.New = func() interface{} {
+		buf := make([]byte, bufSize)
+		return &buf
+	}
+	return mp
+}
+
+// Malloc .
+func (mp *MemPool) Malloc(size int) *[]byte {
+	var ret []byte
+	if size > mp.freeSize {
+		ret = make([]byte, size)
+		mp.incrMalloc(&ret)
+		return &ret
+	}
+	pbuf := mp.pool.Get().(*[]byte)
+	n := cap(*pbuf)
+	if n < size {
+		*pbuf = append((*pbuf)[:n], make([]byte, size-n)...)
+	}
+	(*pbuf) = (*pbuf)[:size]
+	mp.incrMalloc(pbuf)
+	return pbuf
+}
+
+// Realloc .
+func (mp *MemPool) Realloc(pbuf *[]byte, size int) *[]byte {
+	if size <= cap(*pbuf) {
+		*pbuf = (*pbuf)[:size]
+		return pbuf
+	}
+
+	if cap(*pbuf) < mp.freeSize {
+		newBufPtr := mp.pool.Get().(*[]byte)
+		n := cap(*newBufPtr)
+		if n < size {
+			*newBufPtr = append((*newBufPtr)[:n], make([]byte, size-n)...)
+		}
+		*newBufPtr = (*newBufPtr)[:size]
+		copy(*newBufPtr, *pbuf)
+		mp.Free(pbuf)
+		return newBufPtr
+	}
+	*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, size-cap(*pbuf))...)[:size]
+	return pbuf
+}
+
+// Append .
+func (mp *MemPool) Append(pbuf *[]byte, more ...byte) *[]byte {
+	*pbuf = append(*pbuf, more...)
+	return pbuf
+}
+
+// AppendString .
+func (mp *MemPool) AppendString(pbuf *[]byte, more string) *[]byte {
+	*pbuf = append(*pbuf, more...)
+	return pbuf
+}
+
+// Free .
+func (mp *MemPool) Free(pbuf *[]byte) {
+	if pbuf != nil && cap(*pbuf) > 0 {
+		mp.incrFree(pbuf)
+		if cap(*pbuf) > mp.freeSize {
+			return
+		}
+		mp.pool.Put(pbuf)
+	}
 }

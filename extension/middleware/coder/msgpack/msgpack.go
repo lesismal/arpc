@@ -23,7 +23,8 @@ func (mp *MsgPack) Encode(client *arpc.Client, msg *arpc.Message) *arpc.Message 
 	data, err := msgpack.Marshal(&v)
 	if err == nil {
 		ml := msg.MethodLen()
-		msg.Buffer = append(msg.Buffer[:arpc.HeadLen+ml], data...)
+		*msg.PBuffer = (*msg.PBuffer)[:arpc.HeadLen+ml]
+		msg.PBuffer = msg.Handler().Append(msg.PBuffer, data...)
 		msg.SetBodyLen(ml + len(data))
 	} else {
 		// some error log
@@ -40,7 +41,8 @@ func (mp *MsgPack) Decode(client *arpc.Client, msg *arpc.Message) *arpc.Message 
 	err := msgpack.Unmarshal(msg.Data(), v)
 	if err == nil {
 		ml := msg.MethodLen()
-		msg.Buffer = append(msg.Buffer[:arpc.HeadLen+ml], v.Body...)
+		*msg.PBuffer = (*msg.PBuffer)[:arpc.HeadLen+ml]
+		msg.PBuffer = msg.Handler().Append(msg.PBuffer, v.Body...)
 		msg.SetBodyLen(ml + len(v.Body))
 		for k, v := range v.Values {
 			msg.Set(k, v)

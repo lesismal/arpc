@@ -221,19 +221,19 @@ type Handler interface {
 	OnMessage(c *Client, m *Message)
 
 	// Malloc makes a buffer by size.
-	Malloc(size int) []byte
+	Malloc(size int) *[]byte
 	// HandleMalloc registers buffer maker.
-	HandleMalloc(f func(size int) []byte)
+	HandleMalloc(f func(size int) *[]byte)
 
 	// Append append bytes to buffer.
-	Append(b []byte, more ...byte) []byte
+	Append(pb *[]byte, more ...byte) *[]byte
 	// HandleAppend registers buffer appender.
-	HandleAppend(f func(b []byte, more ...byte) []byte)
+	HandleAppend(f func(pb *[]byte, more ...byte) *[]byte)
 
 	// Free release a buffer.
-	Free([]byte)
+	Free(*[]byte)
 	// HandleFree registers buffer releaser.
-	HandleFree(f func(buf []byte))
+	HandleFree(f func(pb *[]byte))
 
 	// EnablePool registers handlers for pool operation for Context and Message and Message.Buffer
 	EnablePool(enable bool)
@@ -247,7 +247,7 @@ type Handler interface {
 
 	// NewMessageWithBuffer creates a message with the buffer and manage the message by the pool.
 	// The buffer arg should be managed by a pool if EnablePool(true) .
-	NewMessageWithBuffer(buffer []byte) *Message
+	NewMessageWithBuffer(pb *[]byte) *Message
 
 	// SetAsyncExecutor sets executor.
 	SetAsyncExecutor(executor func(f func()))
@@ -281,9 +281,9 @@ type handler struct {
 
 	beforeRecv func(net.Conn) error
 	beforeSend func(net.Conn) error
-	malloc     func(int) []byte
-	append     func([]byte, ...byte) []byte
-	free       func([]byte)
+	malloc     func(int) *[]byte
+	append     func(*[]byte, ...byte) *[]byte
+	free       func(*[]byte)
 
 	wrapReader func(conn net.Conn) io.Reader
 
@@ -672,7 +672,7 @@ func (h *handler) Recv(c *Client) (*Message, error) {
 	}
 
 	if message.Len() >= HeadLen {
-		_, err = io.ReadFull(c.Reader, message.Buffer[HeaderIndexBodyLenEnd:])
+		_, err = io.ReadFull(c.Reader, (*message.PBuffer)[HeaderIndexBodyLenEnd:])
 	}
 
 	return message, err
@@ -815,35 +815,41 @@ func (h *handler) OnMessage(c *Client, msg *Message) {
 	}
 }
 
-func (h *handler) Malloc(size int) []byte {
+func (h *handler) Malloc(size int) *[]byte {
 	if h.malloc != nil {
 		return h.malloc(size)
 	}
-	return make([]byte, size)
+	b := make([]byte, size)
+	return &b
 }
 
-func (h *handler) HandleMalloc(f func(int) []byte) {
+func (h *handler) HandleMalloc(f func(int) *[]byte) {
 	h.malloc = f
 }
 
-func (h *handler) Append(b []byte, more ...byte) []byte {
+func (h *handler) Append(pb *[]byte, more ...byte) *[]byte {
 	if h.append != nil {
-		return h.append(b, more...)
+		return h.append(pb, more...)
 	}
-	return append(b, more...)
+	if pb != nil {
+		b := append(*pb, more...)
+		return &b
+	}
+	b := append([]byte{}, more...)
+	return &b
 }
 
-func (h *handler) HandleAppend(f func(b []byte, more ...byte) []byte) {
+func (h *handler) HandleAppend(f func(b *[]byte, more ...byte) *[]byte) {
 	h.append = f
 }
 
-func (h *handler) Free(b []byte) {
+func (h *handler) Free(pb *[]byte) {
 	if h.free != nil {
-		h.free(b)
+		h.free(pb)
 	}
 }
 
-func (h *handler) HandleFree(f func([]byte)) {
+func (h *handler) HandleFree(f func(*[]byte)) {
 	h.free = f
 }
 
@@ -859,13 +865,19 @@ func (h *handler) EnablePool(enable bool) {
 			m.Release()
 		})
 	} else {
-		h.HandleMalloc(func(size int) []byte {
-			return make([]byte, size)
+		h.HandleMalloc(func(size int) *[]byte {
+			b := make([]byte, size)
+			return &b
 		})
-		h.HandleAppend(func(b []byte, more ...byte) []byte {
-			return append(b, more...)
+		h.HandleAppend(func(pb *[]byte, more ...byte) *[]byte {
+			if pb != nil {
+				b := append(*pb, more...)
+				return &b
+			}
+			b := append([]byte{}, more...)
+			return &b
 		})
-		h.HandleFree(func(buf []byte) {})
+		h.HandleFree(func(pb *[]byte) {})
 		h.HandleContextDone(func(ctx *Context) {})
 		h.HandleMessageDone(func(c *Client, m *Message) {})
 	}
@@ -890,9 +902,9 @@ func (h *handler) NewMessage(cmd byte, method string, v interface{}, isError boo
 	return newMessage(cmd, method, v, false, false, seq, h, codec, values)
 }
 
-func (h *handler) NewMessageWithBuffer(buffer []byte) *Message {
+func (h *handler) NewMessageWithBuffer(pb *[]byte) *Message {
 	msg := messagePool.Get().(*Message)
-	msg.Buffer = buffer
+	msg.PBuffer = pb
 	msg.handler = h
 	return msg
 }
@@ -1113,12 +1125,12 @@ func HandleNotFound(h HandlerFunc) {
 }
 
 // HandleMalloc registers default buffer maker.
-func HandleMalloc(f func(int) []byte) {
+func HandleMalloc(f func(int) *[]byte) {
 	DefaultHandler.HandleMalloc(f)
 }
 
 // HandleFree registers buffer releaser.
-func HandleFree(f func([]byte)) {
+func HandleFree(f func(*[]byte)) {
 	DefaultHandler.HandleFree(f)
 }
 
