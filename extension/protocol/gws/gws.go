@@ -1,0 +1,181 @@
+// Copyright 2020 lesismal. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
+package gws
+
+import (
+	"errors"
+	"github.com/lxzan/gws"
+	"io"
+	"net"
+	"net/http"
+	"sync/atomic"
+	"time"
+)
+
+var (
+	// ErrClosed .
+	ErrClosed = errors.New("websocket listener closed")
+	// ErrInvalidMessage .
+	ErrInvalidMessage = errors.New("invalid message")
+	// ErrInvalidMessageType .
+	ErrInvalidMessageType = errors.New("invalid message type")
+)
+
+func getPipeReader(socket *gws.Conn) io.ReadCloser {
+	pr, _ := socket.Session().Load("pr")
+	return pr.(io.ReadCloser)
+}
+
+func getPipeWriter(socket *gws.Conn) io.WriteCloser {
+	pw, _ := socket.Session().Load("pw")
+	return pw.(io.WriteCloser)
+}
+
+// Listener .
+type Listener struct {
+	gws.BuiltinEventHandler
+	addr     net.Addr
+	upgrader *gws.Upgrader
+	chAccept chan net.Conn
+	chClose  chan struct{}
+	closed   uint32
+}
+
+// Handler .
+func (ln *Listener) Handler(w http.ResponseWriter, r *http.Request) {
+	c, err := ln.upgrader.Upgrade(w, r)
+	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	go c.ReadLoop()
+	wsc := &Conn{Conn: c, chHandler: make(chan func(), 1)}
+	select {
+	case ln.chAccept <- wsc:
+	case <-ln.chClose:
+		_ = c.WriteClose(100, nil)
+	}
+}
+
+// Close .
+func (ln *Listener) Close() error {
+	if atomic.CompareAndSwapUint32(&ln.closed, 0, 1) {
+		close(ln.chClose)
+	}
+	return nil
+}
+
+// Addr .
+func (ln *Listener) Addr() net.Addr {
+	return ln.addr
+}
+
+// Accept .
+func (ln *Listener) Accept() (net.Conn, error) {
+	select {
+	case c := <-ln.chAccept:
+		return c, nil
+	case <-ln.chClose:
+	}
+	return nil, ErrClosed
+}
+
+type eventHandler struct {
+	gws.BuiltinEventHandler
+}
+
+func (e *eventHandler) OnOpen(socket *gws.Conn) {
+	pr, pw := io.Pipe()
+	socket.Session().Store("pr", pr)
+	socket.Session().Store("pw", pw)
+}
+
+func (e *eventHandler) OnClose(socket *gws.Conn, err error) {
+	pr := getPipeReader(socket)
+	pw := getPipeWriter(socket)
+	_ = pr.Close()
+	_ = pw.Close()
+}
+
+func (e *eventHandler) OnMessage(socket *gws.Conn, message *gws.Message) {
+	defer message.Close()
+	pw := getPipeWriter(socket)
+	_, _ = pw.Write(message.Bytes())
+}
+
+// Conn wraps websocket.Conn to net.Conn
+type Conn struct {
+	*gws.Conn
+	chHandler chan func()
+	buffer    []byte
+}
+
+func (c *Conn) Close() error {
+	return c.WriteClose(1000, nil)
+}
+
+// HandleWebsocket .
+func (c *Conn) HandleWebsocket(handler func()) {
+	select {
+	case c.chHandler <- handler:
+	default:
+	}
+}
+
+// Read .
+func (c *Conn) Read(b []byte) (int, error) {
+	pr := getPipeReader(c.Conn)
+	return pr.Read(b)
+}
+
+// Write .
+func (c *Conn) Write(b []byte) (int, error) {
+	err := c.WriteMessage(gws.OpcodeBinary, b)
+	if err == nil {
+		return len(b), nil
+	}
+	return 0, err
+}
+
+// SetDeadline .
+func (c *Conn) SetDeadline(t time.Time) error {
+	err := c.SetReadDeadline(t)
+	if err != nil {
+		return err
+	}
+	return c.SetWriteDeadline(t)
+}
+
+// Listen wraps websocket listen
+func Listen(addr string, option *gws.ServerOption) (net.Listener, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	ln := &Listener{
+		addr:     tcpAddr,
+		upgrader: gws.NewUpgrader(&eventHandler{}, option),
+		chAccept: make(chan net.Conn, 4096),
+		chClose:  make(chan struct{}),
+	}
+	return ln, nil
+}
+
+// Dial wraps websocket dial
+//func Dial(url string, args ...interface{}) (net.Conn, error) {
+//	dialer := websocket.DefaultDialer
+//	if len(args) > 0 {
+//		d, ok := args[0].(*websocket.Dialer)
+//		if ok {
+//			dialer = d
+//		}
+//	}
+//	c, _, err := dialer.Dial(url, nil)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return &Conn{Conn: c}, nil
+//}
