@@ -477,7 +477,7 @@ arpc.DefaultHandler.SetSendQueueSize(4096)
 
 ## Web Chat Examples
 
-- See [webchat](https://github.com/lesismal/arpc/tree/master/examples/webchat)
+- See [webchat](https://github.com/lesismal/arpcex/tree/master/examples/webchat)
 
 
 ## Pub/Sub Examples
