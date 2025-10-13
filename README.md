@@ -104,7 +104,7 @@ import "github.com/lesismal/arpc"
 
 ## Quick Start
  
-- start a [server](https://github.com/lesismal/arpc/blob/master/examples/rpc/server/server.go)
+- start a [server](https://github.com/lesismal/arpcex/blob/master/examples/rpc/server/server.go)
 
 ```go
 package main
@@ -126,7 +126,7 @@ func main() {
 }
 ```
 
-- start a [client](https://github.com/lesismal/arpc/blob/master/examples/rpc/client/client.go)
+- start a [client](https://github.com/lesismal/arpcex/blob/master/examples/rpc/client/client.go)
 
 ```go
 package main
@@ -299,7 +299,7 @@ go func() {
 
 ### Broadcast - Notify
 
-- for more details:	[**server**](https://github.com/lesismal/arpc/blob/master/examples/broadcast/server/server.go) [**client**](https://github.com/lesismal/arpc/blob/master/examples/broadcast/client/client.go)
+- for more details:	[**server**](https://github.com/lesismal/arpcex/blob/master/examples/broadcast/server/server.go) [**client**](https://github.com/lesismal/arpcex/blob/master/examples/broadcast/client/client.go)
 
 ```golang
 var mux = sync.RWMutex{}
@@ -473,7 +473,7 @@ arpc.DefaultHandler.SetSendQueueSize(4096)
 
 ## JS Client 
 
-- See [arpc.js](https://github.com/lesismal/arpc/blob/master/extension/jsclient/arpc.js)
+- See [arpc.js](https://github.com/lesismal/arpcex/blob/master/extension/jsclient/arpc.js)
 
 ## Web Chat Examples
 
