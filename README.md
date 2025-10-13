@@ -597,4 +597,4 @@ func main() {
 
 ## More Examples
 
-- See [examples](https://github.com/lesismal/arpc/tree/master/examples)
+- See [examples](https://github.com/lesismal/arpcex/tree/master/examples)
