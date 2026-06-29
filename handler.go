@@ -227,9 +227,16 @@ type Handler interface {
 	// with the route name in the "Service.Method" form: m + "." + the first
 	// method's name (or just the method's name when m is empty).
 	//
-	// A first method whose "Binding" pair is missing or is not an
-	// arpc.HandlerFunc is skipped. If no eligible method pair is found on h,
-	// Register panics.
+	// A first method that has no valid "Binding" pair is registered standalone,
+	// under its own name(in the same "Service.Method" form), using an
+	// auto-generated handler that news the request/response, binds the request,
+	// calls the method and writes the response.
+	//
+	// Any other exported method that is itself of arpc.HandlerFunc type
+	// (func(*arpc.Context)) but is not the "Binding" half of an eligible pair is
+	// also registered standalone, under its own name.
+	//
+	// If no method is registered, Register panics.
 	//
 	// It returns any error encountered during registration.
 	Register(m string, h interface{}) error
@@ -600,7 +607,6 @@ func (h *handler) Handle(method string, cb HandlerFunc, args ...interface{}) {
 
 var (
 	typeContext     = reflect.TypeOf((*context.Context)(nil)).Elem()
-	typeArpcContext = reflect.TypeOf((*Context)(nil))
 	typeHandlerFunc = reflect.TypeOf(HandlerFunc(nil))
 )
 
@@ -615,6 +621,19 @@ func (h *handler) Register(m string, h2 interface{}) error {
 	hv := reflect.ValueOf(h2)
 	ht := hv.Type()
 
+	// route builds the "Service.Method" route name, or just the method name
+	// when the service name m is empty.
+	route := func(name string) string {
+		if m == "" {
+			return name
+		}
+		return m + "." + name
+	}
+
+	// First pass: find eligible first/Binding method pairs. The Binding method
+	// of each pair is registered under the first method's name, and is recorded
+	// in paired so that it is not also registered standalone in the second pass.
+	paired := map[string]bool{}
 	registered := 0
 	for i := 0; i < ht.NumMethod(); i++ {
 		method := ht.Method(i)
@@ -639,29 +658,49 @@ func (h *handler) Register(m string, h2 interface{}) error {
 			continue
 		}
 
-		// Find the paired second method: Name + "Binding". If it is missing
-		// or is not an arpc.HandlerFunc, the method is not part of an eligible
-		// pair and is simply skipped.
+		// Find the paired second method: Name + "Binding".
 		bindingName := method.Name + bindingSuffix
 		bindingVal := hv.MethodByName(bindingName)
-		if !bindingVal.IsValid() || !bindingVal.Type().ConvertibleTo(typeHandlerFunc) {
+		if bindingVal.IsValid() && bindingVal.Type().ConvertibleTo(typeHandlerFunc) {
+			// Eligible pair: register the Binding method under the first
+			// method's name, and record it so it is not registered standalone.
+			cb := bindingVal.Convert(typeHandlerFunc).Interface().(HandlerFunc)
+			h.Handle(route(method.Name), cb)
+			paired[bindingName] = true
+			registered++
 			continue
 		}
 
-		// The route name is in the "Service.Method" form, with m as the
-		// service name and the first method's name as the method name.
-		route := method.Name
-		if m != "" {
-			route = m + "." + method.Name
+		// No valid Binding pair: register the first method standalone with an
+		// auto-generated handler that news the req/rsp, binds the request, calls
+		// the method and writes the response.
+		h.Handle(route(method.Name), newStructHandler(hv.Method(i), mt.In(2), mt.In(3)))
+		registered++
+	}
+
+	// Second pass: register the remaining arpc.HandlerFunc methods standalone,
+	// under their own name. A HandlerFunc method that was already consumed as
+	// the Binding of a pair in the first pass is skipped.
+	for i := 0; i < ht.NumMethod(); i++ {
+		method := ht.Method(i)
+		if method.PkgPath != "" || paired[method.Name] {
+			continue
 		}
 
-		cb := bindingVal.Convert(typeHandlerFunc).Interface().(HandlerFunc)
-		h.Handle(route, cb)
+		// A standalone handler is a method whose bound value(receiver already
+		// bound) is convertible to arpc.HandlerFunc, i.e. func(*arpc.Context).
+		mv := hv.Method(i)
+		if !mv.Type().ConvertibleTo(typeHandlerFunc) {
+			continue
+		}
+
+		cb := mv.Convert(typeHandlerFunc).Interface().(HandlerFunc)
+		h.Handle(route(method.Name), cb)
 		registered++
 	}
 
 	if registered == 0 {
-		panic(fmt.Errorf("arpc: Register: no eligible method pair found on %v", ht))
+		panic(fmt.Errorf("arpc: Register: no eligible method found on %v", ht))
 	}
 
 	return nil
@@ -670,6 +709,25 @@ func (h *handler) Register(m string, h2 interface{}) error {
 // isStructPtr reports whether t is a pointer to a struct.
 func isStructPtr(t reflect.Type) bool {
 	return t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct
+}
+
+// newStructHandler builds a HandlerFunc for a first-method-typed method that
+// has no paired "Binding" method. fn is the bound method value with signature
+// func(context.Context, reqType, rspType); reqType and rspType are pointers to
+// structs. The returned handler news the request/response values, binds the
+// request, calls the method(passing the arpc.Context as the context.Context),
+// then writes the response.
+func newStructHandler(fn reflect.Value, reqType, rspType reflect.Type) HandlerFunc {
+	return func(ctx *Context) {
+		req := reflect.New(reqType.Elem())
+		if err := ctx.Bind(req.Interface()); err != nil {
+			ctx.Error(err)
+			return
+		}
+		rsp := reflect.New(rspType.Elem())
+		fn.Call([]reflect.Value{reflect.ValueOf(ctx), req, rsp})
+		ctx.Write(rsp.Interface())
+	}
 }
 
 func (h *handler) HandleNotFound(cb HandlerFunc) {

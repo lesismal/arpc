@@ -32,6 +32,7 @@
 	- [Quick Start](#quick-start)
 	- [API Examples](#api-examples)
 		- [Register Routers](#register-routers)
+		- [Register Service Methods](#register-service-methods)
 		- [Router Middleware](#router-middleware)
 		- [Coder Middleware](#coder-middleware)
 		- [Client Call, CallAsync, Notify](#client-call-callasync-notify)
@@ -182,6 +183,92 @@ handler.Handle("/route2", func(ctx *arpc.Context) { ... })
 // this make message handled by a new goroutine
 async := true
 handler.Handle("/asyncResponse", func(ctx *arpc.Context) { ... }, async)
+```
+
+### Register Service Methods
+
+Instead of registering each route by hand, `handler.Register(m, svc)` reflects
+over the struct value `svc` and registers all of its eligible methods at once,
+each under the `"Service.Method"` route name `m + "." + <MethodName>` (or just
+`<MethodName>` when `m` is empty). If no method is registered, `Register` panics.
+
+There are two method shapes that `Register` recognizes:
+
+- **The first shape**(a typed request/response method): an exported method with
+  the signature `func(ctx context.Context, req *Request, rsp *Response)` and no
+  return values, where `req`/`rsp` are pointers to structs.
+- **The second shape**(an `arpc.HandlerFunc` method): an exported method of type
+  `func(*arpc.Context)`.
+
+`Register` handles three cases, summarized here and shown in the examples below:
+
+| Case | Methods on the struct | Registered handler | Reflection at call time? | Performance |
+| ---- | --------------------- | ------------------ | ------------------------ | ----------- |
+| 1. First shape alone | `Foo(ctx, req, rsp)` only | an **auto-generated** handler that news `req`/`rsp`, binds the request, calls `Foo`, then writes the response | **Yes** — `reflect.New` + `reflect.Value.Call` on every request | Slower |
+| 2. Second shape alone | `Bar(ctx *arpc.Context)` only (any name, it does **not** have to end with `Binding`) | the method itself | **No** — a plain function call | Fast |
+| 3. Both, paired | `Foo(ctx, req, rsp)` + `FooBinding(ctx *arpc.Context)` | the `FooBinding` method, registered under the route name `Foo` | **No** — a plain function call | Fast |
+
+> Note: `Register` always uses reflection while **registering**(a one-time cost
+> at startup). The table above is about the **call-time / per-request** path:
+> only case 1's auto-generated handler keeps using reflection on every request,
+> so prefer case 2 or case 3 on hot paths.
+
+In case 3 the two methods must be paired by name: the second method is named
+`<FirstMethodName>Binding`. It is registered under the first method's name, and
+lets you write the binding/response logic yourself instead of relying on the
+reflection-based auto-generated handler.
+
+```golang
+type Echo struct{}
+
+type EchoReq struct{ Message string }
+type EchoRsp struct{ Message string }
+
+// Case 1: first shape alone(no "HelloBinding"). Register auto-generates a
+// reflection-based handler that binds the request, calls Hello and writes the
+// response, registered as "Echo.Hello".
+func (e *Echo) Hello(ctx context.Context, req *EchoReq, rsp *EchoRsp) {
+	rsp.Message = "hello, " + req.Message
+}
+
+// Case 2: second shape alone. A plain arpc.HandlerFunc method, registered as
+// "Echo.Ping". The name need not end with "Binding".
+func (e *Echo) Ping(ctx *arpc.Context) {
+	ctx.Write("pong")
+}
+
+// Case 3: paired. Say is the first shape, SayBinding is the second shape named
+// after it. SayBinding is registered under the first method's name "Echo.Say",
+// and the call path is a plain function call(no reflection).
+// arpc.Context implements context.Context, so it can be passed through directly.
+func (e *Echo) Say(ctx context.Context, req *EchoReq, rsp *EchoRsp) {
+	rsp.Message = req.Message
+}
+func (e *Echo) SayBinding(ctx *arpc.Context) {
+	req := &EchoReq{}
+	rsp := &EchoRsp{}
+	if err := ctx.Bind(req); err != nil {
+		ctx.Error(err)
+		return
+	}
+	e.Say(ctx, req, rsp)
+	ctx.Write(rsp)
+}
+
+var handler arpc.Handler
+
+// package
+handler = arpc.DefaultHandler
+// server
+handler = server.Handler
+// client
+handler = client.Handler
+
+// registers "Echo.Hello"(case 1, auto-generated), "Echo.Ping"(case 2) and
+// "Echo.Say"(case 3, via SayBinding)
+if err := handler.Register("Echo", &Echo{}); err != nil {
+	log.Fatal(err)
+}
 ```
 
 ### Router Middleware
