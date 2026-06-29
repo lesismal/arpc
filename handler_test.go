@@ -5,6 +5,7 @@
 package arpc
 
 import (
+	"context"
 	"io"
 	"net"
 	"testing"
@@ -137,6 +138,123 @@ func Test_handler_SetSendQueueSize(t *testing.T) {
 
 func Test_handler_Handle(t *testing.T) {
 	DefaultHandler.Handle("/hello", func(*Context) {})
+}
+
+type registerReq struct{ A int }
+type registerRsp struct{ B int }
+
+// registerService holds several methods used to exercise Register:
+//   - Add/AddBinding   : an eligible pair, should be registered.
+//   - Sub              : matching signature but no Binding pair, should be skipped.
+//   - Mul/MulBinding   : matching signature but Binding is not a HandlerFunc, skipped.
+//   - Helper           : not a request/response method, ignored.
+//   - lower/lowerBinding: unexported, ignored.
+type registerService struct {
+	addCalled bool
+}
+
+func (s *registerService) Add(ctx context.Context, req *registerReq, rsp *registerRsp) {
+	s.addCalled = true
+	rsp.B = req.A + 1
+}
+
+func (s *registerService) AddBinding(ctx *Context) {
+	req := &registerReq{A: 1}
+	rsp := &registerRsp{}
+	s.Add(context.Background(), req, rsp)
+}
+
+// Sub has the right signature but no SubBinding pair: must be skipped.
+func (s *registerService) Sub(ctx context.Context, req *registerReq, rsp *registerRsp) {}
+
+// Mul has the right signature, but MulBinding is not an arpc.HandlerFunc: skipped.
+func (s *registerService) Mul(ctx context.Context, req *registerReq, rsp *registerRsp) {}
+func (s *registerService) MulBinding(ctx *Context) error                               { return nil }
+
+// Helper is not a request/response method and must be ignored.
+func (s *registerService) Helper() {}
+
+func Test_handler_Register(t *testing.T) {
+	h := NewHandler().(*handler)
+	svc := &registerService{}
+
+	if err := h.Register("Svc", svc); err != nil {
+		t.Fatalf("handler.Register() error = %v", err)
+	}
+
+	// Only the Add/AddBinding pair should have been registered, using the
+	// "Service.Method" route name.
+	if _, ok := h.routes["Svc.Add"]; !ok {
+		t.Fatalf("route %q not registered, routes = %v", "Svc.Add", h.routes)
+	}
+	if _, ok := h.routes["Svc.Sub"]; ok {
+		t.Errorf("route %q should be skipped(no Binding pair)", "Svc.Sub")
+	}
+	if _, ok := h.routes["Svc.Mul"]; ok {
+		t.Errorf("route %q should be skipped(Binding is not a HandlerFunc)", "Svc.Mul")
+	}
+	if _, ok := h.routes["Svc.Helper"]; ok {
+		t.Errorf("route %q should not be registered", "Svc.Helper")
+	}
+	// routes always contains the reserved "" entry, plus the single Svc.Add.
+	if len(h.routes) != 2 {
+		t.Errorf("unexpected registered route count = %v, want %v, routes = %v", len(h.routes), 2, h.routes)
+	}
+
+	// The registered binding callback should invoke the first method.
+	rh, ok := h.routes["Svc.Add"]
+	if !ok {
+		t.Fatalf("route %q not registered", "Svc.Add")
+	}
+	rh.handlers[len(rh.handlers)-1](&Context{})
+	if !svc.addCalled {
+		t.Errorf("registered binding did not call the first method")
+	}
+}
+
+func Test_handler_Register_EmptyService(t *testing.T) {
+	h := NewHandler().(*handler)
+	if err := h.Register("", &registerService{}); err != nil {
+		t.Fatalf("handler.Register() error = %v", err)
+	}
+	// With an empty service name the route is just the method name.
+	if _, ok := h.routes["Add"]; !ok {
+		t.Fatalf("route %q not registered, routes = %v", "Add", h.routes)
+	}
+}
+
+// noPairService has no eligible method pair at all.
+type noPairService struct{}
+
+func (s *noPairService) Foo()      {}
+func (s *noPairService) Bar(x int) {}
+
+func Test_handler_Register_NoPairPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("handler.Register() should panic when no eligible method pair is found")
+		}
+	}()
+	NewHandler().(*handler).Register("", &noPairService{})
+}
+
+func Test_handler_Register_Nil(t *testing.T) {
+	if err := NewHandler().(*handler).Register("", nil); err == nil {
+		t.Errorf("handler.Register(nil) should return an error")
+	}
+}
+
+func TestRegister(t *testing.T) {
+	d := DefaultHandler
+	SetHandler(NewHandler())
+	defer SetHandler(d)
+
+	if err := Register("Svc", &registerService{}); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if _, ok := DefaultHandler.(*handler).routes["Svc.Add"]; !ok {
+		t.Errorf("route %q not registered via package-level Register", "Svc.Add")
+	}
 }
 
 func TestNewHandler(t *testing.T) {

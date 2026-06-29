@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -209,6 +211,28 @@ type Handler interface {
 	// If pass a Boolean value of "true", the handler will be called asynchronously in a new goroutine,
 	// Else the handler will be called synchronously in the client's reading goroutine one by one.
 	Handle(m string, h HandlerFunc, args ...interface{})
+
+	// Register registers all the eligible method pairs of a struct value h
+	// as method/router handlers, using m as the service name.
+	//
+	// For each eligible pair of methods on h:
+	//   - The first method must be exported and have the signature:
+	//       func (ctx context.Context, req *Request, rsp *Response)
+	//     with no return values, where req and rsp are pointers to structs.
+	//   - The second method must be named as the first method's name plus the
+	//     "Binding" suffix, and must be of arpc.HandlerFunc type. It is expected
+	//     to new the request/response pointers and call the first method.
+	//
+	// The second method(the "Binding" one) of each eligible pair is registered
+	// with the route name in the "Service.Method" form: m + "." + the first
+	// method's name (or just the method's name when m is empty).
+	//
+	// A first method whose "Binding" pair is missing or is not an
+	// arpc.HandlerFunc is skipped. If no eligible method pair is found on h,
+	// Register panics.
+	//
+	// It returns any error encountered during registration.
+	Register(m string, h interface{}) error
 
 	// HandleNotFound registers "" method/router handler,
 	// It will be called when mothod/router is not found.
@@ -572,6 +596,80 @@ func (h *handler) Handle(method string, cb HandlerFunc, args ...interface{}) {
 		panic(fmt.Errorf("empty('') method is reserved for [method not found], should use HandleNotFound to register '' handler"))
 	}
 	h.handle(method, cb, args...)
+}
+
+var (
+	typeContext     = reflect.TypeOf((*context.Context)(nil)).Elem()
+	typeArpcContext = reflect.TypeOf((*Context)(nil))
+	typeHandlerFunc = reflect.TypeOf(HandlerFunc(nil))
+)
+
+// bindingSuffix is the suffix of the second method's name in an eligible pair.
+const bindingSuffix = "Binding"
+
+func (h *handler) Register(m string, h2 interface{}) error {
+	if h2 == nil {
+		return fmt.Errorf("arpc: Register: nil handler")
+	}
+
+	hv := reflect.ValueOf(h2)
+	ht := hv.Type()
+
+	registered := 0
+	for i := 0; i < ht.NumMethod(); i++ {
+		method := ht.Method(i)
+
+		// Only consider exported methods, and skip the "Binding" methods
+		// themselves so that they are not treated as a first method.
+		if method.PkgPath != "" || strings.HasSuffix(method.Name, bindingSuffix) {
+			continue
+		}
+
+		// Check the first method's signature:
+		//   func (receiver) Name(ctx context.Context, req *struct, rsp *struct)
+		// mt.In(0) is the receiver, so there are 4 input params and no output.
+		mt := method.Type
+		if mt.NumIn() != 4 || mt.NumOut() != 0 {
+			continue
+		}
+		if mt.In(1) != typeContext {
+			continue
+		}
+		if !isStructPtr(mt.In(2)) || !isStructPtr(mt.In(3)) {
+			continue
+		}
+
+		// Find the paired second method: Name + "Binding". If it is missing
+		// or is not an arpc.HandlerFunc, the method is not part of an eligible
+		// pair and is simply skipped.
+		bindingName := method.Name + bindingSuffix
+		bindingVal := hv.MethodByName(bindingName)
+		if !bindingVal.IsValid() || !bindingVal.Type().ConvertibleTo(typeHandlerFunc) {
+			continue
+		}
+
+		// The route name is in the "Service.Method" form, with m as the
+		// service name and the first method's name as the method name.
+		route := method.Name
+		if m != "" {
+			route = m + "." + method.Name
+		}
+
+		cb := bindingVal.Convert(typeHandlerFunc).Interface().(HandlerFunc)
+		h.Handle(route, cb)
+		registered++
+	}
+
+	if registered == 0 {
+		panic(fmt.Errorf("arpc: Register: no eligible method pair found on %v", ht))
+	}
+
+	return nil
+}
+
+// isStructPtr reports whether t is a pointer to a struct.
+func isStructPtr(t reflect.Type) bool {
+	return t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct
 }
 
 func (h *handler) HandleNotFound(cb HandlerFunc) {
@@ -1104,6 +1202,14 @@ func UseCoder(coder MessageCoder) {
 // Else the handler will be called synchronously in the client's reading goroutine one by one.
 func Handle(m string, h HandlerFunc, args ...interface{}) {
 	DefaultHandler.Handle(m, h, args...)
+}
+
+// Register registers all the eligible method pairs of the struct value h
+// to the DefaultHandler, using m as the route name prefix.
+//
+// See Handler.Register for the method pair conventions.
+func Register(m string, h interface{}) error {
+	return DefaultHandler.Register(m, h)
 }
 
 // HandleNotFound registers default "" method/router handler,
