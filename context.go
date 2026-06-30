@@ -122,7 +122,7 @@ func (ctx *Context) Next() {
 
 // Abort stops the one-by-one-calling of middlewares and method/router handler.
 func (ctx *Context) Abort() {
-	ctx.index = int(math.MaxInt8)
+	ctx.index = math.MaxInt
 }
 
 // Deadline implements stdlib's Context.
