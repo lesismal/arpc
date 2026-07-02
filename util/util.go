@@ -79,6 +79,44 @@ func ValueToBytes(codec acodec.Codec, v interface{}) []byte {
 	return data
 }
 
+// ValueToBytesOwned converts values to []byte and reports whether the returned
+// slice is safe to hold across an asynchronous send without copying.
+//
+// owned is true when the bytes are either freshly allocated by the codec, or
+// alias an immutable string backing (string/error), both of which cannot be
+// mutated by the caller after this call. owned is false only for []byte/*[]byte
+// inputs, whose contents the caller may mutate; callers that keep the slice
+// beyond the call (e.g. the writev queue) must copy it into their own buffer.
+func ValueToBytesOwned(codec acodec.Codec, v interface{}) (data []byte, owned bool) {
+	if v == nil {
+		return nil, true
+	}
+	var err error
+	switch vt := v.(type) {
+	case []byte:
+		return vt, false
+	case *[]byte:
+		return *vt, false
+	case string:
+		return StrToBytes(vt), true
+	case *string:
+		return StrToBytes(*vt), true
+	case error:
+		return StrToBytes(vt.Error()), true
+	case *error:
+		return StrToBytes((*vt).Error()), true
+	default:
+		if codec == nil {
+			codec = acodec.DefaultCodec
+		}
+		data, err = codec.Marshal(vt)
+		if err != nil {
+			log.Error("ValueToBytesOwned: %v", err)
+		}
+		return data, true
+	}
+}
+
 // BytesToValue converts []byte to values
 func BytesToValue(codec acodec.Codec, data []byte, v interface{}) error {
 	var err error

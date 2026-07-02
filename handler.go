@@ -143,6 +143,14 @@ type Handler interface {
 	// SetAsyncWrite sets AsyncWrite flag.
 	SetAsyncWrite(async bool)
 
+	// AsyncWritev returns AsyncWritev flag.
+	// When enabled, the Client sends messages through a lock-protected
+	// [][]byte queue drained by an on-demand writer goroutine that uses
+	// net.Buffers (writev) instead of the chSend/sendLoop path.
+	AsyncWritev() bool
+	// SetAsyncWritev sets AsyncWritev flag.
+	SetAsyncWritev(async bool)
+
 	// AsyncResponse returns AsyncResponse flag.
 	AsyncResponse() bool
 	// SetAsyncResponse sets AsyncResponse flag.
@@ -292,6 +300,7 @@ type handler struct {
 	batchRecv         bool
 	batchSend         bool
 	asyncWrite        bool
+	asyncWritev       bool
 	asyncResponse     bool
 	recvBufferSize    int
 	sendBufferSize    int
@@ -491,6 +500,14 @@ func (h *handler) AsyncWrite() bool {
 
 func (h *handler) SetAsyncWrite(async bool) {
 	h.asyncWrite = async
+}
+
+func (h *handler) AsyncWritev() bool {
+	return h.asyncWritev
+}
+
+func (h *handler) SetAsyncWritev(async bool) {
+	h.asyncWritev = async
 }
 
 func (h *handler) AsyncResponse() bool {

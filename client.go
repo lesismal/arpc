@@ -66,6 +66,16 @@ type Client struct {
 	chSend  chan *Message
 	chClose chan util.Empty
 
+	// writev async-send path (enabled by Handler.AsyncWritev()).
+	// writevBuffers is the [][]byte send queue; writevMsgs holds the matching
+	// *Message values (in enqueue order) for lifecycle callbacks after the
+	// write completes. writevSending reports whether a writer goroutine is
+	// currently draining the queue, ensuring a single writer per conn.
+	writevMux     sync.Mutex
+	writevBuffers net.Buffers
+	writevMsgs    []*Message
+	writevSending bool
+
 	onStop func(*Client)
 
 	values map[interface{}]interface{}
@@ -163,7 +173,11 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 		c.deleteSession(seq)
 	}()
 
-	if c.Handler.AsyncWrite() {
+	if c.Handler.AsyncWritev() {
+		if err := c.pushWritev(msg); err != nil {
+			return err
+		}
+	} else if c.Handler.AsyncWrite() {
 		select {
 		case c.chSend <- msg:
 		case <-timer.C:
@@ -225,7 +239,11 @@ func (c *Client) CallContext(ctx context.Context, method string, req interface{}
 	c.addSession(seq, sess)
 	defer c.deleteSession(seq)
 
-	if c.Handler.AsyncWrite() {
+	if c.Handler.AsyncWritev() {
+		if err := c.pushWritev(msg); err != nil {
+			return err
+		}
+	} else if c.Handler.AsyncWrite() {
 		select {
 		case c.chSend <- msg:
 		case <-ctx.Done():
@@ -297,7 +315,9 @@ func (c *Client) CallAsync(method string, req interface{}, handler AsyncHandlerF
 	ah := getAsyncHandler(timerCallback, handler)
 	c.addAsyncHandler(seq, ah)
 
-	if c.Handler.AsyncWrite() {
+	if c.Handler.AsyncWritev() {
+		err = c.pushWritev(msg)
+	} else if c.Handler.AsyncWrite() {
 		err = c.pushMessage(msg, timer)
 	} else {
 		if !c.reconnecting {
@@ -334,7 +354,9 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration, 
 
 	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
 
-	if c.Handler.AsyncWrite() {
+	if c.Handler.AsyncWritev() {
+		err = c.pushWritev(msg)
+	} else if c.Handler.AsyncWrite() {
 		switch timeout {
 		case TimeZero:
 			err = c.pushMessage(msg, nil)
@@ -378,7 +400,9 @@ func (c *Client) NotifyContext(ctx context.Context, method string, data interfac
 
 	msg := c.newRequestMessage(CmdNotify, method, data, false, true, args...)
 
-	if c.Handler.AsyncWrite() {
+	if c.Handler.AsyncWritev() {
+		return c.pushWritev(msg)
+	} else if c.Handler.AsyncWrite() {
 		select {
 		case c.chSend <- msg:
 		case <-ctx.Done():
@@ -417,6 +441,10 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 	if err != nil {
 		c.Handler.OnMessageDone(c, msg)
 		return err
+	}
+
+	if c.Handler.AsyncWritev() {
+		return c.pushWritev(msg)
 	}
 
 	if !c.Handler.AsyncWrite() {
@@ -481,7 +509,6 @@ func (c *Client) Restart() error {
 		preConn := c.Conn
 		c.Conn = conn
 
-		c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 		c.chClose = make(chan util.Empty)
 		c.sessionMap = make(map[uint64]*rpcSession)
 		c.asyncHandlerMap = make(map[uint64]*asyncHandler)
@@ -489,8 +516,15 @@ func (c *Client) Restart() error {
 		c.streamRemoteMap = make(map[uint64]*Stream)
 		c.values = map[interface{}]interface{}{}
 
+		c.writevMux.Lock()
+		c.writevBuffers = nil
+		c.writevMsgs = nil
+		c.writevSending = false
+		c.writevMux.Unlock()
+
 		c.initReader()
-		if c.Handler.AsyncWrite() {
+		// AsyncWritev takes precedence: on-demand writer, no chSend/sendLoop.
+		if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
 			c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 			go util.Safe(c.sendLoop)
 		}
@@ -520,7 +554,13 @@ func (c *Client) closeAndClean() {
 	c.mux.Unlock()
 
 	c.Conn.Close()
-	if c.chSend != nil {
+
+	// Drop any messages still queued for the writev writer. Whoever swaps a
+	// batch out under writevMux owns it, so this never double-processes messages
+	// already taken by an in-flight writevLoop.
+	c.drainWritev()
+
+	if c.chSend != nil || c.Handler.AsyncWritev() {
 		close(c.chClose)
 	}
 	if c.onStop != nil {
@@ -528,6 +568,18 @@ func (c *Client) closeAndClean() {
 	}
 
 	c.Handler.OnDisconnected(c)
+}
+
+// drainWritev drops all messages currently queued on the writev send queue.
+func (c *Client) drainWritev() {
+	c.writevMux.Lock()
+	msgs := c.writevMsgs
+	c.writevBuffers = nil
+	c.writevMsgs = nil
+	c.writevMux.Unlock()
+	for _, m := range msgs {
+		c.dropMessage(m)
+	}
 }
 
 // CheckState checks Client's state.
@@ -616,11 +668,108 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 	return nil
 }
 
-func (c *Client) newRequestMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, args ...interface{}) *Message {
-	if len(args) == 0 {
-		return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, nil)
+// pushWritev enqueues a message onto the writev send queue and, if no writer
+// goroutine is currently draining it, starts one. It never blocks on I/O.
+//
+// A single writer goroutine drains the queue per connection: the writevSending
+// flag (guarded by writevMux) records whether one is already running, which is
+// equivalent to "the queue was non-empty before this append".
+func (c *Client) pushWritev(msg *Message) error {
+	if c.reconnecting {
+		c.dropMessage(msg)
+		return ErrClientReconnecting
 	}
-	return newMessage(cmd, method, v, isError, isAsync, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, args[0].(map[interface{}]interface{}))
+
+	// Coders operate on the contiguous msg.Buffer and may return a new message,
+	// so they must run before the buffer is captured into the queue. When coders
+	// are registered, newRequestMessage builds a contiguous message (body == nil).
+	if coders := c.Handler.Coders(); len(coders) > 0 {
+		for j := 0; j < len(coders); j++ {
+			msg = coders[j].Encode(c, msg)
+		}
+	}
+
+	c.writevMux.Lock()
+	if !c.running {
+		c.writevMux.Unlock()
+		c.Handler.OnMessageDone(c, msg)
+		return ErrClientStopped
+	}
+	c.writevBuffers = append(c.writevBuffers, msg.Buffer)
+	if len(msg.body) > 0 {
+		c.writevBuffers = append(c.writevBuffers, msg.body)
+	}
+	c.writevMsgs = append(c.writevMsgs, msg)
+	launch := !c.writevSending
+	if launch {
+		c.writevSending = true
+	}
+	c.writevMux.Unlock()
+
+	if launch {
+		go util.Safe(c.writevLoop)
+	}
+	return nil
+}
+
+// writevLoop drains the writev send queue until it is empty, writing each batch
+// with a single net.Buffers/writev syscall. It is the on-demand writer started
+// by pushWritev; only one instance runs per connection at a time.
+func (c *Client) writevLoop() {
+	closed := false
+	for {
+		c.writevMux.Lock()
+		if len(c.writevBuffers) == 0 {
+			c.writevSending = false
+			c.writevMux.Unlock()
+			return
+		}
+		bufs := c.writevBuffers
+		msgs := c.writevMsgs
+		c.writevBuffers = nil
+		c.writevMsgs = nil
+		c.writevMux.Unlock()
+
+		// Once the connection is gone, drop the rest of the queue instead of
+		// writing, but keep draining so the writevSending flag is released only
+		// when the queue is empty (preserving the single-writer invariant).
+		if closed || c.reconnecting {
+			for _, m := range msgs {
+				c.dropMessage(m)
+			}
+			closed = true
+			continue
+		}
+
+		// net.Buffers.WriteTo consumes bufs (nils out written entries); it is a
+		// local copy, so message lifecycle is driven by msgs, not bufs.
+		if _, err := c.Handler.SendN(c.Conn, bufs); err != nil {
+			c.Conn.Close()
+			for _, m := range msgs {
+				c.Handler.OnMessageDone(c, m)
+			}
+			closed = true
+			continue
+		}
+
+		for _, m := range msgs {
+			c.Handler.OnMessageDone(c, m)
+		}
+	}
+}
+
+func (c *Client) newRequestMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, args ...interface{}) *Message {
+	var values map[interface{}]interface{}
+	if len(args) > 0 {
+		values = args[0].(map[interface{}]interface{})
+	}
+	seq := atomic.AddUint64(&c.seq, 1)
+	// Use the split head/body construction only when the writev path is active
+	// and no coders are registered (coders require a contiguous buffer).
+	if c.Handler.AsyncWritev() && len(c.Handler.Coders()) == 0 {
+		return newWritevMessage(cmd, method, v, isError, isAsync, seq, c.Handler, c.Codec, values)
+	}
+	return newMessage(cmd, method, v, isError, isAsync, seq, c.Handler, c.Codec, values)
 }
 
 func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
@@ -798,7 +947,9 @@ func (c *Client) run() {
 	if !c.running {
 		c.running = true
 		c.initReader()
-		if c.Handler.AsyncWrite() {
+		// AsyncWritev takes precedence: its writer goroutine is started on
+		// demand by pushWritev, so no persistent sendLoop is needed.
+		if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
 			go util.Safe(c.sendLoop)
 		}
 		go util.Safe(c.recvLoop)
@@ -1003,7 +1154,7 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 		streamRemoteMap: make(map[uint64]*Stream),
 		onStop:          onStop,
 	}
-	if c.Handler.AsyncWrite() {
+	if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
 		c.chSend = make(chan *Message, handler.SendQueueSize())
 	}
 
@@ -1042,7 +1193,7 @@ func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 		streamLocalMap:  make(map[uint64]*Stream),
 		streamRemoteMap: make(map[uint64]*Stream),
 	}
-	if c.Handler.AsyncWrite() {
+	if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
 		c.chSend = make(chan *Message, handler.SendQueueSize())
 	}
 
