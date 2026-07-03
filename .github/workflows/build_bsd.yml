@@ -14,7 +14,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [1.22.x]
+        # Use the latest stable Go on macOS: older toolchains link test
+        # binaries without an LC_UUID load command, which the newer macos-latest
+        # dyld rejects ("missing LC_UUID load command", abort trap).
+        go: [stable]
         os: [macos-latest]
     runs-on: ${{ matrix.os}}
     steps:
