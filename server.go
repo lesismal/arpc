@@ -32,15 +32,33 @@ type Server struct {
 
 	mux sync.Mutex
 
-	running bool
+	// running is accessed atomically(runLoop reads it while Stop/Shutdown
+	// write it from another goroutine), 0 means stopped, 1 means running.
+	running int32
 	chStop  chan error
 	clients map[*Client]util.Empty
 }
 
+func (s *Server) setRunning(v bool) {
+	if v {
+		atomic.StoreInt32(&s.running, 1)
+	} else {
+		atomic.StoreInt32(&s.running, 0)
+	}
+}
+
+func (s *Server) isRunning() bool {
+	return atomic.LoadInt32(&s.running) == 1
+}
+
 // Serve starts service with listener.
 func (s *Server) Serve(ln net.Listener) error {
+	// Listener/chStop are read by Stop/Shutdown from another goroutine, so they
+	// must be published under the mutex.
+	s.mux.Lock()
 	s.Listener = ln
 	s.chStop = make(chan error)
+	s.mux.Unlock()
 	log.Info("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
 	defer log.Info("%v Stopped", s.Handler.LogTag())
 	return s.runLoop()
@@ -53,8 +71,10 @@ func (s *Server) Run(addr string) error {
 		log.Info("%v Running failed: %v", s.Handler.LogTag(), err)
 		return err
 	}
+	s.mux.Lock()
 	s.Listener = ln
 	s.chStop = make(chan error)
+	s.mux.Unlock()
 	log.Info("%v Running On: \"%v\"", s.Handler.LogTag(), ln.Addr())
 	// defer log.Info("%v Stopped", s.Handler.LogTag())
 	return s.runLoop()
@@ -110,11 +130,15 @@ func (s *Server) ForEachWithFilter(h func(*Client), filter func(*Client) bool) {
 
 // Stop stops service.
 func (s *Server) Stop() error {
-	defer log.Info("%v \"%v\" Stop", s.Handler.LogTag(), s.Listener.Addr())
-	s.running = false
-	s.Listener.Close()
+	s.setRunning(false)
+	s.mux.Lock()
+	ln := s.Listener
+	chStop := s.chStop
+	s.mux.Unlock()
+	defer log.Info("%v \"%v\" Stop", s.Handler.LogTag(), ln.Addr())
+	ln.Close()
 	select {
-	case <-s.chStop:
+	case <-chStop:
 	case <-time.After(time.Second):
 		return ErrTimeout
 	default:
@@ -124,11 +148,15 @@ func (s *Server) Stop() error {
 
 // Shutdown shutdown service.
 func (s *Server) Shutdown(ctx context.Context) error {
-	defer log.Info("%v \"%v\" Shutdown", s.Handler.LogTag(), s.Listener.Addr())
-	s.running = false
-	s.Listener.Close()
+	s.setRunning(false)
+	s.mux.Lock()
+	ln := s.Listener
+	chStop := s.chStop
+	s.mux.Unlock()
+	defer log.Info("%v \"%v\" Shutdown", s.Handler.LogTag(), ln.Addr())
+	ln.Close()
 	select {
-	case <-s.chStop:
+	case <-chStop:
 	case <-ctx.Done():
 		return ErrTimeout
 	}
@@ -179,13 +207,13 @@ func (s *Server) runLoop() error {
 		conn net.Conn
 	)
 
-	s.running = true
+	s.setRunning(true)
 	defer func() {
 		s.clearClients()
 		close(s.chStop)
 	}()
 
-	for s.running {
+	for s.isRunning() {
 		conn, err = s.Listener.Accept()
 		if err == nil {
 			load := s.addLoad()
@@ -201,7 +229,7 @@ func (s *Server) runLoop() error {
 				conn.Close()
 				s.subLoad()
 			}
-		} else if s.running {
+		} else if s.isRunning() {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				log.Error("%v Accept error: %v; retrying...", s.Handler.LogTag(), err)
 				time.Sleep(time.Second / 20)

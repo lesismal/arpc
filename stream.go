@@ -155,7 +155,9 @@ func (s *Stream) send(ctx context.Context, v interface{}, eof bool, args ...inte
 		s.halfClose()
 	}
 
-	if c.Handler.AsyncWrite() {
+	if c.Handler.AsyncWritev() {
+		return c.pushWritev(msg)
+	} else if c.Handler.AsyncWrite() {
 		select {
 		case c.chSend <- msg:
 		case <-c.chClose:

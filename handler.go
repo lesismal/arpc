@@ -143,6 +143,14 @@ type Handler interface {
 	// SetAsyncWrite sets AsyncWrite flag.
 	SetAsyncWrite(async bool)
 
+	// AsyncWritev returns AsyncWritev flag.
+	// When enabled, the Client sends messages through a lock-protected
+	// [][]byte queue drained by an on-demand writer goroutine that uses
+	// net.Buffers (writev) instead of the chSend/sendLoop path.
+	AsyncWritev() bool
+	// SetAsyncWritev sets AsyncWritev flag.
+	SetAsyncWritev(async bool)
+
 	// AsyncResponse returns AsyncResponse flag.
 	AsyncResponse() bool
 	// SetAsyncResponse sets AsyncResponse flag.
@@ -211,6 +219,20 @@ type Handler interface {
 	// If pass a Boolean value of "true", the handler will be called asynchronously in a new goroutine,
 	// Else the handler will be called synchronously in the client's reading goroutine one by one.
 	Handle(m string, h HandlerFunc, args ...interface{})
+
+	// Singleflight enables singleflight de-duplication of Client.Call for the
+	// given method. When several goroutines Call the same method with the same
+	// key at the same time, only one request is actually sent to the server and
+	// all the callers share its response, which reduces duplicated round-trips.
+	//
+	// keyFunc is optional and computes the de-dup key from the Call's req arg.
+	// If it is omitted(or nil), the key is req.String() when req implements
+	// fmt.Stringer, otherwise fmt.Sprintf("%v", req) is used.
+	Singleflight(method string, keyFunc ...func(req interface{}) string)
+
+	// SingleflightKey reports whether method has singleflight enabled(via
+	// Singleflight) and, if so, returns the de-dup key computed from req.
+	SingleflightKey(method string, req interface{}) (string, bool)
 
 	// Register registers all the eligible method pairs of a struct value h
 	// as method/router handlers, using m as the service name.
@@ -292,6 +314,7 @@ type handler struct {
 	batchRecv         bool
 	batchSend         bool
 	asyncWrite        bool
+	asyncWritev       bool
 	asyncResponse     bool
 	recvBufferSize    int
 	sendBufferSize    int
@@ -320,6 +343,10 @@ type handler struct {
 
 	routes  map[string]*routerHandler
 	streams map[string]*streamHandler
+
+	// singleflights holds the methods enabled for Call singleflight de-dup,
+	// mapping each method to the func computing the de-dup key from the req.
+	singleflights map[string]func(req interface{}) string
 
 	middles   []HandlerFunc
 	msgCoders []MessageCoder
@@ -355,6 +382,13 @@ func (h *handler) Clone() Handler {
 			handler: v.handler,
 		}
 		cp.streams[k] = sh
+	}
+
+	if h.singleflights != nil {
+		cp.singleflights = make(map[string]func(req interface{}) string, len(h.singleflights))
+		for k, v := range h.singleflights {
+			cp.singleflights[k] = v
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -491,6 +525,14 @@ func (h *handler) AsyncWrite() bool {
 
 func (h *handler) SetAsyncWrite(async bool) {
 	h.asyncWrite = async
+}
+
+func (h *handler) AsyncWritev() bool {
+	return h.asyncWritev
+}
+
+func (h *handler) SetAsyncWritev(async bool) {
+	h.asyncWritev = async
 }
 
 func (h *handler) AsyncResponse() bool {
@@ -704,6 +746,41 @@ func (h *handler) Register(m string, h2 interface{}) error {
 	}
 
 	return nil
+}
+
+// defaultSingleflightKey is the fallback key func used when Singleflight is
+// called without a keyFunc: it uses req.String() when req is a fmt.Stringer,
+// otherwise fmt.Sprintf("%v", req).
+func defaultSingleflightKey(req interface{}) string {
+	if s, ok := req.(fmt.Stringer); ok {
+		return s.String()
+	}
+	return fmt.Sprintf("%v", req)
+}
+
+func (h *handler) Singleflight(method string, keyFunc ...func(req interface{}) string) {
+	if method == "" {
+		panic(fmt.Errorf("empty('') method is not allowed for Singleflight"))
+	}
+	if h.singleflights == nil {
+		h.singleflights = map[string]func(req interface{}) string{}
+	}
+	kf := defaultSingleflightKey
+	if len(keyFunc) > 0 && keyFunc[0] != nil {
+		kf = keyFunc[0]
+	}
+	h.singleflights[method] = kf
+}
+
+func (h *handler) SingleflightKey(method string, req interface{}) (string, bool) {
+	if h.singleflights == nil {
+		return "", false
+	}
+	kf, ok := h.singleflights[method]
+	if !ok {
+		return "", false
+	}
+	return kf(req), true
 }
 
 // isStructPtr reports whether t is a pointer to a struct.
@@ -1268,6 +1345,14 @@ func Handle(m string, h HandlerFunc, args ...interface{}) {
 // See Handler.Register for the method pair conventions.
 func Register(m string, h interface{}) error {
 	return DefaultHandler.Register(m, h)
+}
+
+// Singleflight enables singleflight de-duplication of Client.Call for method
+// on the DefaultHandler.
+//
+// See Handler.Singleflight for details.
+func Singleflight(method string, keyFunc ...func(req interface{}) string) {
+	DefaultHandler.Singleflight(method, keyFunc...)
 }
 
 // HandleNotFound registers default "" method/router handler,

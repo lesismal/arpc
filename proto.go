@@ -128,6 +128,17 @@ type Message struct {
 
 	Buffer []byte
 
+	// body holds the message payload as a separate buffer, used only by the
+	// writev async-send path (see Client.pushWritev). When body is non-nil,
+	// Buffer only contains the head+method and body holds the serialized data;
+	// the two are gathered on the wire via net.Buffers/writev without being
+	// concatenated. For all other paths body is nil and Buffer is contiguous.
+	body []byte
+	// bodyPooled reports whether body was allocated from the handler's pool and
+	// must be Free'd on Release. It is false when body aliases a caller-owned or
+	// codec-owned slice that must not be returned to the pool.
+	bodyPooled bool
+
 	handler Handler
 	values  map[interface{}]interface{}
 }
@@ -143,6 +154,9 @@ func (m *Message) Release() int32 {
 	if n == -1 {
 		if m.handler != nil {
 			m.handler.Free(m.Buffer)
+			if m.bodyPooled && m.body != nil {
+				m.handler.Free(m.body)
+			}
 		}
 		*m = emptyMessage
 		messagePool.Put(m)
@@ -395,6 +409,56 @@ func newMessage(cmd byte, method string, v interface{}, isError bool, isAsync bo
 	msg.SetSeq(seq)
 	copy(msg.Buffer[HeadLen:HeadLen+len(method)], method)
 	copy(msg.Buffer[HeadLen+len(method):], data)
+
+	return msg
+}
+
+// newWritevMessage creates a Message for the writev async-send path.
+//
+// Unlike newMessage, it does not concatenate the serialized body into the head
+// buffer. msg.Buffer holds only head+method (a small pooled buffer) and msg.body
+// holds the serialized data as a separate slice; the two are gathered on the
+// wire via net.Buffers/writev. The wire body length in the header still counts
+// method+data, so the receiver's contiguous read is unaffected.
+//
+// When the data aliases a caller-mutable slice ([]byte/*[]byte), it is copied
+// into a pooled buffer so it stays valid until the asynchronous write completes.
+func newWritevMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, seq uint64, h Handler, codec codec.Codec, values map[interface{}]interface{}) *Message {
+	data, owned := util.ValueToBytesOwned(codec, v)
+	bodyLen := len(method) + len(data)
+
+	if h == nil {
+		h = DefaultHandler
+	}
+
+	msg := messagePool.Get().(*Message)
+	msg.values = values
+	msg.handler = h
+	msg.Buffer = h.Malloc(HeadLen + len(method))
+
+	msg.ResetAttrs()
+	msg.SetCmd(cmd)
+	msg.SetError(isError)
+	msg.SetAsync(isAsync)
+	msg.SetMethodLen(len(method))
+	msg.SetBodyLen(bodyLen)
+	msg.SetSeq(seq)
+	copy(msg.Buffer[HeadLen:HeadLen+len(method)], method)
+
+	if len(data) == 0 {
+		msg.body = nil
+		msg.bodyPooled = false
+	} else if owned {
+		msg.body = data
+		msg.bodyPooled = false
+	} else {
+		// Caller may mutate the slice; copy into a pooled buffer so it stays
+		// valid until the asynchronous writev completes.
+		b := h.Malloc(len(data))
+		copy(b, data)
+		msg.body = b
+		msg.bodyPooled = true
+	}
 
 	return msg
 }
