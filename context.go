@@ -5,10 +5,15 @@
 package arpc
 
 import (
-	"math"
 	"sync"
 	"time"
 )
+
+// maxInt is the maximum value of int on the current platform. It is used by
+// Abort to stop Next from calling any further handlers. Defined locally(rather
+// than using math.MaxInt) so the package still builds on Go 1.16, since
+// math.MaxInt was only added in Go 1.17.
+const maxInt = int(^uint(0) >> 1)
 
 var (
 	contextPool = sync.Pool{
@@ -122,7 +127,7 @@ func (ctx *Context) Next() {
 
 // Abort stops the one-by-one-calling of middlewares and method/router handler.
 func (ctx *Context) Abort() {
-	ctx.index = math.MaxInt
+	ctx.index = maxInt
 }
 
 // Deadline implements stdlib's Context.
