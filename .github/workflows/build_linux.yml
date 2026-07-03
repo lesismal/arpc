@@ -8,9 +8,6 @@ on:
     branches:
       - master
 
-env:
-  GO111MODULE: off
-
 jobs:
   test:
     name: build-linux
@@ -22,19 +19,17 @@ jobs:
     runs-on: ${{ matrix.os}}
     steps:
       - name: install golang
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
       - name: checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: go env
         run: |
           printf "$(go version)\n"
           printf "\n\ngo environment:\n\n"
-          go get -u github.com/lesismal/arpc
           ulimit -n 30000
           go env
-          echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
       - name: go test
         run: go test -timeout 60s -coverprofile="./coverage"
       - name: update code coverage report
