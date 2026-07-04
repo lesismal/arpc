@@ -10,6 +10,16 @@ import (
 	"time"
 )
 
+// singleflightCallPool recycles singleflightCall structs, which are allocated
+// once per real round-trip(the leader's). Callers share a call through a
+// reference count so it is only returned here once every sharing caller is done
+// with it(see releaseCall).
+var singleflightCallPool = sync.Pool{
+	New: func() interface{} {
+		return &singleflightCall{}
+	},
+}
+
 // sfKey identifies an in-flight singleflight call. async separates blocking
 // callers(Call/CallContext) from asynchronous callers(CallAsync) so the two
 // de-duplicate within their own kind, since their result delivery differs.
@@ -46,6 +56,14 @@ type singleflightCall struct {
 	// consistent critical sections.
 	finished bool
 	subs     []*sfAsyncSub
+
+	// refs counts the callers still holding this call: the leader plus every
+	// follower that joined while the entry was in the group. It is incremented
+	// under singleflightGroup.mu(strictly before the leader removes the entry)
+	// and decremented via releaseCall; the last releaser recycles the call to
+	// singleflightCallPool, so a pooled call can never be observed by an
+	// in-flight follower.
+	refs int32
 }
 
 // sfAsyncSub is a CallAsync follower waiting for the leader's result. Its
@@ -84,13 +102,39 @@ func (g *singleflightGroup) acquire(k sfKey) (call *singleflightCall, leader boo
 		g.calls = make(map[sfKey]*singleflightCall)
 	}
 	if c, ok := g.calls[k]; ok {
+		// Join as a follower: take a reference so the shared call is not
+		// recycled while we still read it(blocking) or register on it(async).
+		// Incrementing under g.mu, i.e. strictly before the leader can remove
+		// the entry in finish/finishAsync, guarantees every sharing follower is
+		// counted.
+		atomic.AddInt32(&c.refs, 1)
 		g.mu.Unlock()
 		return c, false
 	}
-	call = &singleflightCall{done: make(chan struct{})}
+	// Become the leader: reuse a pooled call. The blocking path signals
+	// completion through done; the async path never touches done, so the
+	// channel is only allocated when it is actually needed.
+	call = singleflightCallPool.Get().(*singleflightCall)
+	call.refs = 1
+	if !k.async {
+		call.done = make(chan struct{})
+	}
 	g.calls[k] = call
 	g.mu.Unlock()
 	return call, true
+}
+
+// releaseCall drops one reference held by a caller(leader or follower). The
+// last releaser resets the call and returns it to the pool. Because a call is
+// only recycled after it has been removed from the group(finish/finishAsync)
+// and every sharing caller is done touching it, the pooled object can never be
+// observed by an in-flight follower.
+func (g *singleflightGroup) releaseCall(call *singleflightCall) {
+	if atomic.AddInt32(&call.refs, -1) != 0 {
+		return
+	}
+	*call = singleflightCall{}
+	singleflightCallPool.Put(call)
 }
 
 // release removes call from the map so later callers start a fresh request. It
