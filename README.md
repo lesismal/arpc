@@ -36,6 +36,7 @@
 		- [Router Middleware](#router-middleware)
 		- [Coder Middleware](#coder-middleware)
 		- [Client Call, CallAsync, Notify](#client-call-callasync-notify)
+		- [Singleflight (Call De-duplication)](#singleflight-call-de-duplication)
 		- [Server Call, CallAsync, Notify](#server-call-callasync-notify)
 		- [Broadcast - Notify](#broadcast---notify)
 		- [Async Response](#async-response)
@@ -58,6 +59,7 @@
 - [x] Two-Way Notify
 - [x] Sync and Async Calling
 - [x] Sync and Async Response
+- [x] Singleflight Call De-duplication
 - [x] Batch Write | Writev | net.Buffers 
 - [x] Broadcast
 - [x] Middleware
@@ -353,6 +355,47 @@ client.Notify("/notify", data, time.Second)
 // defer cancel()
 // client.NotifyWith(ctx, "/notify", data)
 ```
+
+### Singleflight (Call De-duplication)
+
+Enable singleflight on a router/method to de-duplicate concurrent calls: when
+several goroutines call the same method with the same key at the same time,
+only one request is actually sent to the server and all of them share its
+response. This cuts duplicated round-trips and server load for hot, identical
+requests. It applies to `Call`, `CallContext`/`CallWith` and `CallAsync`.
+
+Only methods you register are optimized; every other method behaves exactly as
+before.
+
+```golang
+// Configure it on the Handler used by your Client (or use the package-level
+// arpc.Singleflight(...) which applies to arpc.DefaultHandler).
+
+// 1) Default key: req.String() when req implements fmt.Stringer,
+//    otherwise fmt.Sprintf("%v", req).
+handler.Singleflight("/call/echo")
+
+// 2) Or provide a custom func that computes the de-dup key from the req.
+handler.Singleflight("/user/get", func(req interface{}) string {
+	return req.(*GetUserReq).ID
+})
+
+// Create the Client with that Handler, then call as usual; concurrent calls
+// sharing the same key are collapsed into a single request.
+client, _ := arpc.NewClient(dialer, handler)
+err := client.Call("/call/echo", request, response, time.Second*5)
+```
+
+Notes:
+
+- The leader performs the real round-trip; followers wait for it and each
+  decodes the shared response into their own `rsp`. The blocking path decodes
+  the payload only once and shares the decoded value, so the shared response
+  should be treated as read-only.
+- Every caller still honors its own timeout/context while waiting.
+- `Call` and `CallContext` de-duplicate together; `CallAsync` de-duplicates
+  within its own kind and each follower's callback is invoked with the shared
+  response (or its own timeout).
 
 ### Server Call, CallAsync, Notify
 

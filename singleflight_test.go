@@ -268,6 +268,70 @@ func TestClient_SingleflightCallAsync(t *testing.T) {
 	}
 }
 
+// TestClient_SingleflightCallAsyncPooled exercises the async fan-out with
+// message pooling enabled on the client, so the leader's response Context is
+// recycled right after its handler returns. Followers are dispatched via
+// AsyncExecute and must still Bind the response correctly from the standalone
+// clone(not the recycled Context).
+func TestClient_SingleflightCallAsyncPooled(t *testing.T) {
+	var hits int32
+	svr := newSingleflightServer(t, "localhost:11009", &hits)
+	defer svr.Stop()
+
+	handler := DefaultHandler.Clone()
+	handler.EnablePool(true)
+	handler.Singleflight(methodSingleflightStruct)
+
+	c, err := NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", "localhost:11009", time.Second)
+	}, handler)
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer c.Stop()
+
+	const n = 30
+	var (
+		wg     sync.WaitGroup
+		okCnt  int32
+		errCnt int32
+	)
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		req := &sfReq{ID: 1}
+		err := c.CallAsync(methodSingleflightStruct, req, func(ctx *Context, err error) {
+			defer wg.Done()
+			if err != nil {
+				atomic.AddInt32(&errCnt, 1)
+				return
+			}
+			var rsp sfResp
+			if err := ctx.Bind(&rsp); err != nil {
+				atomic.AddInt32(&errCnt, 1)
+				return
+			}
+			if rsp.ID != 1 || rsp.Name != "name-1" || len(rsp.Tags) != 2 {
+				t.Errorf("unexpected rsp %+v", rsp)
+				atomic.AddInt32(&errCnt, 1)
+				return
+			}
+			atomic.AddInt32(&okCnt, 1)
+		}, time.Second*3)
+		if err != nil {
+			wg.Done()
+			t.Fatalf("CallAsync error: %v", err)
+		}
+	}
+	wg.Wait()
+
+	if got := atomic.LoadInt32(&okCnt); got != n {
+		t.Fatalf("pooled CallAsync singleflight: %v handlers succeeded, want %v (errs=%v)", got, n, atomic.LoadInt32(&errCnt))
+	}
+	if got := atomic.LoadInt32(&hits); got >= n {
+		t.Fatalf("singleflight did not de-duplicate pooled CallAsync: server hits=%v, want < %v", got, n)
+	}
+}
+
 func TestClient_SingleflightStructResult(t *testing.T) {
 	var hits int32
 	svr := newSingleflightServer(t, "localhost:11008", &hits)

@@ -436,19 +436,18 @@ func (c *Client) callAsyncSingleflight(method string, req interface{}, handler A
 	call, leader := c.sfGroup.acquire(k)
 
 	if leader {
-		// The leader's internal handler invokes its own handler, then fans the
-		// result out to followers, then clears the in-flight entry.
+		// The leader runs its own handler, then publishes the result to
+		// followers. finishAsync captures the followers and drops the in-flight
+		// entry in one critical section; fireAsyncSubs delivers to them.
 		internal := func(ctx *Context, err error) {
 			handler(ctx, err)
-			call.fanout(ctx, err)
-			c.sfGroup.release(k, call)
+			c.fireAsyncSubs(ctx, err, c.sfGroup.finishAsync(k, call))
 		}
 		if err := c.callAsyncOnce(method, req, internal, timeout, args...); err != nil {
 			// The request was never sent: wake any followers with the error and
 			// drop the entry. The leader itself learns via the returned err(its
 			// handler is not called), matching non-singleflight CallAsync.
-			call.fanout(nil, err)
-			c.sfGroup.release(k, call)
+			c.fireAsyncSubs(nil, err, c.sfGroup.finishAsync(k, call))
 			return err
 		}
 		return nil
@@ -459,12 +458,52 @@ func (c *Client) callAsyncSingleflight(method string, req interface{}, handler A
 	sub.timer = time.AfterFunc(timeout, func() {
 		sub.fire(nil, ErrTimeout)
 	})
-	if !call.addSub(sub) {
+	if !c.sfGroup.addSub(call, sub) {
 		// The leader already finished; fall back to a real request of our own.
 		sub.timer.Stop()
 		return c.callAsyncOnce(method, req, handler, timeout, args...)
 	}
 	return nil
+}
+
+// fireAsyncSubs delivers the async leader's result to its followers through the
+// handler's executor(AsyncExecute), so that slow follower handlers do not block
+// the leader's goroutine(the reader loop on success, or the timer goroutine on
+// timeout). On success(ctx != nil) the followers share one standalone Context
+// holding an independent copy of the payload(see cloneAsyncContext), so they
+// can Bind safely even after the leader's pooled Context is recycled. On
+// error/timeout they receive a nil Context and err, matching CallAsync.
+func (c *Client) fireAsyncSubs(ctx *Context, err error, subs []*sfAsyncSub) {
+	if len(subs) == 0 {
+		return
+	}
+	var fctx *Context
+	if ctx != nil {
+		fctx = c.cloneAsyncContext(ctx)
+	}
+	for _, sub := range subs {
+		sub := sub
+		c.Handler.AsyncExecute(func() {
+			sub.fire(fctx, err)
+		})
+	}
+}
+
+// cloneAsyncContext builds a standalone Context holding an independent copy of
+// the response payload. The clone is not pooled and shares no state with the
+// leader's Context/Message, so followers dispatched via AsyncExecute can Bind
+// the response from their own goroutines even after the leader's Context is
+// recycled. The clone is read-only for followers, so a single instance is
+// shared across all of them.
+func (c *Client) cloneAsyncContext(ctx *Context) *Context {
+	fctx := &Context{Client: c}
+	if ctx != nil && ctx.Message != nil {
+		src := ctx.Message
+		buf := make([]byte, len(src.Buffer))
+		copy(buf, src.Buffer)
+		fctx.Message = &Message{Buffer: buf, values: src.values}
+	}
+	return fctx
 }
 
 // callAsyncOnce performs one real CallAsync round-trip. It is the shared body
