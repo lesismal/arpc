@@ -66,6 +66,10 @@ type Client struct {
 
 	chSend  chan *Message
 	chClose chan util.Empty
+	// recvDone is closed when the current generation's recvLoop returns. Restart
+	// waits on it so a new generation is only built after the old recvLoop has
+	// fully torn down, preventing its teardown from clobbering the new state.
+	recvDone chan struct{}
 
 	// writev async-send path (enabled by Handler.AsyncWritev()).
 	// writevBuffers is the [][]byte send queue; writevMsgs holds the matching
@@ -664,7 +668,21 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 
 // Restart stops and restarts a Client.
 func (c *Client) Restart() error {
+	c.mux.Lock()
+	recvDone := c.recvDone
+	c.mux.Unlock()
+
 	c.Stop()
+
+	// Wait for the previous generation's recvLoop to fully tear down before
+	// building a new one. Otherwise its teardown(closeAndClean setting running,
+	// clearing sessions, closing the connection) could clobber the new
+	// generation's state, e.g. flipping running back to false right after we set
+	// it true. Stop closed the connection and the stop channel, so the old loop
+	// unblocks promptly.
+	if recvDone != nil {
+		<-recvDone
+	}
 
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -694,9 +712,18 @@ func (c *Client) Restart() error {
 		// AsyncWritev takes precedence: on-demand writer, no chSend/sendLoop.
 		if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
 			c.chSend = make(chan *Message, c.Handler.SendQueueSize())
-			go util.Safe(c.sendLoop)
 		}
-		go util.Safe(c.recvLoop)
+		// Bind the new loops to this generation's channels.
+		chSend, chClose := c.chSend, c.chClose
+		recvDone := make(chan struct{})
+		c.recvDone = recvDone
+		if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
+			go util.Safe(func() { c.sendLoop(chSend, chClose) })
+		}
+		go util.Safe(func() {
+			defer close(recvDone)
+			c.recvLoop(chClose)
+		})
 
 		c.running = true
 		c.reconnecting = false
@@ -707,18 +734,48 @@ func (c *Client) Restart() error {
 	return nil
 }
 
+// chanClosed reports whether the broadcast channel ch has been closed. ch is
+// only ever closed(never sent to), so a ready receive means it is closed.
+func chanClosed(ch chan util.Empty) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
+// closeChan closes the broadcast channel ch at most once. It must be called
+// with c.mux held so the check-and-close is atomic against another stopper
+// closing the same ch(Stop vs. closeAndClean of the same generation).
+func closeChan(ch chan util.Empty) {
+	select {
+	case <-ch:
+	default:
+		close(ch)
+	}
+}
+
 // Stop stops a Client.
 func (c *Client) Stop() {
 	c.mux.Lock()
 	c.running = false
+	// Signal this generation's recv/send loops to stop. Restart installs a fresh
+	// chClose before starting new loops, so a superseded loop keeps watching its
+	// own(now closed) channel and cannot resurrect when running is flipped back.
+	closeChan(c.chClose)
 	c.mux.Unlock()
 
 	c.Conn.Close()
 }
 
-func (c *Client) closeAndClean() {
+// closeAndClean tears down the connection for the recv loop generation whose
+// stop channel is chClose. It closes chClose(idempotently, so a later Stop or a
+// concurrent stopper never double-closes it) and runs the stop callbacks.
+func (c *Client) closeAndClean(chClose chan util.Empty) {
 	c.mux.Lock()
 	c.running = false
+	closeChan(chClose)
 	c.mux.Unlock()
 
 	c.Conn.Close()
@@ -728,9 +785,6 @@ func (c *Client) closeAndClean() {
 	// already taken by an in-flight writevLoop.
 	c.drainWritev()
 
-	if c.chSend != nil || c.Handler.AsyncWritev() {
-		close(c.chClose)
-	}
 	if c.onStop != nil {
 		c.onStop(c)
 	}
@@ -1115,12 +1169,20 @@ func (c *Client) run() {
 	if !c.running {
 		c.running = true
 		c.initReader()
+		// Capture this generation's channels so the loops watch their own
+		// signals(a later Restart installs fresh ones).
+		chSend, chClose := c.chSend, c.chClose
+		recvDone := make(chan struct{})
+		c.recvDone = recvDone
 		// AsyncWritev takes precedence: its writer goroutine is started on
 		// demand by pushWritev, so no persistent sendLoop is needed.
 		if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
-			go util.Safe(c.sendLoop)
+			go util.Safe(func() { c.sendLoop(chSend, chClose) })
 		}
-		go util.Safe(c.recvLoop)
+		go util.Safe(func() {
+			defer close(recvDone)
+			c.recvLoop(chClose)
+		})
 	}
 }
 
@@ -1132,7 +1194,11 @@ func (c *Client) initReader() {
 	}
 }
 
-func (c *Client) recvLoop() {
+// recvLoop reads and dispatches messages for one connection generation. chClose
+// is this generation's stop signal: Stop/Restart close it so a superseded loop
+// terminates instead of resurrecting when a subsequent Restart flips c.running
+// back to true(the old loop keeps watching its own, already-closed chClose).
+func (c *Client) recvLoop(chClose chan util.Empty) {
 	var (
 		err  error
 		msg  *Message
@@ -1143,11 +1209,11 @@ func (c *Client) recvLoop() {
 	defer log.Debug("%v\t%v\trecvLoop stop", c.Handler.LogTag(), addr)
 
 	if c.Dialer == nil {
-		for c.running {
+		for !chanClosed(chClose) {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
 				log.Error("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
-				c.closeAndClean()
+				c.closeAndClean(chClose)
 				return
 			}
 			c.Handler.OnMessage(c, msg)
@@ -1155,7 +1221,7 @@ func (c *Client) recvLoop() {
 	} else {
 		go c.Handler.OnConnected(c)
 
-		for c.running {
+		for !chanClosed(chClose) {
 		RECV:
 			for {
 				msg, err = c.Handler.Recv(c)
@@ -1177,7 +1243,7 @@ func (c *Client) recvLoop() {
 			// 	log.Info("%v\t%v\tReconnect Start", c.Handler.LogTag(), addr)
 			// }
 			maxReconnectTimes := c.Handler.MaxReconnectTimes()
-			for i := 0; c.running && ((maxReconnectTimes <= 0) || (i < maxReconnectTimes)); i++ {
+			for i := 0; !chanClosed(chClose) && ((maxReconnectTimes <= 0) || (i < maxReconnectTimes)); i++ {
 				log.Info("%v\t%v\tReconnect Trying %v", c.Handler.LogTag(), addr, i)
 				conn, err := c.Dialer()
 				if err == nil {
@@ -1196,29 +1262,32 @@ func (c *Client) recvLoop() {
 
 				time.Sleep(time.Second)
 			}
-			c.closeAndClean()
+			c.closeAndClean(chClose)
 		}
 	}
 }
 
-func (c *Client) sendLoop() {
+// sendLoop drains chSend for one connection generation, stopping when chClose
+// is closed. Both channels are captured at start so a superseded loop drains its
+// own queue and exits instead of competing with the loop a Restart installs.
+func (c *Client) sendLoop(chSend chan *Message, chClose chan util.Empty) {
 	addr := c.Conn.RemoteAddr().String()
 	log.Debug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
 	defer log.Debug("%v\t%v\tsendLoop stop", c.Handler.LogTag(), addr)
 
 	if c.Handler.BatchSend() {
-		c.batchSendLoop()
+		c.batchSendLoop(chSend, chClose)
 	} else {
-		c.normalSendLoop()
+		c.normalSendLoop(chSend, chClose)
 	}
 }
 
-func (c *Client) normalSendLoop() {
+func (c *Client) normalSendLoop(chSend chan *Message, chClose chan util.Empty) {
 	var msg *Message
 	var coders []MessageCoder
 	for {
 		select {
-		case msg = <-c.chSend:
+		case msg = <-chSend:
 			if !c.reconnecting {
 				coders = c.Handler.Coders()
 				for j := 0; j < len(coders); j++ {
@@ -1231,11 +1300,11 @@ func (c *Client) normalSendLoop() {
 			} else {
 				c.dropMessage(msg)
 			}
-		case <-c.chClose:
+		case <-chClose:
 			// clear msg in send queue
 			for {
 				select {
-				case msg := <-c.chSend:
+				case msg := <-chSend:
 					c.Handler.OnMessageDone(c, msg)
 				default:
 					return
@@ -1245,7 +1314,7 @@ func (c *Client) normalSendLoop() {
 	}
 }
 
-func (c *Client) batchSendLoop() {
+func (c *Client) batchSendLoop(chSend chan *Message, chClose chan util.Empty) {
 	var msg *Message
 	var chLen int
 	var coders []MessageCoder
@@ -1255,12 +1324,12 @@ func (c *Client) batchSendLoop() {
 
 	for {
 		select {
-		case msg = <-c.chSend:
-		case <-c.chClose:
+		case msg = <-chSend:
+		case <-chClose:
 			// clear msg in send queue
 			for {
 				select {
-				case msg := <-c.chSend:
+				case msg := <-chSend:
 					c.Handler.OnMessageDone(c, msg)
 				default:
 					return
@@ -1268,7 +1337,7 @@ func (c *Client) batchSendLoop() {
 			}
 		}
 		if !c.reconnecting {
-			chLen = len(c.chSend)
+			chLen = len(chSend)
 			coders = c.Handler.Coders()
 			for i := 0; i < chLen && len(buffer) < sendBufferSize; i++ {
 				if len(buffer) == 0 {
@@ -1278,7 +1347,7 @@ func (c *Client) batchSendLoop() {
 					buffer = c.Handler.Append(buffer, msg.Buffer...)
 					c.Handler.OnMessageDone(c, msg)
 				}
-				msg = <-c.chSend
+				msg = <-chSend
 				for j := 0; j < len(coders); j++ {
 					msg = coders[j].Encode(c, msg)
 				}
