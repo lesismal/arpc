@@ -8,6 +8,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -210,11 +211,14 @@ func (c *Client) callSingleflight(ctx context.Context, method string, req interf
 	call, leader := c.sfGroup.acquire(k)
 	if leader {
 		data, err := c.requestData(ctx, method, req, args...)
-		c.sfGroup.finish(k, call, data, err)
-		if err != nil {
-			return err
+		// Decode the payload once into rsp and publish the decoded value so
+		// followers can copy it instead of decoding the same bytes again.
+		var result interface{}
+		if err == nil {
+			result, err = c.parseSharedResult(data, rsp)
 		}
-		return c.parseData(data, rsp)
+		c.sfGroup.finish(k, call, data, result, err)
+		return err
 	}
 
 	select {
@@ -227,7 +231,7 @@ func (c *Client) callSingleflight(ctx context.Context, method string, req interf
 	if call.err != nil {
 		return call.err
 	}
-	return c.parseData(call.data, rsp)
+	return c.applySharedResult(call.result, call.data, rsp)
 }
 
 // writeSync encodes msg through the registered coders and writes it to the
@@ -342,6 +346,48 @@ func (c *Client) parseData(data []byte, rsp interface{}) error {
 		return c.Codec.Unmarshal(data, rsp)
 	}
 	return nil
+}
+
+// parseSharedResult is the singleflight leader's decode step. It decodes data
+// once into a fresh holder of rsp's type, copies the decoded value into the
+// leader's own rsp, and returns the holder so that followers can copy it
+// instead of decoding data again(see applySharedResult). The holder is only
+// read after being published, so concurrent follower copies are safe.
+//
+// When rsp is nil or not a non-nil pointer, no shareable holder is produced and
+// data is decoded straight into rsp(preserving parseData's behavior/errors).
+func (c *Client) parseSharedResult(data []byte, rsp interface{}) (interface{}, error) {
+	rv := reflect.ValueOf(rsp)
+	if rsp == nil || rv.Kind() != reflect.Ptr || rv.IsNil() {
+		return nil, c.parseData(data, rsp)
+	}
+	holder := reflect.New(rv.Type().Elem()) // *T of the same type as rsp
+	if err := c.parseData(data, holder.Interface()); err != nil {
+		return nil, err
+	}
+	rv.Elem().Set(holder.Elem()) // copy the decoded value into the leader's rsp
+	return holder.Interface(), nil
+}
+
+// applySharedResult gives a singleflight follower its response by copying the
+// leader's already-decoded result into rsp, avoiding a repeated decode of the
+// same payload. Because the copy is shallow, the decoded value is shared among
+// all callers and must be treated as read-only. It falls back to decoding data
+// when there is no shared result or rsp has a different type than the leader's
+// (e.g. concurrent callers using different rsp types for the same key).
+func (c *Client) applySharedResult(result interface{}, data []byte, rsp interface{}) error {
+	if rsp == nil {
+		return nil
+	}
+	if result != nil {
+		rv := reflect.ValueOf(rsp)
+		hv := reflect.ValueOf(result)
+		if rv.Kind() == reflect.Ptr && !rv.IsNil() && rv.Type() == hv.Type() {
+			rv.Elem().Set(hv.Elem())
+			return nil
+		}
+	}
+	return c.parseData(data, rsp)
 }
 
 // CallWith uses context to make rpc call.

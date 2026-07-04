@@ -15,11 +15,12 @@ import (
 )
 
 const (
-	methodSingleflight    = "/singleflight"
-	methodSingleflightKey = "/singleflightkey"
-	methodSingleflightCtx = "/singleflightctx"
-	methodSingleflightAsc = "/singleflightasync"
-	singleflightAddr      = "localhost:11003"
+	methodSingleflight       = "/singleflight"
+	methodSingleflightKey    = "/singleflightkey"
+	methodSingleflightCtx    = "/singleflightctx"
+	methodSingleflightAsc    = "/singleflightasync"
+	methodSingleflightStruct = "/singleflightstruct"
+	singleflightAddr         = "localhost:11003"
 )
 
 type sfReq struct {
@@ -30,6 +31,14 @@ type sfReq struct {
 // derive a key from it.
 func (r *sfReq) String() string {
 	return fmt.Sprintf("sfReq:%d", r.ID)
+}
+
+// sfResp is a struct response used to exercise the codec-decode singleflight
+// path(where the decode-once optimization matters most).
+type sfResp struct {
+	ID   int
+	Name string
+	Tags []string
 }
 
 // newSingleflightServer starts a server that counts how many times each method
@@ -47,6 +56,13 @@ func newSingleflightServer(t *testing.T, addr string, hits *int32) *Server {
 	for _, m := range []string{methodSingleflight, methodSingleflightKey, methodSingleflightCtx, methodSingleflightAsc} {
 		svr.Handler.Handle(m, echo, true)
 	}
+	svr.Handler.Handle(methodSingleflightStruct, func(ctx *Context) {
+		atomic.AddInt32(hits, 1)
+		var req sfReq
+		ctx.Bind(&req)
+		time.Sleep(time.Second / 10)
+		ctx.Write(&sfResp{ID: req.ID, Name: fmt.Sprintf("name-%d", req.ID), Tags: []string{"a", "b"}})
+	}, true)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		t.Fatalf("listen failed: %v", err)
@@ -249,6 +265,49 @@ func TestClient_SingleflightCallAsync(t *testing.T) {
 	// But only a few real requests should have reached the server.
 	if got := atomic.LoadInt32(&hits); got >= n {
 		t.Fatalf("singleflight did not de-duplicate CallAsync: server hits=%v, want < %v", got, n)
+	}
+}
+
+func TestClient_SingleflightStructResult(t *testing.T) {
+	var hits int32
+	svr := newSingleflightServer(t, "localhost:11008", &hits)
+	defer svr.Stop()
+
+	handler := DefaultHandler.Clone()
+	handler.Singleflight(methodSingleflightStruct)
+
+	c, err := NewClient(func() (net.Conn, error) {
+		return net.DialTimeout("tcp", "localhost:11008", time.Second)
+	}, handler)
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer c.Stop()
+
+	const n = 20
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			req := &sfReq{ID: 1}
+			// Each caller decodes into its own rsp; the leader decodes once and
+			// followers copy the shared result.
+			var rsp sfResp
+			if err := c.Call(methodSingleflightStruct, req, &rsp, time.Second*3); err != nil {
+				t.Errorf("Call error: %v", err)
+				return
+			}
+			if rsp.ID != 1 || rsp.Name != "name-1" || len(rsp.Tags) != 2 || rsp.Tags[0] != "a" || rsp.Tags[1] != "b" {
+				t.Errorf("unexpected rsp %+v", rsp)
+			}
+		}()
+	}
+	wg.Wait()
+
+	// All n concurrent Calls shared one request(and one decode).
+	if got := atomic.LoadInt32(&hits); got >= n {
+		t.Fatalf("singleflight did not de-duplicate struct result: server hits=%v, want < %v", got, n)
 	}
 }
 
