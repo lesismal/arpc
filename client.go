@@ -218,9 +218,11 @@ func (c *Client) callSingleflight(ctx context.Context, method string, req interf
 			result, err = c.parseSharedResult(data, rsp)
 		}
 		c.sfGroup.finish(k, call, data, result, err)
+		c.sfGroup.releaseCall(call)
 		return err
 	}
 
+	defer c.sfGroup.releaseCall(call)
 	select {
 	case <-call.done:
 	case <-ctx.Done():
@@ -442,18 +444,22 @@ func (c *Client) callAsyncSingleflight(method string, req interface{}, handler A
 		internal := func(ctx *Context, err error) {
 			handler(ctx, err)
 			c.fireAsyncSubs(ctx, err, c.sfGroup.finishAsync(k, call))
+			c.sfGroup.releaseCall(call)
 		}
 		if err := c.callAsyncOnce(method, req, internal, timeout, args...); err != nil {
 			// The request was never sent: wake any followers with the error and
 			// drop the entry. The leader itself learns via the returned err(its
 			// handler is not called), matching non-singleflight CallAsync.
 			c.fireAsyncSubs(nil, err, c.sfGroup.finishAsync(k, call))
+			c.sfGroup.releaseCall(call)
 			return err
 		}
 		return nil
 	}
 
-	// Follower: subscribe to the leader's result, honoring our own timeout.
+	// Follower: subscribe to the leader's result, honoring our own timeout. The
+	// reference taken in acquire keeps call alive across addSub.
+	defer c.sfGroup.releaseCall(call)
 	sub := &sfAsyncSub{handler: handler}
 	sub.timer = time.AfterFunc(timeout, func() {
 		sub.fire(nil, ErrTimeout)
