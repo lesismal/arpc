@@ -40,8 +40,10 @@ type singleflightCall struct {
 	result interface{}
 	err    error
 
-	// async fan-out fields
-	mu       sync.Mutex
+	// async fan-out fields(CallAsync). finished and subs are guarded by the
+	// owning singleflightGroup.mu so that publishing the result(capturing subs
+	// + removing the call from the group) and registering a follower are single
+	// consistent critical sections.
 	finished bool
 	subs     []*sfAsyncSub
 }
@@ -111,28 +113,34 @@ func (g *singleflightGroup) finish(k sfKey, call *singleflightCall, data []byte,
 	close(call.done)
 }
 
-// addSub registers an async follower. It returns false when the leader already
-// finished, in which case the caller should fall back to its own request.
-func (call *singleflightCall) addSub(sub *sfAsyncSub) bool {
-	call.mu.Lock()
+// addSub registers an async follower on call. It returns false when the leader
+// already finished, in which case the caller should fall back to its own
+// request. It shares the group lock with finishAsync so that a follower either
+// joins in time to be fanned out or cleanly falls back.
+func (g *singleflightGroup) addSub(call *singleflightCall, sub *sfAsyncSub) bool {
+	g.mu.Lock()
 	if call.finished {
-		call.mu.Unlock()
+		g.mu.Unlock()
 		return false
 	}
 	call.subs = append(call.subs, sub)
-	call.mu.Unlock()
+	g.mu.Unlock()
 	return true
 }
 
-// fanout delivers the async leader's result to every registered follower
-// exactly once and marks the call finished so late followers fall back.
-func (call *singleflightCall) fanout(ctx *Context, err error) {
-	call.mu.Lock()
+// finishAsync publishes an async leader's result in a single critical section:
+// it marks the call finished, removes it from the group(so late followers start
+// a fresh request) and returns the captured followers. The caller fires them
+// outside the lock. Marking finished and removing the map entry atomically is
+// what guarantees consistency between fan-out and follower registration.
+func (g *singleflightGroup) finishAsync(k sfKey, call *singleflightCall) []*sfAsyncSub {
+	g.mu.Lock()
 	call.finished = true
 	subs := call.subs
 	call.subs = nil
-	call.mu.Unlock()
-	for _, sub := range subs {
-		sub.fire(ctx, err)
+	if g.calls[k] == call {
+		delete(g.calls, k)
 	}
+	g.mu.Unlock()
+	return subs
 }
