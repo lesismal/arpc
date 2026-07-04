@@ -22,15 +22,23 @@ type sfKey struct {
 // singleflightCall represents a single in-flight request shared by
 // de-duplicated callers.
 //
-//   - Blocking callers(Call/CallContext): the leader fills data/err and closes
-//     done; followers wait on done and then read the shared data/err.
+//   - Blocking callers(Call/CallContext): the leader decodes the response once
+//     into result(and keeps the raw data as a fallback) and closes done;
+//     followers wait on done and then copy the shared result into their own rsp
+//     instead of decoding the payload again.
 //   - Async callers(CallAsync): followers register an sfAsyncSub and the leader
 //     fans its result out to every subscriber.
 type singleflightCall struct {
 	// blocking fields
 	done chan struct{}
-	data []byte
-	err  error
+	// result is the leader's decoded response holder(a fresh pointer of the
+	// leader's rsp type). It is written once before done is closed and only
+	// read afterwards, so concurrent follower copies are safe. data is the raw
+	// response payload, kept as a fallback for followers whose rsp type differs
+	// from the leader's.
+	data   []byte
+	result interface{}
+	err    error
 
 	// async fan-out fields
 	mu       sync.Mutex
@@ -93,10 +101,11 @@ func (g *singleflightGroup) release(k sfKey, call *singleflightCall) {
 	g.mu.Unlock()
 }
 
-// finish publishes a blocking leader's result, drops the in-flight entry and
-// wakes every follower waiting on done.
-func (g *singleflightGroup) finish(k sfKey, call *singleflightCall, data []byte, err error) {
+// finish publishes a blocking leader's decoded result(and the raw data
+// fallback), drops the in-flight entry and wakes every follower waiting on done.
+func (g *singleflightGroup) finish(k sfKey, call *singleflightCall, data []byte, result interface{}, err error) {
 	call.data = data
+	call.result = result
 	call.err = err
 	g.release(k, call)
 	close(call.done)
