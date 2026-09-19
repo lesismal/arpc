@@ -7,7 +7,6 @@ package arpc
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -20,7 +19,6 @@ const (
 	methodSingleflightCtx    = "/singleflightctx"
 	methodSingleflightAsc    = "/singleflightasync"
 	methodSingleflightStruct = "/singleflightstruct"
-	singleflightAddr         = "localhost:11003"
 )
 
 type sfReq struct {
@@ -41,51 +39,52 @@ type sfResp struct {
 	Tags []string
 }
 
-// newSingleflightServer starts a server that counts how many times each method
-// is actually invoked and echoes a per-method response after a small delay(so
-// concurrent Calls overlap and can be de-duplicated).
-func newSingleflightServer(t *testing.T, addr string, hits *int32) *Server {
-	svr := NewServer()
-	echo := func(ctx *Context) {
-		atomic.AddInt32(hits, 1)
-		var req sfReq
-		ctx.Bind(&req)
-		time.Sleep(time.Second / 10)
-		ctx.Write(fmt.Sprintf("resp:%d", req.ID))
-	}
-	for _, m := range []string{methodSingleflight, methodSingleflightKey, methodSingleflightCtx, methodSingleflightAsc} {
-		svr.Handler.Handle(m, echo, true)
-	}
-	svr.Handler.Handle(methodSingleflightStruct, func(ctx *Context) {
-		atomic.AddInt32(hits, 1)
-		var req sfReq
-		ctx.Bind(&req)
-		time.Sleep(time.Second / 10)
-		ctx.Write(&sfResp{ID: req.ID, Name: fmt.Sprintf("name-%d", req.ID), Tags: []string{"a", "b"}})
-	}, true)
-	ln, err := net.Listen("tcp", addr)
+// newSingleflightServer starts a server on an ephemeral port that counts how
+// many times each method is actually invoked and echoes a per-method response
+// after a small delay(so concurrent Calls overlap and can be de-duplicated). It
+// returns the server address.
+func newSingleflightServer(t *testing.T, hits *int32) string {
+	_, addr := startServer(t, func(h Handler) {
+		echo := func(ctx *Context) {
+			atomic.AddInt32(hits, 1)
+			var req sfReq
+			ctx.Bind(&req)
+			time.Sleep(time.Second / 10)
+			ctx.Write(fmt.Sprintf("resp:%d", req.ID))
+		}
+		for _, m := range []string{methodSingleflight, methodSingleflightKey, methodSingleflightCtx, methodSingleflightAsc} {
+			h.Handle(m, echo, true)
+		}
+		h.Handle(methodSingleflightStruct, func(ctx *Context) {
+			atomic.AddInt32(hits, 1)
+			var req sfReq
+			ctx.Bind(&req)
+			time.Sleep(time.Second / 10)
+			ctx.Write(&sfResp{ID: req.ID, Name: fmt.Sprintf("name-%d", req.ID), Tags: []string{"a", "b"}})
+		}, true)
+	})
+	return addr
+}
+
+// newSingleflightClient connects a Client using handler to addr, and stops it
+// at the end of the test.
+func newSingleflightClient(t *testing.T, addr string, handler Handler) *Client {
+	c, err := NewClient(tcpDialer(addr), handler)
 	if err != nil {
-		t.Fatalf("listen failed: %v", err)
+		t.Fatalf("NewClient failed: %v", err)
 	}
-	go svr.Serve(ln)
-	return svr
+	t.Cleanup(c.Stop)
+	return c
 }
 
 func TestClient_SingleflightDefaultKey(t *testing.T) {
 	var hits int32
-	svr := newSingleflightServer(t, singleflightAddr, &hits)
-	defer svr.Stop()
+	addr := newSingleflightServer(t, &hits)
 
 	handler := DefaultHandler.Clone()
 	handler.Singleflight(methodSingleflight)
 
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", singleflightAddr, time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
+	c := newSingleflightClient(t, addr, handler)
 
 	const n = 20
 	var wg sync.WaitGroup
@@ -115,8 +114,7 @@ func TestClient_SingleflightDefaultKey(t *testing.T) {
 
 func TestClient_SingleflightCustomKey(t *testing.T) {
 	var hits int32
-	svr := newSingleflightServer(t, "localhost:11004", &hits)
-	defer svr.Stop()
+	addr := newSingleflightServer(t, &hits)
 
 	handler := DefaultHandler.Clone()
 	// Key by the request ID; two distinct IDs must not be de-duplicated.
@@ -124,13 +122,7 @@ func TestClient_SingleflightCustomKey(t *testing.T) {
 		return fmt.Sprintf("%d", req.(*sfReq).ID)
 	})
 
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", "localhost:11004", time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
+	c := newSingleflightClient(t, addr, handler)
 
 	const groups = 2
 	const perGroup = 10
@@ -168,19 +160,12 @@ func TestClient_SingleflightCustomKey(t *testing.T) {
 
 func TestClient_SingleflightCallContext(t *testing.T) {
 	var hits int32
-	svr := newSingleflightServer(t, "localhost:11005", &hits)
-	defer svr.Stop()
+	addr := newSingleflightServer(t, &hits)
 
 	handler := DefaultHandler.Clone()
 	handler.Singleflight(methodSingleflightCtx)
 
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", "localhost:11005", time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
+	c := newSingleflightClient(t, addr, handler)
 
 	const n = 20
 	var wg sync.WaitGroup
@@ -210,19 +195,12 @@ func TestClient_SingleflightCallContext(t *testing.T) {
 
 func TestClient_SingleflightCallAsync(t *testing.T) {
 	var hits int32
-	svr := newSingleflightServer(t, "localhost:11006", &hits)
-	defer svr.Stop()
+	addr := newSingleflightServer(t, &hits)
 
 	handler := DefaultHandler.Clone()
 	handler.Singleflight(methodSingleflightAsc)
 
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", "localhost:11006", time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
+	c := newSingleflightClient(t, addr, handler)
 
 	const n = 20
 	var (
@@ -275,20 +253,13 @@ func TestClient_SingleflightCallAsync(t *testing.T) {
 // clone(not the recycled Context).
 func TestClient_SingleflightCallAsyncPooled(t *testing.T) {
 	var hits int32
-	svr := newSingleflightServer(t, "localhost:11009", &hits)
-	defer svr.Stop()
+	addr := newSingleflightServer(t, &hits)
 
 	handler := DefaultHandler.Clone()
 	handler.EnablePool(true)
 	handler.Singleflight(methodSingleflightStruct)
 
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", "localhost:11009", time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
+	c := newSingleflightClient(t, addr, handler)
 
 	const n = 30
 	var (
@@ -334,19 +305,12 @@ func TestClient_SingleflightCallAsyncPooled(t *testing.T) {
 
 func TestClient_SingleflightStructResult(t *testing.T) {
 	var hits int32
-	svr := newSingleflightServer(t, "localhost:11008", &hits)
-	defer svr.Stop()
+	addr := newSingleflightServer(t, &hits)
 
 	handler := DefaultHandler.Clone()
 	handler.Singleflight(methodSingleflightStruct)
 
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", "localhost:11008", time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
+	c := newSingleflightClient(t, addr, handler)
 
 	const n = 20
 	var wg sync.WaitGroup
