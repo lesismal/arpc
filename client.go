@@ -26,6 +26,22 @@ const (
 	TimeForever time.Duration = 1<<63 - 1
 )
 
+// ReconnectInfo describes one reconnect Dial attempt of a client-role Client,
+// passed to the Handler's OnReconnect callback.
+type ReconnectInfo struct {
+	// Times is the 1-based attempt number within the current reconnect round.
+	// It restarts from 1 each time the connection is lost again.
+	Times int
+	// MaxTimes is the Handler's MaxReconnectTimes; <= 0 means unlimited.
+	MaxTimes int
+	// Addr is the target address, i.e. the remote address of the lost connection.
+	Addr string
+	// Success reports whether this attempt connected.
+	Success bool
+	// Err is the Dial error when Success is false, otherwise nil.
+	Err error
+}
+
 // DialerFunc defines the dialer used by arpc Client to connect to the server.
 type DialerFunc func() (net.Conn, error)
 
@@ -1246,6 +1262,13 @@ func (c *Client) recvLoop(chClose chan util.Empty) {
 			for i := 0; !chanClosed(chClose) && ((maxReconnectTimes <= 0) || (i < maxReconnectTimes)); i++ {
 				log.Info("%v\t%v\tReconnect Trying %v", c.Handler.LogTag(), addr, i)
 				conn, err := c.Dialer()
+				info := &ReconnectInfo{
+					Times:    i + 1,
+					MaxTimes: maxReconnectTimes,
+					Addr:     addr,
+					Success:  err == nil,
+					Err:      err,
+				}
 				if err == nil {
 					c.Conn = conn
 
@@ -1255,10 +1278,17 @@ func (c *Client) recvLoop(chClose chan util.Empty) {
 
 					log.Info("%v\t%v\tReconnected", c.Handler.LogTag(), addr)
 
+					// Called synchronously after the new conn is installed and
+					// before OnConnected, so c.Conn is already the new connection.
+					c.Handler.OnReconnect(c, info)
+
 					go c.Handler.OnConnected(c)
 
 					goto RECV
 				}
+
+				log.Info("%v\t%v\tReconnect Failed %v: %v", c.Handler.LogTag(), addr, i, err)
+				c.Handler.OnReconnect(c, info)
 
 				time.Sleep(time.Second)
 			}
