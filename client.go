@@ -395,7 +395,7 @@ func (c *Client) parseData(data []byte, rsp interface{}) error {
 // data is decoded straight into rsp(preserving parseData's behavior/errors).
 func (c *Client) parseSharedResult(data []byte, rsp interface{}) (interface{}, error) {
 	rv := reflect.ValueOf(rsp)
-	if rsp == nil || rv.Kind() != reflect.Ptr || rv.IsNil() {
+	if rsp == nil || rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return nil, c.parseData(data, rsp)
 	}
 	holder := reflect.New(rv.Type().Elem()) // *T of the same type as rsp
@@ -419,7 +419,7 @@ func (c *Client) applySharedResult(result interface{}, data []byte, rsp interfac
 	if result != nil {
 		rv := reflect.ValueOf(rsp)
 		hv := reflect.ValueOf(result)
-		if rv.Kind() == reflect.Ptr && !rv.IsNil() && rv.Type() == hv.Type() {
+		if rv.Kind() == reflect.Pointer && !rv.IsNil() && rv.Type() == hv.Type() {
 			rv.Elem().Set(hv.Elem())
 			return nil
 		}

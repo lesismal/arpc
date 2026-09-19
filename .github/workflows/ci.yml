@@ -87,6 +87,9 @@ jobs:
         run: go build ./...
 
       - name: Test
+        # Not PowerShell, the Windows default: it splits "-coverprofile=coverage.out"
+        # at the dot and passes ".out" to go test as a package.
+        shell: bash
         env:
           # Go 1.22's internal linker omits LC_UUID, which recent macOS dyld rejects.
           GOFLAGS: ${{ runner.os == 'macOS' && matrix.go == '1.22.x' && '-ldflags=-linkmode=external' || '' }}
