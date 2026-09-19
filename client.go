@@ -1176,12 +1176,16 @@ func (c *Client) recvLoop(chClose chan util.Empty) {
 	log.Debug("%v\t%v\trecvLoop start", c.Handler.LogTag(), addr)
 	defer log.Debug("%v\t%v\trecvLoop stop", c.Handler.LogTag(), addr)
 
+	// Every exit stops this generation, including when chClose was closed
+	// before the loop started or while a message was being handled, so that
+	// onStop and OnDisconnected are always called once.
+	defer c.closeAndClean(chClose)
+
 	if c.Dialer == nil {
 		for !chanClosed(chClose) {
 			msg, err = c.Handler.Recv(c)
 			if err != nil {
 				log.Error("%v\t%v\tDisconnected: %v", c.Handler.LogTag(), addr, err)
-				c.closeAndClean(chClose)
 				return
 			}
 			c.Handler.OnMessage(c, msg)
@@ -1244,7 +1248,8 @@ func (c *Client) recvLoop(chClose chan util.Empty) {
 
 				time.Sleep(time.Second)
 			}
-			c.closeAndClean(chClose)
+			// Stopped, or out of reconnect attempts.
+			return
 		}
 	}
 }
@@ -1306,7 +1311,9 @@ func (c *Client) batchSendLoop(chSend chan *Message, chClose chan util.Empty) {
 	var coders []MessageCoder
 	var buffer = c.Handler.Malloc(2048)[0:0]
 	var sendBufferSize = c.Handler.SendBufferSize()
-	defer c.Handler.Free(buffer)
+	// Free the buffer held at exit: Append may have replaced, and freed, the
+	// one allocated above.
+	defer func() { c.Handler.Free(buffer) }()
 
 	for {
 		select {

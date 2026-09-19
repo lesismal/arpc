@@ -7,78 +7,59 @@ package codec
 import (
 	"bytes"
 	"encoding/gob"
-	"reflect"
 	"testing"
 )
 
-// codecGob is a Codec based on encoding/gob, used to test SetCodec.
-type codecGob struct{}
-
-// Marshal encodes v with gob.
-func (c *codecGob) Marshal(v interface{}) ([]byte, error) {
-	buffer := &bytes.Buffer{}
-	err := gob.NewEncoder(buffer).Encode(v)
-	if err != nil {
-		return nil, err
-	}
-	return buffer.Bytes(), nil
+type payload struct {
+	A int
+	B string
 }
 
-// Unmarshal decodes data into v with gob.
-func (c *codecGob) Unmarshal(data []byte, v interface{}) error {
-	return gob.NewDecoder(bytes.NewBuffer(data)).Decode(v)
-}
-func TestJSONCodec_Marshal(t *testing.T) {
-	type Value struct {
-		I int
-		S string
+func TestJSONCodec(t *testing.T) {
+	c := &JSONCodec{}
+	data, err := c.Marshal(&payload{A: 1, B: "b"})
+	if err != nil || string(data) != `{"A":1,"B":"b"}` {
+		t.Fatalf("Marshal = %s, %v", data, err)
 	}
-
-	v1 := &Value{I: 3, S: "hello"}
-	v2 := &Value{}
-	jc := &JSONCodec{}
-	data, err := jc.Marshal(v1)
-	if err != nil {
-		t.Errorf("JSONCodec.Marshal() error = %v, wantErr %v", err, nil)
-		return
+	var p payload
+	if err := c.Unmarshal(data, &p); err != nil || p != (payload{A: 1, B: "b"}) {
+		t.Fatalf("Unmarshal = %+v, %v", p, err)
 	}
-	err = jc.Unmarshal(data, v2)
-	if err != nil {
-		t.Errorf("JSONCodec.Unmarshal() error = %v, wantErr %v", err, nil)
-		return
+	if _, err := c.Marshal(make(chan int)); err == nil {
+		t.Fatal("Marshal of an unsupported value should fail")
 	}
-	if !reflect.DeepEqual(v1, v2) {
-		t.Errorf("v2 = %v, want %v", v2, v1)
+	if err := c.Unmarshal([]byte("{"), &p); err == nil {
+		t.Fatal("Unmarshal of bad data should fail")
 	}
 }
 
-func TestJSONCodec_Unmarshal(t *testing.T) {
-	TestJSONCodec_Marshal(t)
+// gobCodec is a Codec other than the default one.
+type gobCodec struct{}
+
+func (gobCodec) Marshal(v interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	err := gob.NewEncoder(&buf).Encode(v)
+	return buf.Bytes(), err
+}
+
+func (gobCodec) Unmarshal(data []byte, v interface{}) error {
+	return gob.NewDecoder(bytes.NewReader(data)).Decode(v)
 }
 
 func TestSetCodec(t *testing.T) {
-	type Value struct {
-		I int
-		S string
-	}
+	old := DefaultCodec
+	defer SetCodec(old)
 
-	gc := &codecGob{}
-	SetCodec(gc)
-
-	v1 := &Value{I: 3, S: "hello"}
-	v2 := &Value{}
-	dc := DefaultCodec
-	data, err := dc.Marshal(v1)
-	if err != nil {
-		t.Errorf("JSONCodec.Marshal() error = %v, wantErr %v", err, nil)
-		return
+	SetCodec(gobCodec{})
+	if _, ok := DefaultCodec.(gobCodec); !ok {
+		t.Fatal("SetCodec not applied")
 	}
-	err = gc.Unmarshal(data, v2)
+	data, err := DefaultCodec.Marshal(&payload{A: 1, B: "b"})
 	if err != nil {
-		t.Errorf("JSONCodec.Unmarshal() error = %v, wantErr %v", err, nil)
-		return
+		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(v1, v2) {
-		t.Errorf("v2 = %v, want %v", v2, v1)
+	var p payload
+	if err := DefaultCodec.Unmarshal(data, &p); err != nil || p != (payload{A: 1, B: "b"}) {
+		t.Fatalf("round trip = %+v, %v", p, err)
 	}
 }

@@ -6,270 +6,257 @@ package arpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-const (
-	methodSingleflight    = "/singleflight"
-	methodSingleflightKey = "/singleflightkey"
-	methodSingleflightCtx = "/singleflightctx"
-	methodSingleflightAsc = "/singleflightasync"
-	singleflightAddr      = "localhost:11003"
-)
+type sfReq struct{ ID int }
 
-type sfReq struct {
-	ID int
-}
+func (r *sfReq) String() string { return fmt.Sprintf("sfReq:%d", r.ID) }
 
-// String makes sfReq a fmt.Stringer so the default singleflight key func can
-// derive a key from it.
-func (r *sfReq) String() string {
-	return fmt.Sprintf("sfReq:%d", r.ID)
-}
+func TestSingleflightGroup(t *testing.T) {
+	var g singleflightGroup
+	k := sfKey{method: "m", key: "k"}
 
-// newSingleflightServer starts a server that counts how many times each method
-// is actually invoked and echoes a per-method response after a small delay (so
-// concurrent Calls overlap and can be de-duplicated).
-func newSingleflightServer(t *testing.T, addr string, hits *int32) *Server {
-	svr := NewServer()
-	echo := func(ctx *Context) {
-		atomic.AddInt32(hits, 1)
-		var req sfReq
-		ctx.Bind(&req)
-		time.Sleep(time.Second / 10)
-		ctx.Write(fmt.Sprintf("resp:%d", req.ID))
+	call, leader := g.acquire(k)
+	if !leader {
+		t.Fatal("the first caller should lead")
 	}
-	for _, m := range []string{methodSingleflight, methodSingleflightKey, methodSingleflightCtx, methodSingleflightAsc} {
-		svr.Handler.Handle(m, echo, true)
+	if c2, leader := g.acquire(k); leader || c2 != call {
+		t.Fatal("a concurrent caller should follow the same call")
 	}
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatalf("listen failed: %v", err)
+	if _, leader := g.acquire(sfKey{method: "m", key: "k", async: true}); !leader {
+		t.Fatal("async callers are grouped apart")
 	}
-	go svr.Serve(ln)
-	return svr
-}
 
-func TestClient_SingleflightDefaultKey(t *testing.T) {
-	var hits int32
-	svr := newSingleflightServer(t, singleflightAddr, &hits)
-	defer svr.Stop()
-
-	handler := DefaultHandler.Clone()
-	handler.Singleflight(methodSingleflight)
-
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", singleflightAddr, time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+	g.finish(k, call, []byte("data"), nil)
+	<-call.done
+	if string(call.data) != "data" || call.err != nil {
+		t.Fatal("finish should publish the result")
 	}
-	defer c.Stop()
-
-	const n = 20
-	var wg sync.WaitGroup
-	wg.Add(n)
-	for i := 0; i < n; i++ {
-		go func() {
-			defer wg.Done()
-			req := &sfReq{ID: 1}
-			var rsp string
-			if err := c.Call(methodSingleflight, req, &rsp, time.Second*3); err != nil {
-				t.Errorf("Call error: %v", err)
-				return
-			}
-			if rsp != "resp:1" {
-				t.Errorf("unexpected rsp %q, want %q", rsp, "resp:1")
-			}
-		}()
+	c3, leader := g.acquire(k)
+	if !leader || c3 == call {
+		t.Fatal("after finish, a new call starts")
 	}
-	wg.Wait()
-
-	// All n concurrent Calls share the same key, so the server should be hit
-	// far fewer than n times (ideally once, with some slack for timing).
-	if got := atomic.LoadInt32(&hits); got >= n {
-		t.Fatalf("singleflight did not de-duplicate: server hits=%v, want < %v", got, n)
+	// Releasing a superseded call does not remove the current one.
+	g.release(k, call)
+	if c4, leader := g.acquire(k); leader || c4 != c3 {
+		t.Fatal("release of a stale call removed the current one")
 	}
 }
 
-func TestClient_SingleflightCustomKey(t *testing.T) {
-	var hits int32
-	svr := newSingleflightServer(t, "localhost:11004", &hits)
-	defer svr.Stop()
-
-	handler := DefaultHandler.Clone()
-	// Key by the request ID; two distinct IDs must not be de-duplicated.
-	handler.Singleflight(methodSingleflightKey, func(req interface{}) string {
-		return fmt.Sprintf("%d", req.(*sfReq).ID)
-	})
-
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", "localhost:11004", time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
-
-	const groups = 2
-	const perGroup = 10
-	var wg sync.WaitGroup
-	wg.Add(groups * perGroup)
-	for g := 0; g < groups; g++ {
-		id := g + 1
-		for i := 0; i < perGroup; i++ {
-			go func() {
-				defer wg.Done()
-				req := &sfReq{ID: id}
-				var rsp string
-				if err := c.Call(methodSingleflightKey, req, &rsp, time.Second*3); err != nil {
-					t.Errorf("Call error: %v", err)
-					return
-				}
-				if want := fmt.Sprintf("resp:%d", id); rsp != want {
-					t.Errorf("unexpected rsp %q, want %q", rsp, want)
-				}
-			}()
+func TestSingleflightAsyncFanout(t *testing.T) {
+	call := &singleflightCall{done: make(chan struct{})}
+	var got []error
+	var mu sync.Mutex
+	errResult := errors.New("result")
+	for i := 0; i < 3; i++ {
+		if !call.addSub(&sfAsyncSub{handler: func(ctx *Context, err error) {
+			mu.Lock()
+			got = append(got, err)
+			mu.Unlock()
+		}}) {
+			t.Fatal("addSub before fanout should succeed")
 		}
 	}
-	wg.Wait()
-
-	// Two distinct keys => at least 2 real requests, but far fewer than the
-	// total number of concurrent callers.
-	got := atomic.LoadInt32(&hits)
-	if got < groups {
-		t.Fatalf("expected at least %v server hits(one per key), got %v", groups, got)
+	call.fanout(nil, errResult)
+	if len(got) != 3 || got[0] != errResult {
+		t.Fatalf("fanout delivered %v", got)
 	}
-	if got >= groups*perGroup {
-		t.Fatalf("singleflight did not de-duplicate: server hits=%v, want < %v", got, groups*perGroup)
+	if call.addSub(&sfAsyncSub{}) {
+		t.Fatal("addSub after fanout should fail")
+	}
+
+	// A sub fires once: by its timer or the fanout, whichever comes first.
+	var fired int32
+	sub := &sfAsyncSub{handler: func(*Context, error) { atomic.AddInt32(&fired, 1) }}
+	sub.timer = time.AfterFunc(time.Hour, func() {})
+	sub.fire(nil, ErrTimeout)
+	sub.fire(nil, nil)
+	if fired != 1 {
+		t.Fatalf("fired %v times", fired)
 	}
 }
 
-func TestClient_SingleflightCallContext(t *testing.T) {
-	var hits int32
-	svr := newSingleflightServer(t, "localhost:11005", &hits)
-	defer svr.Stop()
+// sfServer starts a server whose "/sf" handler counts hits and blocks until
+// release is closed.
+func sfServer(t *testing.T) (addr string, hits *int32, release chan struct{}) {
+	hits = new(int32)
+	release = make(chan struct{})
+	_, addr = startServer(t, func(h Handler) {
+		h.Handle("/sf", func(ctx *Context) {
+			atomic.AddInt32(hits, 1)
+			<-release
+			var req sfReq
+			ctx.Bind(&req)
+			if req.ID < 0 {
+				ctx.Error("negative id")
+				return
+			}
+			ctx.Write(fmt.Sprintf("rsp:%d", req.ID))
+		})
+	})
+	return addr, hits, release
+}
 
-	handler := DefaultHandler.Clone()
-	handler.Singleflight(methodSingleflightCtx)
+func TestSingleflight_Call(t *testing.T) {
+	addr, hits, release := sfServer(t)
+	c := dialClient(t, addr, func(h Handler) { h.Singleflight("/sf") })
 
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", "localhost:11005", time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
-
-	const n = 20
+	const n = 10
 	var wg sync.WaitGroup
-	wg.Add(n)
+	errs := make(chan error, n)
 	for i := 0; i < n; i++ {
-		go func() {
+		wg.Add(1)
+		go func(i int) {
 			defer wg.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-			defer cancel()
-			req := &sfReq{ID: 1}
 			var rsp string
-			if err := c.CallContext(ctx, methodSingleflightCtx, req, &rsp); err != nil {
-				t.Errorf("CallContext error: %v", err)
-				return
+			var err error
+			if i%2 == 0 {
+				err = c.Call("/sf", &sfReq{ID: 1}, &rsp, 2*time.Second)
+			} else {
+				err = c.CallContext(context.Background(), "/sf", &sfReq{ID: 1}, &rsp)
 			}
-			if rsp != "resp:1" {
-				t.Errorf("unexpected rsp %q, want %q", rsp, "resp:1")
+			if err == nil && rsp != "rsp:1" {
+				err = fmt.Errorf("rsp = %q", rsp)
 			}
-		}()
+			errs <- err
+		}(i)
 	}
+	waitFor(t, "leader request", func() bool { return atomic.LoadInt32(hits) == 1 })
+	time.Sleep(50 * time.Millisecond) // let the followers join
+	close(release)
 	wg.Wait()
-
-	if got := atomic.LoadInt32(&hits); got >= n {
-		t.Fatalf("singleflight did not de-duplicate CallContext: server hits=%v, want < %v", got, n)
-	}
-}
-
-func TestClient_SingleflightCallAsync(t *testing.T) {
-	var hits int32
-	svr := newSingleflightServer(t, "localhost:11006", &hits)
-	defer svr.Stop()
-
-	handler := DefaultHandler.Clone()
-	handler.Singleflight(methodSingleflightAsc)
-
-	c, err := NewClient(func() (net.Conn, error) {
-		return net.DialTimeout("tcp", "localhost:11006", time.Second)
-	}, handler)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	defer c.Stop()
-
-	const n = 20
-	var (
-		wg     sync.WaitGroup
-		okCnt  int32
-		errCnt int32
-	)
-	wg.Add(n)
-	for i := 0; i < n; i++ {
-		req := &sfReq{ID: 1}
-		err := c.CallAsync(methodSingleflightAsc, req, func(ctx *Context, err error) {
-			defer wg.Done()
-			if err != nil {
-				atomic.AddInt32(&errCnt, 1)
-				return
-			}
-			var rsp string
-			if err := ctx.Bind(&rsp); err != nil {
-				atomic.AddInt32(&errCnt, 1)
-				return
-			}
-			if rsp != "resp:1" {
-				t.Errorf("unexpected rsp %q, want %q", rsp, "resp:1")
-				atomic.AddInt32(&errCnt, 1)
-				return
-			}
-			atomic.AddInt32(&okCnt, 1)
-		}, time.Second*3)
+	close(errs)
+	for err := range errs {
 		if err != nil {
-			wg.Done()
-			t.Fatalf("CallAsync error: %v", err)
+			t.Fatal(err)
 		}
 	}
-	wg.Wait()
-
-	// Every caller's handler must fire exactly once with the shared response.
-	if got := atomic.LoadInt32(&okCnt); got != n {
-		t.Fatalf("CallAsync singleflight: %v handlers succeeded, want %v (errs=%v)", got, n, atomic.LoadInt32(&errCnt))
+	if got := atomic.LoadInt32(hits); got >= n {
+		t.Fatalf("%v requests for %v calls, want de-duplication", got, n)
 	}
-	// But only a few real requests should have reached the server.
-	if got := atomic.LoadInt32(&hits); got >= n {
-		t.Fatalf("singleflight did not de-duplicate CallAsync: server hits=%v, want < %v", got, n)
+
+	// Different keys are not merged; errors are shared too.
+	var rsp string
+	if err := c.Call("/sf", &sfReq{ID: 2}, &rsp, time.Second); err != nil || rsp != "rsp:2" {
+		t.Fatalf("Call = %v, %q", err, rsp)
+	}
+	if err := c.Call("/sf", &sfReq{ID: -1}, &rsp, time.Second); err == nil || err.Error() != "negative id" {
+		t.Fatalf("Call = %v", err)
 	}
 }
 
-func TestHandler_SingleflightKey(t *testing.T) {
+func TestSingleflight_FollowerGivesUp(t *testing.T) {
+	addr, hits, release := sfServer(t)
+	defer close(release)
+	c := dialClient(t, addr, func(h Handler) { h.Singleflight("/sf") })
+
+	leader := make(chan error, 1)
+	go func() { leader <- c.Call("/sf", &sfReq{ID: 1}, nil, 50*time.Millisecond) }()
+	waitFor(t, "leader request", func() bool { return atomic.LoadInt32(hits) == 1 })
+
+	// A follower times out on its own.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if err := c.CallContext(ctx, "/sf", &sfReq{ID: 1}, nil); err != ErrClientTimeout {
+		t.Fatalf("follower = %v, want ErrClientTimeout", err)
+	}
+	// The leader's error is shared with the followers still waiting.
+	follower := make(chan error, 1)
+	go func() { follower <- c.Call("/sf", &sfReq{ID: 1}, nil, time.Second) }()
+	if err := recvWithin(t, leader, "leader"); err != ErrClientTimeout {
+		t.Fatalf("leader = %v, want ErrClientTimeout", err)
+	}
+	if err := recvWithin(t, follower, "follower"); err != ErrClientTimeout && err != nil {
+		t.Fatalf("follower = %v", err)
+	}
+
+	// A follower returns when the Client stops.
+	go func() { leader <- c.Call("/sf", &sfReq{ID: 3}, nil, time.Second) }()
+	waitFor(t, "second leader request", func() bool { return atomic.LoadInt32(hits) >= 2 })
+	go func() { follower <- c.Call("/sf", &sfReq{ID: 3}, nil, time.Second) }()
+	time.Sleep(20 * time.Millisecond)
+	c.Stop()
+	if err := recvWithin(t, follower, "follower"); err != ErrClientStopped {
+		t.Fatalf("follower = %v, want ErrClientStopped", err)
+	}
+	recvWithin(t, leader, "leader")
+}
+
+func TestSingleflight_CallAsync(t *testing.T) {
+	addr, hits, release := sfServer(t)
+	c := dialClient(t, addr, func(h Handler) { h.Singleflight("/sf") })
+
+	const n = 10
+	type result struct {
+		rsp string
+		err error
+	}
+	results := make(chan result, n)
+	// CallAsync returns at once, so all calls join the first one while the
+	// server holds it.
+	for i := 0; i < n; i++ {
+		if err := c.CallAsync("/sf", &sfReq{ID: 1}, func(ctx *Context, err error) {
+			var rsp string
+			if err == nil {
+				err = ctx.Bind(&rsp)
+			}
+			results <- result{rsp, err}
+		}, 2*time.Second); err != nil {
+			t.Fatalf("CallAsync: %v", err)
+		}
+	}
+	waitFor(t, "leader request", func() bool { return atomic.LoadInt32(hits) == 1 })
+	close(release)
+	for i := 0; i < n; i++ {
+		if r := recvWithin(t, results, "result"); r.err != nil || r.rsp != "rsp:1" {
+			t.Fatalf("result %+v", r)
+		}
+	}
+	if got := atomic.LoadInt32(hits); got != 1 {
+		t.Fatalf("%v requests, want 1", got)
+	}
+}
+
+func TestSingleflight_CallAsyncFollowerTimeout(t *testing.T) {
+	addr, _, release := sfServer(t)
+	defer close(release)
+	c := dialClient(t, addr, func(h Handler) { h.Singleflight("/sf") })
+
+	leader := make(chan error, 1)
+	follower := make(chan error, 1)
+	if err := c.CallAsync("/sf", &sfReq{ID: 1}, func(_ *Context, err error) { leader <- err }, time.Second); err != nil {
+		t.Fatalf("CallAsync: %v", err)
+	}
+	if err := c.CallAsync("/sf", &sfReq{ID: 1}, func(_ *Context, err error) { follower <- err }, 10*time.Millisecond); err != nil {
+		t.Fatalf("CallAsync: %v", err)
+	}
+	if err := recvWithin(t, follower, "follower timeout"); err != ErrTimeout {
+		t.Fatalf("follower = %v, want ErrTimeout", err)
+	}
+}
+
+func TestSingleflight_CallAsyncLeaderFails(t *testing.T) {
+	// When the leader cannot send, it gets the error, its handler is not
+	// called, and the call is released for the next caller.
 	h := NewHandler()
+	h.SetAsyncWrite(false)
+	h.Singleflight("/sf")
+	c, conn, _ := pipeClient(t, h)
+	conn.setFailWrite(true)
 
-	if _, ok := h.SingleflightKey("/x", &sfReq{ID: 1}); ok {
-		t.Fatal("SingleflightKey should report not-enabled before Singleflight is called")
+	called := make(chan error, 1)
+	err := c.CallAsync("/sf", &sfReq{ID: 1}, func(_ *Context, err error) { called <- err }, time.Second)
+	if err != errTestWrite {
+		t.Fatalf("CallAsync = %v", err)
 	}
-
-	// Default key uses fmt.Stringer.
-	h.Singleflight("/x")
-	if key, ok := h.SingleflightKey("/x", &sfReq{ID: 7}); !ok || key != "sfReq:7" {
-		t.Fatalf("default key = (%q, %v), want (%q, true)", key, ok, "sfReq:7")
-	}
-
-	// Custom key func takes precedence.
-	h.Singleflight("/y", func(req interface{}) string {
-		return "custom"
-	})
-	if key, ok := h.SingleflightKey("/y", &sfReq{ID: 7}); !ok || key != "custom" {
-		t.Fatalf("custom key = (%q, %v), want (%q, true)", key, ok, "custom")
+	assertNoRecv(t, called, 20*time.Millisecond, "leader handler")
+	if _, leader := c.sfGroup.acquire(sfKey{method: "/sf", key: "sfReq:1", async: true}); !leader {
+		t.Fatal("the failed call should be released")
 	}
 }
