@@ -167,9 +167,9 @@ func TestServer_StopAndShutdown(t *testing.T) {
 		if err := s.Stop(); err != nil {
 			t.Fatalf("Stop = %v", err)
 		}
-		if err := recvWithin(t, served, "Serve"); err == nil {
-			t.Fatal("Serve should return the Accept error")
-		}
+		// Serve returns once stopped. Its error is the last Accept result: the
+		// closed listener's error, or nil if Stop came right after an accept.
+		recvWithin(t, served, "Serve")
 		// All conns are stopped.
 		recvWithin(t, disconnected, "OnDisconnected")
 		if serverClients(s) != 0 {
