@@ -70,7 +70,7 @@ func (s *Stream) CloseSend() {
 func (s *Stream) CloseSendContext(ctx context.Context) {
 	if atomic.CompareAndSwapInt32(&s.stateSend, 0, 1) {
 		eof := true
-		s.send(ctx, []byte{}, eof)
+		_ = s.send(ctx, []byte{}, eof)
 		s.halfClose()
 	}
 }

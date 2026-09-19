@@ -57,7 +57,6 @@ func SetLevel(lvl int) {
 	switch lvl {
 	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
 		DefaultLogger.SetLevel(lvl)
-		break
 	default:
 		fmt.Fprintf(Output, "invalid log level: %v", lvl)
 	}
@@ -73,7 +72,6 @@ func (l *logger) SetLevel(lvl int) {
 	switch lvl {
 	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
 		l.level = lvl
-		break
 	default:
 		fmt.Fprintf(Output, "invalid log level: %v", lvl)
 	}

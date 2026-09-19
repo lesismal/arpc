@@ -10,8 +10,8 @@
 [4]: https://github.com/avelino/awesome-go#distributed-systems
 [5]: https://img.shields.io/badge/license-MIT-blue.svg
 [6]: LICENSE
-[7]: https://img.shields.io/github/actions/workflow/status/lesismal/arpc/build_linux.yml?branch=master&style=flat-square&logo=github-actions
-[8]: https://github.com/lesismal/arpc/actions?query=workflow%3build-linux
+[7]: https://img.shields.io/github/actions/workflow/status/lesismal/arpc/ci.yml?branch=master&style=flat-square&logo=github-actions
+[8]: https://github.com/lesismal/arpc/actions/workflows/ci.yml
 [9]: https://goreportcard.com/badge/github.com/lesismal/arpc
 [10]: https://goreportcard.com/report/github.com/lesismal/arpc
 [11]: https://codecov.io/gh/lesismal/arpc/branch/master/graph/badge.svg

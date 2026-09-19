@@ -860,7 +860,7 @@ func (h *handler) SingleflightKey(method string, req interface{}) (string, bool)
 
 // isStructPtr reports whether t is a pointer to a struct.
 func isStructPtr(t reflect.Type) bool {
-	return t.Kind() == reflect.Ptr && t.Elem().Kind() == reflect.Struct
+	return t.Kind() == reflect.Pointer && t.Elem().Kind() == reflect.Struct
 }
 
 // newStructHandler builds the handler for a Register method without a
