@@ -124,8 +124,10 @@ func TestServer_MaxLoad(t *testing.T) {
 	if _, err := conn.Read(make([]byte, 1)); err != io.EOF {
 		t.Fatalf("Read = %v, want io.EOF", err)
 	}
-	if s.Accepted != 1 || atomic.LoadInt64(&s.CurrLoad) != 1 {
-		t.Fatalf("Accepted = %v, CurrLoad = %v", s.Accepted, s.CurrLoad)
+	// The load is taken back right after the close, which the Read may beat.
+	waitFor(t, "load taken back", func() bool { return atomic.LoadInt64(&s.CurrLoad) == 1 })
+	if s.Accepted != 1 {
+		t.Fatalf("Accepted = %v", s.Accepted)
 	}
 }
 

@@ -93,7 +93,19 @@ jobs:
         env:
           # Go 1.22's internal linker omits LC_UUID, which recent macOS dyld rejects.
           GOFLAGS: ${{ runner.os == 'macOS' && matrix.go == '1.22.x' && '-ldflags=-linkmode=external' || '' }}
-        run: go test -count=1 -timeout 120s -coverprofile=coverage.out -covermode=atomic ./...
+        run: |
+          set -o pipefail
+          go test -count=1 -timeout 120s -coverprofile=coverage.out -covermode=atomic ./... 2>&1 | tee test.log
+
+      - name: Report test failures
+        # Annotations show up on the run summary, unlike the raw log.
+        if: failure()
+        shell: bash
+        run: |
+          [ -f test.log ] || exit 0
+          grep -E -- '--- FAIL|_test\.go:[0-9]+:|^panic:' test.log | head -20 | while IFS= read -r line; do
+            echo "::error title=go test::${line}"
+          done
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.go == 'stable'

@@ -412,7 +412,11 @@ func TestClient_WritevDropAfterWriteError(t *testing.T) {
 	if err := c.Notify("m", "first", 0); err != nil {
 		t.Fatalf("Notify: %v", err)
 	}
-	time.Sleep(10 * time.Millisecond)
+	waitFor(t, "first message taken by the writer", func() bool {
+		c.writevMux.Lock()
+		defer c.writevMux.Unlock()
+		return c.writevSending && len(c.writevMsgs) == 0
+	})
 	for i := 0; i < 3; i++ {
 		if err := c.Notify("m", "queued", 0); err != nil {
 			t.Fatalf("Notify: %v", err)
