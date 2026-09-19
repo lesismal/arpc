@@ -8,34 +8,33 @@ import (
 	"encoding/json"
 )
 
-// DefaultCodec is the default codec used by arpc
+// DefaultCodec is the codec used by arpc when none is specified.
 var DefaultCodec Codec = &JSONCodec{}
 
-// Codec is the interface that wraps the arpc Message data encoding method.
+// Codec encodes and decodes the body of arpc Messages.
 //
-// Marshal returns the JSON encoding of v
+// Marshal returns the encoding of v.
 //
-// Unmarshal parses the Message data and stores the result
-// in the value pointed to by v
+// Unmarshal decodes data and stores the result in the value pointed to by v.
 type Codec interface {
 	Marshal(v interface{}) ([]byte, error)
 	Unmarshal(data []byte, v interface{}) error
 }
 
-// JSONCodec wraps std json
+// JSONCodec is a Codec based on encoding/json.
 type JSONCodec struct{}
 
-// Marshal wraps std json.Marshal
+// Marshal calls json.Marshal.
 func (j *JSONCodec) Marshal(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-// Unmarshal wraps std json.Unmarshal
+// Unmarshal calls json.Unmarshal.
 func (j *JSONCodec) Unmarshal(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
 }
 
-// SetCodec sets default codec instance
+// SetCodec replaces DefaultCodec.
 func SetCodec(c Codec) {
 	DefaultCodec = c
 }

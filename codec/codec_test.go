@@ -11,10 +11,10 @@ import (
 	"testing"
 )
 
-// codecGob .
+// codecGob is a Codec based on encoding/gob, used to test SetCodec.
 type codecGob struct{}
 
-// Marshal .
+// Marshal encodes v with gob.
 func (c *codecGob) Marshal(v interface{}) ([]byte, error) {
 	buffer := &bytes.Buffer{}
 	err := gob.NewEncoder(buffer).Encode(v)
@@ -24,7 +24,7 @@ func (c *codecGob) Marshal(v interface{}) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-// Unmarshal .
+// Unmarshal decodes data into v with gob.
 func (c *codecGob) Unmarshal(data []byte, v interface{}) error {
 	return gob.NewDecoder(bytes.NewBuffer(data)).Decode(v)
 }

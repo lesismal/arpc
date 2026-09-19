@@ -12,32 +12,32 @@ import (
 )
 
 var (
-	// TimeFormat is used to format time parameters.
+	// TimeFormat is the timestamp layout of each log line.
 	TimeFormat = "2006/01/02 15:04:05.000"
 
-	// Output is used to receive log output.
+	// Output is where the default logger writes to.
 	Output io.Writer = os.Stdout
 
-	// DefaultLogger is the default logger and is used by arpc
+	// DefaultLogger is the logger used by arpc, at LevelInfo by default.
 	DefaultLogger Logger = &logger{level: LevelInfo}
 )
 
 const (
 	// LevelAll enables all logs.
 	LevelAll = iota
-	// LevelDebug logs are usually disabled in production.
+	// LevelDebug is for debug logs, usually disabled in production.
 	LevelDebug
-	// LevelInfo is the default logging priority.
+	// LevelInfo is the default level.
 	LevelInfo
-	// LevelWarn .
+	// LevelWarn is for warnings.
 	LevelWarn
-	// LevelError .
+	// LevelError is for errors.
 	LevelError
 	// LevelNone disables all logs.
 	LevelNone
 )
 
-// Logger defines log interface
+// Logger is the logging interface used by arpc.
 type Logger interface {
 	SetLevel(lvl int)
 	Debug(format string, v ...interface{})
@@ -46,12 +46,13 @@ type Logger interface {
 	Error(format string, v ...interface{})
 }
 
-// SetLogger sets default logger.
+// SetLogger replaces DefaultLogger.
 func SetLogger(l Logger) {
 	DefaultLogger = l
 }
 
-// SetLevel sets default logger's priority.
+// SetLevel sets the level of DefaultLogger. An invalid level is reported to
+// Output and ignored.
 func SetLevel(lvl int) {
 	switch lvl {
 	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
@@ -62,12 +63,12 @@ func SetLevel(lvl int) {
 	}
 }
 
-// logger implements Logger and is used in arpc by default.
+// logger is the default Logger implementation, writing to Output.
 type logger struct {
 	level int
 }
 
-// SetLevel sets logs priority.
+// SetLevel sets the minimum level to log. An invalid level is ignored.
 func (l *logger) SetLevel(lvl int) {
 	switch lvl {
 	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
@@ -78,56 +79,56 @@ func (l *logger) SetLevel(lvl int) {
 	}
 }
 
-// Debug uses fmt.Printf to log a message at LevelDebug.
+// Debug writes a message to Output at LevelDebug.
 func (l *logger) Debug(format string, v ...interface{}) {
 	if LevelDebug >= l.level {
 		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [DBG] "+format+"\n", v...)
 	}
 }
 
-// Info uses fmt.Printf to log a message at LevelInfo.
+// Info writes a message to Output at LevelInfo.
 func (l *logger) Info(format string, v ...interface{}) {
 	if LevelInfo >= l.level {
 		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [INF] "+format+"\n", v...)
 	}
 }
 
-// Warn uses fmt.Printf to log a message at LevelWarn.
+// Warn writes a message to Output at LevelWarn.
 func (l *logger) Warn(format string, v ...interface{}) {
 	if LevelWarn >= l.level {
 		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [WRN] "+format+"\n", v...)
 	}
 }
 
-// Error uses fmt.Printf to log a message at LevelError.
+// Error writes a message to Output at LevelError.
 func (l *logger) Error(format string, v ...interface{}) {
 	if LevelError >= l.level {
 		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [ERR] "+format+"\n", v...)
 	}
 }
 
-// Debug uses DefaultLogger to log a message at LevelDebug.
+// Debug logs a message at LevelDebug via DefaultLogger, if it is not nil.
 func Debug(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Debug(format, v...)
 	}
 }
 
-// Info uses DefaultLogger to log a message at LevelInfo.
+// Info logs a message at LevelInfo via DefaultLogger, if it is not nil.
 func Info(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Info(format, v...)
 	}
 }
 
-// Warn uses DefaultLogger to log a message at LevelWarn.
+// Warn logs a message at LevelWarn via DefaultLogger, if it is not nil.
 func Warn(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Warn(format, v...)
 	}
 }
 
-// Error uses DefaultLogger to log a message at LevelError.
+// Error logs a message at LevelError via DefaultLogger, if it is not nil.
 func Error(format string, v ...interface{}) {
 	if DefaultLogger != nil {
 		DefaultLogger.Error(format, v...)

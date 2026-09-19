@@ -27,8 +27,8 @@ func TestClient_HandleReconnect(t *testing.T) {
 	go svr.Serve(ln)
 	defer svr.Stop()
 
-	// The initial dial succeeds, the next two(the first reconnect attempts)
-	// fail, and later ones succeed.
+	// The initial dial succeeds, the first failTimes reconnect attempts fail,
+	// and the ones after succeed.
 	const failTimes = 2
 	errDial := errors.New("mock dial error")
 	var dials int32

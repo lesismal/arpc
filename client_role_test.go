@@ -14,7 +14,7 @@ func TestClient_IsClientIsServer(t *testing.T) {
 	const addr = "localhost:11007"
 
 	svr := NewServer()
-	// Capture the server-side Client(created for an accepted connection).
+	// Capture the server-role Client created for the accepted conn.
 	chSvrCli := make(chan *Client, 1)
 	svr.Handler.HandleConnected(func(c *Client) {
 		select {
@@ -37,12 +37,12 @@ func TestClient_IsClientIsServer(t *testing.T) {
 	}
 	defer cli.Stop()
 
-	// The dialing side is a client-side Client.
+	// The dialing side is a client-role Client.
 	if !cli.IsClient() || cli.IsServer() {
 		t.Fatalf("dialing Client: IsClient()=%v IsServer()=%v, want true/false", cli.IsClient(), cli.IsServer())
 	}
 
-	// The accepted side is a server-side Client.
+	// The accepted side is a server-role Client.
 	var svrCli *Client
 	select {
 	case svrCli = <-chSvrCli:

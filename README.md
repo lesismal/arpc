@@ -471,16 +471,16 @@ client.Handler.HandleDisconnected(func(c *arpc.Client) {
 
 ### Handle Client's reconnect
 
-Called after each reconnect Dial attempt of a client-role Client, whether it succeeds or fails.
+Called after every reconnect attempt of a client-role Client, whether it succeeds or not.
 
 ```golang
 client, err := arpc.NewClient(...)
 client.Handler.HandleReconnect(func(c *arpc.Client, info *arpc.ReconnectInfo) {
 	// info.Times:    1-based attempt number in the current reconnect round
 	// info.MaxTimes: Handler.MaxReconnectTimes(), <= 0 means unlimited
-	// info.Addr:     target address
-	// info.Success:  whether this attempt connected
-	// info.Err:      Dial error when failed
+	// info.Addr:     remote address of the lost connection
+	// info.Success:  whether the Dial succeeded
+	// info.Err:      Dial error, nil on success
 	...
 })
 ```

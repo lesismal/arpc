@@ -19,56 +19,68 @@ import (
 )
 
 const (
-	// TimeZero represents zero time.
+	// TimeZero as a push timeout means not to wait if the send queue is full.
 	TimeZero time.Duration = 0
-	// TimeForever represents forever time.
+	// TimeForever as a push timeout means to wait until the message is queued
+	// or the Client stops.
 	TimeForever time.Duration = 1<<63 - 1
 )
 
-// ReconnectInfo describes one reconnect Dial attempt of a client-role Client,
-// passed to the Handler's OnReconnect callback.
+// ReconnectInfo describes a single reconnect attempt of a client-role Client.
+// It is passed to Handler.OnReconnect after every attempt.
 type ReconnectInfo struct {
-	// Times is the 1-based attempt number within the current reconnect round.
-	// It restarts from 1 each time the connection is lost again.
+	// Times is the 1-based attempt number in the current reconnect round;
+	// it starts over from 1 each time the connection is lost.
 	Times int
-	// MaxTimes is the Handler's MaxReconnectTimes; <= 0 means unlimited.
+	// MaxTimes is Handler.MaxReconnectTimes(); <= 0 means unlimited.
 	MaxTimes int
-	// Addr is the target address, i.e. the remote address of the lost connection.
+	// Addr is the remote address of the lost connection.
 	Addr string
-	// Success reports whether this attempt connected.
+	// Success reports whether the Dial succeeded.
 	Success bool
-	// Err is the Dial error when Success is false, otherwise nil.
+	// Err is the Dial error, nil on success.
 	Err error
 }
 
-// DialerFunc defines the dialer used by arpc Client to connect to the server.
+// DialerFunc dials the server. A client-role Client also calls it to
+// reconnect and restart.
 type DialerFunc func() (net.Conn, error)
 
-// rpcSession represents an active calling session.
+// rpcSession is a pending blocking call waiting for its response on done.
+// done is closed without a response if the call is dropped or the conn breaks.
 type rpcSession struct {
 	seq  uint64
 	done chan *Message
 }
 
-// newSession creates rpcSession
+// newSession creates an rpcSession for seq.
 func newSession(seq uint64) *rpcSession {
 	return &rpcSession{seq: seq, done: make(chan *Message, 1)}
 }
 
-// Client represents an arpc Client.
-// There may be multiple outstanding Calls or Notifys associated
-// with a single Client, and a Client may be used by
-// multiple goroutines simultaneously.
+// Client is one arpc connection, on either side: a client-role Client dials
+// the server (see NewClient) and reconnects when the conn breaks, while a
+// server-role Client is created by a Server for each accepted conn. Both can
+// make calls to and serve calls from the peer.
+//
+// A Client is safe for concurrent use; there may be multiple outstanding
+// calls at a time.
 type Client struct {
-	// 64-aligned on 32-bit
+	// seq is kept 64-bit aligned on 32-bit platforms.
 	seq uint64
 
-	Conn    net.Conn
-	Codec   codec.Codec
+	// Conn is the current conn; it changes on reconnect and Restart.
+	Conn net.Conn
+	// Codec encodes and decodes message bodies.
+	Codec codec.Codec
+	// Handler handles the Client's messages and events.
 	Handler Handler
-	Reader  io.Reader
-	Dialer  DialerFunc
-	Head    Header
+	// Reader reads from Conn, wrapped by Handler.WrapReader with BatchRecv.
+	Reader io.Reader
+	// Dialer dials the server; nil for a server-role Client.
+	Dialer DialerFunc
+	// Head is the buffer for reading the body length of each message.
+	Head Header
 
 	running      bool
 	reconnecting bool
@@ -81,16 +93,15 @@ type Client struct {
 
 	chSend  chan *Message
 	chClose chan util.Empty
-	// recvDone is closed when the current generation's recvLoop returns. Restart
-	// waits on it so a new generation is only built after the old recvLoop has
-	// fully torn down, preventing its teardown from clobbering the new state.
+	// recvDone is closed when the current generation's recvLoop returns.
+	// Restart waits on it so that the old loop's teardown never overlaps with,
+	// and clobbers, the state of the new generation.
 	recvDone chan struct{}
 
-	// writev async-send path (enabled by Handler.AsyncWritev()).
-	// writevBuffers is the [][]byte send queue; writevMsgs holds the matching
-	// *Message values (in enqueue order) for lifecycle callbacks after the
-	// write completes. writevSending reports whether a writer goroutine is
-	// currently draining the queue, ensuring a single writer per conn.
+	// The writev send queue, used with Handler.AsyncWritev. writevBuffers
+	// holds the buffers to write and writevMsgs the queued Messages in order,
+	// for the callbacks after writing. writevSending reports whether a
+	// writevLoop is running, so that there is at most one per Client.
 	writevMux     sync.Mutex
 	writevBuffers net.Buffers
 	writevMsgs    []*Message
@@ -98,7 +109,7 @@ type Client struct {
 
 	onStop func(*Client)
 
-	// sfGroup de-duplicates concurrent Calls for methods enabled via
+	// sfGroup de-duplicates concurrent calls of methods enabled by
 	// Handler.Singleflight.
 	sfGroup singleflightGroup
 
@@ -106,24 +117,24 @@ type Client struct {
 	// UserData interface{}
 }
 
-// SetState sets running state, should be used only for non-blocking conn.
+// SetState sets the running state directly. It is only meant for Clients
+// driven by an external non-blocking conn framework.
 func (c *Client) SetState(running bool) {
 	c.running = running
 }
 
-// IsClient reports whether c is a client-side Client, i.e. one that actively
-// dials out to a server(created by NewClient and friends, so Dialer != nil).
+// IsClient reports whether c is a client-role Client, i.e. it has a Dialer.
 func (c *Client) IsClient() bool {
 	return c.Dialer != nil
 }
 
-// IsServer reports whether c is a server-side Client, i.e. one created for a
-// connection accepted by a Server(so Dialer == nil).
+// IsServer reports whether c is a server-role Client, i.e. it has no Dialer.
 func (c *Client) IsServer() bool {
 	return c.Dialer == nil
 }
 
-// Get returns value for key.
+// Get returns the value stored on the Client for key. Values are local and
+// cleared by Restart.
 func (c *Client) Get(key interface{}) (interface{}, bool) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -134,7 +145,8 @@ func (c *Client) Get(key interface{}) (interface{}, bool) {
 	return value, ok
 }
 
-// Set sets key-value pair.
+// Set stores a key-value pair on the Client. It does nothing if key or value
+// is nil.
 func (c *Client) Set(key interface{}, value interface{}) {
 	if key == nil || value == nil {
 		return
@@ -147,7 +159,7 @@ func (c *Client) Set(key interface{}, value interface{}) {
 	c.mux.Unlock()
 }
 
-// Delete deletes key-value pair
+// Delete deletes the value for key.
 func (c *Client) Delete(key interface{}) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -156,17 +168,18 @@ func (c *Client) Delete(key interface{}) {
 	}
 }
 
-// Ping .
+// Ping writes a ping message directly to the conn, bypassing the send queue.
 func (c *Client) Ping() {
 	c.Conn.Write(PingMessage.Buffer)
 }
 
-// Pong .
+// Pong writes a pong message directly to the conn, bypassing the send queue.
 func (c *Client) Pong() {
 	c.Conn.Write(PongMessage.Buffer)
 }
 
-// Ping .
+// Keepalive sends a Ping every interval (30s if interval <= 0) while the
+// Client is running. It returns immediately.
 func (c *Client) Keepalive(interval time.Duration) {
 	if c.running {
 		if interval <= 0 {
@@ -179,7 +192,9 @@ func (c *Client) Keepalive(interval time.Duration) {
 	}
 }
 
-// NewMessage creates a Message by client's seq, handler and codec.
+// NewMessage creates a Message with a new sequence number and the Client's
+// Handler and Codec. args[0], if any, must be a map[interface{}]interface{} of
+// message values.
 func (c *Client) NewMessage(cmd byte, method string, v interface{}, args ...interface{}) *Message {
 	if len(args) == 0 {
 		return newMessage(cmd, method, v, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, nil)
@@ -187,15 +202,20 @@ func (c *Client) NewMessage(cmd byte, method string, v interface{}, args ...inte
 	return newMessage(cmd, method, v, false, false, atomic.AddUint64(&c.seq, 1), c.Handler, c.Codec, args[0].(map[interface{}]interface{}))
 }
 
-// Call makes an rpc call with a timeout.
-// Call will block waiting for the server's response until timeout.
+// Call sends a request for method with req and waits for the response,
+// decoding it into rsp. timeout must be > 0 and covers both queuing and
+// waiting. args[0], if any, must be a map[interface{}]interface{} of message
+// values.
+//
+// req and rsp may be []byte, string or pointers to them, or values handled
+// by the Client's Codec; see util.ValueToBytes. It returns ErrClientTimeout
+// on timeout, or the remote error for an error response.
 func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout time.Duration, args ...interface{}) error {
 	if err := c.checkCallArgs(method, timeout); err != nil {
 		return err
 	}
 
-	// Funnel the timeout through a context so Call and CallContext share the
-	// same request path(see callContext/sendRequest).
+	// Turn the timeout into a context to share the path of CallContext.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -206,8 +226,8 @@ func (c *Client) Call(method string, req interface{}, rsp interface{}, timeout t
 	return c.callContext(ctx, method, req, rsp, args...)
 }
 
-// callContext is the shared body of Call and CallContext: it sends a request
-// message and decodes the response into rsp, canceling on ctx.
+// callContext is the body of Call and CallContext without singleflight: it
+// sends the request and decodes the response into rsp.
 func (c *Client) callContext(ctx context.Context, method string, req interface{}, rsp interface{}, args ...interface{}) error {
 	msg := c.newRequestMessage(CmdRequest, method, req, false, false, args...)
 	resp, err := c.sendRequest(ctx, msg)
@@ -219,12 +239,10 @@ func (c *Client) callContext(ctx context.Context, method string, req interface{}
 	return err
 }
 
-// callSingleflight makes a de-duplicated blocking Call/CallContext for a method
-// enabled via Handler.Singleflight. Concurrent callers sharing key issue only
-// one request: the leader performs the real round-trip while followers wait for
-// and share its response(each unmarshaling into its own rsp). Every caller still
-// honors its own ctx while waiting. Callers arriving via Call or CallContext
-// de-duplicate together.
+// callSingleflight is Call/CallContext for a method with singleflight
+// enabled. Concurrent calls with the same key send only one request: the
+// leader sends it, and followers wait for its response and each decode it into
+// their own rsp. Each caller still honors its own ctx.
 func (c *Client) callSingleflight(ctx context.Context, method string, req interface{}, rsp interface{}, key string, args ...interface{}) error {
 	k := sfKey{method: method, key: key}
 	call, leader := c.sfGroup.acquire(k)
@@ -250,11 +268,10 @@ func (c *Client) callSingleflight(ctx context.Context, method string, req interf
 	return c.parseData(call.data, rsp)
 }
 
-// writeSync encodes msg through the registered coders and writes it to the
-// connection synchronously. It is the shared body of the path taken when
-// neither AsyncWritev nor AsyncWrite is enabled: it closes the connection on
-// write error, always runs OnMessageDone, and drops the message(returning
-// ErrClientReconnecting) while the client is reconnecting.
+// writeSync encodes msg with the coders and writes it on the calling
+// goroutine, used when neither AsyncWritev nor AsyncWrite is enabled. The
+// conn is closed on a write error. While reconnecting, msg is dropped and
+// ErrClientReconnecting is returned.
 func (c *Client) writeSync(msg *Message) error {
 	if c.reconnecting {
 		c.dropMessage(msg)
@@ -272,11 +289,10 @@ func (c *Client) writeSync(msg *Message) error {
 	return err
 }
 
-// sendRequest sends msg as a CmdRequest and waits for the matching response,
-// canceling on ctx(mapped to ErrClientTimeout). On success it returns the
-// response Message, which the caller must decode and then hand to
-// OnMessageDone. On failure it returns the error, having already released the
-// request message.
+// sendRequest sends the request msg and waits for its response, or returns
+// ErrClientTimeout when ctx is done. The caller must pass the returned
+// response to OnMessageDone after decoding it. The response is nil if the
+// call was dropped or the conn broke.
 func (c *Client) sendRequest(ctx context.Context, msg *Message) (*Message, error) {
 	seq := msg.Seq()
 	sess := newSession(seq)
@@ -315,10 +331,9 @@ func (c *Client) sendRequest(ctx context.Context, msg *Message) (*Message, error
 	}
 }
 
-// requestData performs one request round-trip and returns a copy of the
-// response payload(so it stays valid after the response Message is released).
-// It is the shared body executed by the singleflight leader; the returned data
-// must be decoded with parseData.
+// requestData is the request of a singleflight leader: it sends the request
+// and returns a copy of the response data, which stays valid after the
+// response is released and can be decoded with parseData.
 func (c *Client) requestData(ctx context.Context, method string, req interface{}, args ...interface{}) ([]byte, error) {
 	msg := c.newRequestMessage(CmdRequest, method, req, false, false, args...)
 	resp, err := c.sendRequest(ctx, msg)
@@ -330,8 +345,8 @@ func (c *Client) requestData(ctx context.Context, method string, req interface{}
 	return data, err
 }
 
-// responseData validates a response Message and returns a copy of its payload,
-// or the remote error for an error response.
+// responseData returns a copy of the response data, or the remote error for
+// an error response.
 func (c *Client) responseData(msg *Message) ([]byte, error) {
 	if msg == nil {
 		return nil, ErrClientReconnecting
@@ -347,8 +362,8 @@ func (c *Client) responseData(msg *Message) ([]byte, error) {
 	}
 }
 
-// parseData decodes a response payload(as returned by requestData) into rsp,
-// mirroring parseResponse's handling of *string/*[]byte and codec types.
+// parseData decodes data returned by requestData into rsp, the same way as
+// parseResponse.
 func (c *Client) parseData(data []byte, rsp interface{}) error {
 	if rsp == nil {
 		return nil
@@ -364,14 +379,12 @@ func (c *Client) parseData(data []byte, rsp interface{}) error {
 	return nil
 }
 
-// CallWith uses context to make rpc call.
-// CallWith blocks to wait for a response from the server until it times out.
+// CallWith is an alias of CallContext.
 func (c *Client) CallWith(ctx context.Context, method string, req interface{}, rsp interface{}, args ...interface{}) error {
 	return c.CallContext(ctx, method, req, rsp, args...)
 }
 
-// CallContext uses context to make rpc call.
-// CallContext blocks to wait for a response from the server until it times out.
+// CallContext is like Call, but waits until ctx is done instead of a timeout.
 func (c *Client) CallContext(ctx context.Context, method string, req interface{}, rsp interface{}, args ...interface{}) error {
 	if err := c.checkStateAndMethod(method); err != nil {
 		return err
@@ -384,9 +397,11 @@ func (c *Client) CallContext(ctx context.Context, method string, req interface{}
 	return c.callContext(ctx, method, req, rsp, args...)
 }
 
-// CallAsync makes an asynchronous rpc call with timeout.
-// CallAsync will not block waiting for the server's response,
-// But the handler will be called if the response arrives before the timeout.
+// CallAsync sends a request for method with req and returns without waiting
+// for the response. handler must not be nil and timeout must be > 0. handler
+// is called at most once: with the response, with ErrTimeout if none arrives
+// within timeout, or with ErrClientReconnecting if the conn breaks. It is not
+// called if CallAsync returns an error or the request is dropped unsent.
 func (c *Client) CallAsync(method string, req interface{}, handler AsyncHandlerFunc, timeout time.Duration, args ...interface{}) error {
 	err := c.checkCallAsyncArgs(method, handler, timeout)
 	if err != nil {
@@ -400,27 +415,25 @@ func (c *Client) CallAsync(method string, req interface{}, handler AsyncHandlerF
 	return c.callAsyncOnce(method, req, handler, timeout, args...)
 }
 
-// callAsyncSingleflight makes a de-duplicated CallAsync for a method enabled via
-// Handler.Singleflight. Concurrent callers sharing key issue only one request:
-// the leader performs the real async round-trip while followers subscribe and
-// have their handler invoked with the leader's shared response(or with
-// ErrTimeout if their own timeout elapses first).
+// callAsyncSingleflight is CallAsync for a method with singleflight enabled.
+// Concurrent calls with the same key send only one request: the leader sends
+// it, and followers' handlers are called with its response, or with
+// ErrTimeout if their own timeout comes first.
 func (c *Client) callAsyncSingleflight(method string, req interface{}, handler AsyncHandlerFunc, timeout time.Duration, key string, args ...interface{}) error {
 	k := sfKey{method: method, key: key, async: true}
 	call, leader := c.sfGroup.acquire(k)
 
 	if leader {
-		// The leader's internal handler invokes its own handler, then fans the
-		// result out to followers, then clears the in-flight entry.
+		// Call the leader's handler, then the followers', then release the call.
 		internal := func(ctx *Context, err error) {
 			handler(ctx, err)
 			call.fanout(ctx, err)
 			c.sfGroup.release(k, call)
 		}
 		if err := c.callAsyncOnce(method, req, internal, timeout, args...); err != nil {
-			// The request was never sent: wake any followers with the error and
-			// drop the entry. The leader itself learns via the returned err(its
-			// handler is not called), matching non-singleflight CallAsync.
+			// The request was not sent: pass the error to the followers. The
+			// leader gets it as the returned error, and its handler is not
+			// called, as with a plain CallAsync.
 			call.fanout(nil, err)
 			c.sfGroup.release(k, call)
 			return err
@@ -428,21 +441,22 @@ func (c *Client) callAsyncSingleflight(method string, req interface{}, handler A
 		return nil
 	}
 
-	// Follower: subscribe to the leader's result, honoring our own timeout.
+	// Follower: subscribe to the leader's result, with its own timeout.
 	sub := &sfAsyncSub{handler: handler}
 	sub.timer = time.AfterFunc(timeout, func() {
 		sub.fire(nil, ErrTimeout)
 	})
 	if !call.addSub(sub) {
-		// The leader already finished; fall back to a real request of our own.
+		// The leader has finished; send a request of its own.
 		sub.timer.Stop()
 		return c.callAsyncOnce(method, req, handler, timeout, args...)
 	}
 	return nil
 }
 
-// callAsyncOnce performs one real CallAsync round-trip. It is the shared body
-// executed by the singleflight leader(and by non-singleflight CallAsync).
+// callAsyncOnce sends the request of a CallAsync and registers its handler,
+// with a timer that calls the handler with ErrTimeout. With AsyncWrite, the
+// same timeout also bounds waiting for the send queue.
 func (c *Client) callAsyncOnce(method string, req interface{}, handler AsyncHandlerFunc, timeout time.Duration, args ...interface{}) error {
 	var err error
 
@@ -482,8 +496,10 @@ func (c *Client) callAsyncOnce(method string, req interface{}, handler AsyncHand
 	return err
 }
 
-// Notify makes a notify with timeout.
-// A notify does not need a response from the server.
+// Notify sends a notify for method with data; the peer sends no response.
+// With AsyncWrite, timeout bounds waiting for the send queue, and 0 means not
+// to wait (ErrClientOverstock if full); it must not be negative. args[0], if
+// any, must be a map[interface{}]interface{} of message values.
 func (c *Client) Notify(method string, data interface{}, timeout time.Duration, args ...interface{}) error {
 	err := c.checkNotifyArgs(method, timeout)
 	if err != nil {
@@ -510,14 +526,13 @@ func (c *Client) Notify(method string, data interface{}, timeout time.Duration, 
 	return err
 }
 
-// NotifyWith use context to make rpc notify.
-// A notify does not need a response from the server.
+// NotifyWith is an alias of NotifyContext.
 func (c *Client) NotifyWith(ctx context.Context, method string, data interface{}, args ...interface{}) error {
 	return c.NotifyContext(ctx, method, data, args...)
 }
 
-// NotifyContext use context to make rpc notify.
-// A notify does not need a response from the server.
+// NotifyContext is like Notify, but waits for the send queue until ctx is
+// done instead of a timeout.
 func (c *Client) NotifyContext(ctx context.Context, method string, data interface{}, args ...interface{}) error {
 	if err := c.checkStateAndMethod(method); err != nil {
 		return err
@@ -546,7 +561,10 @@ func (c *Client) NotifyContext(ctx context.Context, method string, data interfac
 	return nil
 }
 
-// PushMsg pushes a msg to Client's send queue with timeout.
+// PushMsg sends msg as is. With AsyncWrite, timeout bounds waiting for the
+// send queue: TimeZero means not to wait (ErrClientOverstock if full), and
+// TimeForever or a negative value means to wait until queued or stopped.
+// msg is passed to OnMessageDone or OnOverstock if it cannot be sent.
 func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 	err := c.CheckState()
 	if err != nil {
@@ -591,7 +609,9 @@ func (c *Client) PushMsg(msg *Message, timeout time.Duration) error {
 	return err
 }
 
-// Restart stops and restarts a Client.
+// Restart stops the Client, dials a new conn, and starts it again with fresh
+// state: pending calls, Streams and values are dropped. It returns the
+// Dialer's error if dialing fails. It is only for client-role Clients.
 func (c *Client) Restart() error {
 	c.mux.Lock()
 	recvDone := c.recvDone
@@ -599,12 +619,10 @@ func (c *Client) Restart() error {
 
 	c.Stop()
 
-	// Wait for the previous generation's recvLoop to fully tear down before
-	// building a new one. Otherwise its teardown(closeAndClean setting running,
-	// clearing sessions, closing the connection) could clobber the new
-	// generation's state, e.g. flipping running back to false right after we set
-	// it true. Stop closed the connection and the stop channel, so the old loop
-	// unblocks promptly.
+	// Wait for the old recvLoop to exit before building the new generation.
+	// Otherwise its teardown (reconnect cleanup and closeAndClean) may run
+	// after the new state is installed, e.g. setting running back to false.
+	// Stop has already closed the conn and chClose, so it returns promptly.
 	if recvDone != nil {
 		<-recvDone
 	}
@@ -634,11 +652,11 @@ func (c *Client) Restart() error {
 		c.writevMux.Unlock()
 
 		c.initReader()
-		// AsyncWritev takes precedence: on-demand writer, no chSend/sendLoop.
+		// AsyncWritev takes precedence: it uses no chSend or sendLoop.
 		if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
 			c.chSend = make(chan *Message, c.Handler.SendQueueSize())
 		}
-		// Bind the new loops to this generation's channels.
+		// The new loops watch this generation's channels only.
 		chSend, chClose := c.chSend, c.chClose
 		recvDone := make(chan struct{})
 		c.recvDone = recvDone
@@ -659,8 +677,8 @@ func (c *Client) Restart() error {
 	return nil
 }
 
-// chanClosed reports whether the broadcast channel ch has been closed. ch is
-// only ever closed(never sent to), so a ready receive means it is closed.
+// chanClosed reports whether ch has been closed. ch is a close-only signal
+// channel (never sent to), so a ready receive means it is closed.
 func chanClosed(ch chan util.Empty) bool {
 	select {
 	case <-ch:
@@ -670,9 +688,9 @@ func chanClosed(ch chan util.Empty) bool {
 	}
 }
 
-// closeChan closes the broadcast channel ch at most once. It must be called
-// with c.mux held so the check-and-close is atomic against another stopper
-// closing the same ch(Stop vs. closeAndClean of the same generation).
+// closeChan closes ch if it is not closed yet. The caller must hold c.mux so
+// that the check-and-close is atomic between Stop and closeAndClean of the
+// same generation.
 func closeChan(ch chan util.Empty) {
 	select {
 	case <-ch:
@@ -681,22 +699,24 @@ func closeChan(ch chan util.Empty) {
 	}
 }
 
-// Stop stops a Client.
+// Stop stops the Client and closes its conn; a client-role Client does not
+// reconnect after it. OnDisconnected is called by the read goroutine once it
+// exits.
 func (c *Client) Stop() {
 	c.mux.Lock()
 	c.running = false
-	// Signal this generation's recv/send loops to stop. Restart installs a fresh
-	// chClose before starting new loops, so a superseded loop keeps watching its
-	// own(now closed) channel and cannot resurrect when running is flipped back.
+	// Signal the current generation's loops to stop. Restart installs a new
+	// chClose for the next generation, so the old loops keep seeing their own
+	// closed channel and never resume even after running is set to true again.
 	closeChan(c.chClose)
 	c.mux.Unlock()
 
 	c.Conn.Close()
 }
 
-// closeAndClean tears down the connection for the recv loop generation whose
-// stop channel is chClose. It closes chClose(idempotently, so a later Stop or a
-// concurrent stopper never double-closes it) and runs the stop callbacks.
+// closeAndClean stops the generation owning chClose: it closes chClose (see
+// closeChan) and the conn, drops the queued writev messages, and calls onStop
+// and OnDisconnected.
 func (c *Client) closeAndClean(chClose chan util.Empty) {
 	c.mux.Lock()
 	c.running = false
@@ -705,9 +725,9 @@ func (c *Client) closeAndClean(chClose chan util.Empty) {
 
 	c.Conn.Close()
 
-	// Drop any messages still queued for the writev writer. Whoever swaps a
-	// batch out under writevMux owns it, so this never double-processes messages
-	// already taken by an in-flight writevLoop.
+	// Drop the messages still in the writev queue. A batch belongs to whoever
+	// takes it out under writevMux, so this never handles the messages a
+	// running writevLoop has taken.
 	c.drainWritev()
 
 	if c.onStop != nil {
@@ -717,7 +737,7 @@ func (c *Client) closeAndClean(chClose chan util.Empty) {
 	c.Handler.OnDisconnected(c)
 }
 
-// drainWritev drops all messages currently queued on the writev send queue.
+// drainWritev drops all messages in the writev queue.
 func (c *Client) drainWritev() {
 	c.writevMux.Lock()
 	msgs := c.writevMsgs
@@ -729,7 +749,8 @@ func (c *Client) drainWritev() {
 	}
 }
 
-// CheckState checks Client's state.
+// CheckState returns ErrClientStopped if the Client is not running,
+// ErrClientReconnecting if it is reconnecting, or nil.
 func (c *Client) CheckState() error {
 	if !c.running {
 		return ErrClientStopped
@@ -740,6 +761,7 @@ func (c *Client) CheckState() error {
 	return nil
 }
 
+// checkCallArgs checks the state, method and timeout (must be > 0) of Call.
 func (c *Client) checkCallArgs(method string, timeout time.Duration) error {
 	if err := c.checkStateAndMethod(method); err != nil {
 		return err
@@ -753,6 +775,8 @@ func (c *Client) checkCallArgs(method string, timeout time.Duration) error {
 	return nil
 }
 
+// checkCallAsyncArgs checks the state, method, handler and timeout (must be
+// > 0) of CallAsync.
 func (c *Client) checkCallAsyncArgs(method string, handler AsyncHandlerFunc, timeout time.Duration) error {
 	if err := c.checkStateAndMethod(method); err != nil {
 		return err
@@ -769,6 +793,8 @@ func (c *Client) checkCallAsyncArgs(method string, handler AsyncHandlerFunc, tim
 	return nil
 }
 
+// checkNotifyArgs checks the state, method and timeout (must be >= 0) of
+// Notify.
 func (c *Client) checkNotifyArgs(method string, timeout time.Duration) error {
 	if err := c.checkStateAndMethod(method); err != nil {
 		return err
@@ -779,6 +805,7 @@ func (c *Client) checkNotifyArgs(method string, timeout time.Duration) error {
 	return nil
 }
 
+// checkStateAndMethod checks the Client's state and the method name.
 func (c *Client) checkStateAndMethod(method string) error {
 	err := c.CheckState()
 	if err != nil {
@@ -787,6 +814,9 @@ func (c *Client) checkStateAndMethod(method string) error {
 	return checkMethod(method)
 }
 
+// pushMessage pushes msg into chSend. With a nil timer it does not wait and
+// returns ErrClientOverstock if the queue is full; otherwise it waits until
+// the timer fires and returns ErrClientTimeout.
 func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 	if timer == nil {
 		select {
@@ -815,21 +845,17 @@ func (c *Client) pushMessage(msg *Message, timer *time.Timer) error {
 	return nil
 }
 
-// pushWritev enqueues a message onto the writev send queue and, if no writer
-// goroutine is currently draining it, starts one. It never blocks on I/O.
-//
-// A single writer goroutine drains the queue per connection: the writevSending
-// flag (guarded by writevMux) records whether one is already running, which is
-// equivalent to "the queue was non-empty before this append".
+// pushWritev appends msg to the writev queue and starts a writevLoop if none
+// is running. It never blocks on I/O.
 func (c *Client) pushWritev(msg *Message) error {
 	if c.reconnecting {
 		c.dropMessage(msg)
 		return ErrClientReconnecting
 	}
 
-	// Coders operate on the contiguous msg.Buffer and may return a new message,
-	// so they must run before the buffer is captured into the queue. When coders
-	// are registered, newRequestMessage builds a contiguous message (body == nil).
+	// Coders work on a contiguous Buffer and may return a new Message, so run
+	// them before queuing. newRequestMessage builds contiguous messages when
+	// there are coders.
 	if coders := c.Handler.Coders(); len(coders) > 0 {
 		for j := 0; j < len(coders); j++ {
 			msg = coders[j].Encode(c, msg)
@@ -859,9 +885,9 @@ func (c *Client) pushWritev(msg *Message) error {
 	return nil
 }
 
-// writevLoop drains the writev send queue until it is empty, writing each batch
-// with a single net.Buffers/writev syscall. It is the on-demand writer started
-// by pushWritev; only one instance runs per connection at a time.
+// writevLoop writes the writev queue batch by batch, each with one writev,
+// and exits when the queue is empty. It is started by pushWritev, and at most
+// one runs per Client.
 func (c *Client) writevLoop() {
 	closed := false
 	for {
@@ -877,9 +903,9 @@ func (c *Client) writevLoop() {
 		c.writevMsgs = nil
 		c.writevMux.Unlock()
 
-		// Once the connection is gone, drop the rest of the queue instead of
-		// writing, but keep draining so the writevSending flag is released only
-		// when the queue is empty (preserving the single-writer invariant).
+		// Once the conn is broken, drop the queued messages instead of writing
+		// them, but keep looping until the queue is empty so that writevSending
+		// is only cleared then.
 		if closed || c.reconnecting {
 			for _, m := range msgs {
 				c.dropMessage(m)
@@ -888,8 +914,7 @@ func (c *Client) writevLoop() {
 			continue
 		}
 
-		// net.Buffers.WriteTo consumes bufs (nils out written entries); it is a
-		// local copy, so message lifecycle is driven by msgs, not bufs.
+		// SendN consumes bufs, so the callbacks below go by msgs.
 		if _, err := c.Handler.SendN(c.Conn, bufs); err != nil {
 			c.Conn.Close()
 			for _, m := range msgs {
@@ -905,20 +930,25 @@ func (c *Client) writevLoop() {
 	}
 }
 
+// newRequestMessage creates an outgoing message with a new sequence number.
+// args[0], if any, must be a map[interface{}]interface{} of message values.
 func (c *Client) newRequestMessage(cmd byte, method string, v interface{}, isError bool, isAsync bool, args ...interface{}) *Message {
 	var values map[interface{}]interface{}
 	if len(args) > 0 {
 		values = args[0].(map[interface{}]interface{})
 	}
 	seq := atomic.AddUint64(&c.seq, 1)
-	// Use the split head/body construction only when the writev path is active
-	// and no coders are registered (coders require a contiguous buffer).
+	// Keep the data apart from the header only for writev without coders, as
+	// coders need a contiguous buffer.
 	if c.Handler.AsyncWritev() && len(c.Handler.Coders()) == 0 {
 		return newWritevMessage(cmd, method, v, isError, isAsync, seq, c.Handler, c.Codec, values)
 	}
 	return newMessage(cmd, method, v, isError, isAsync, seq, c.Handler, c.Codec, values)
 }
 
+// parseResponse decodes the response msg into rsp: *string and *[]byte get a
+// copy of the data, other types are decoded by the Codec. It returns the
+// remote error for an error response, and ErrClientReconnecting for a nil msg.
 func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
 	if msg == nil {
 		return ErrClientReconnecting
@@ -947,6 +977,7 @@ func (c *Client) parseResponse(msg *Message, rsp interface{}) error {
 	return nil
 }
 
+// addSession registers a pending call, unless the Client is stopped.
 func (c *Client) addSession(seq uint64, session *rpcSession) {
 	c.mux.Lock()
 	if c.running {
@@ -970,6 +1001,7 @@ func (c *Client) getSession(seq uint64) (*rpcSession, bool) {
 	return session, ok
 }
 
+// clearSession fails all pending calls by closing their done channels.
 func (c *Client) clearSession() {
 	c.mux.Lock()
 	for _, sess := range c.sessionMap {
@@ -979,6 +1011,8 @@ func (c *Client) clearSession() {
 	c.mux.Unlock()
 }
 
+// dropMessage gives up an unsent message: it fails its pending call, if any,
+// and calls OnMessageDropped.
 func (c *Client) dropMessage(msg *Message) {
 	if !msg.IsAsync() {
 		session := c.deleteSession(msg.Seq())
@@ -992,6 +1026,7 @@ func (c *Client) dropMessage(msg *Message) {
 	}
 }
 
+// addAsyncHandler registers a pending CallAsync, unless the Client is stopped.
 func (c *Client) addAsyncHandler(seq uint64, ah *asyncHandler) {
 	c.mux.Lock()
 	if c.running {
@@ -1023,6 +1058,8 @@ func (c *Client) getAndDeleteAsyncHandler(seq uint64) (*asyncHandler, bool) {
 	return ah, ok
 }
 
+// clearAsyncHandler calls all pending CallAsync handlers with
+// ErrClientReconnecting, via AsyncExecute.
 func (c *Client) clearAsyncHandler() {
 	c.mux.Lock()
 	handlers := c.asyncHandlerMap
@@ -1053,6 +1090,8 @@ func (c *Client) deleteStream(id uint64, local bool) {
 	c.mux.Unlock()
 }
 
+// getStreamAndPushMsg returns the Stream for id; with done, it also removes
+// the Stream from the Client. local selects the Streams created on this side.
 func (c *Client) getStreamAndPushMsg(id uint64, local, done bool) (stream *Stream, ok bool) {
 	c.mux.Lock()
 	if c.running {
@@ -1071,6 +1110,7 @@ func (c *Client) getStreamAndPushMsg(id uint64, local, done bool) (stream *Strea
 	return stream, ok
 }
 
+// clearStream closes and removes all Streams.
 func (c *Client) clearStream() {
 	c.mux.Lock()
 	streamLocalMap := c.streamLocalMap
@@ -1088,19 +1128,20 @@ func (c *Client) clearStream() {
 	}
 }
 
+// run starts the read loop, and the send loop with AsyncWrite, if the Client
+// is not running.
 func (c *Client) run() {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	if !c.running {
 		c.running = true
 		c.initReader()
-		// Capture this generation's channels so the loops watch their own
-		// signals(a later Restart installs fresh ones).
+		// Capture this generation's channels; a later Restart installs new ones.
 		chSend, chClose := c.chSend, c.chClose
 		recvDone := make(chan struct{})
 		c.recvDone = recvDone
-		// AsyncWritev takes precedence: its writer goroutine is started on
-		// demand by pushWritev, so no persistent sendLoop is needed.
+		// AsyncWritev takes precedence: pushWritev starts a writer on demand,
+		// so there is no sendLoop.
 		if c.Handler.AsyncWrite() && !c.Handler.AsyncWritev() {
 			go util.Safe(func() { c.sendLoop(chSend, chClose) })
 		}
@@ -1111,6 +1152,7 @@ func (c *Client) run() {
 	}
 }
 
+// initReader sets Reader for the current conn according to BatchRecv.
 func (c *Client) initReader() {
 	if c.Handler.BatchRecv() {
 		c.Reader = c.Handler.WrapReader(c.Conn)
@@ -1119,10 +1161,11 @@ func (c *Client) initReader() {
 	}
 }
 
-// recvLoop reads and dispatches messages for one connection generation. chClose
-// is this generation's stop signal: Stop/Restart close it so a superseded loop
-// terminates instead of resurrecting when a subsequent Restart flips c.running
-// back to true(the old loop keeps watching its own, already-closed chClose).
+// recvLoop reads and dispatches messages for one generation. When the conn
+// breaks, a server-role Client stops, while a client-role Client fails its
+// pending calls and Streams and reconnects, stopping once the attempts run
+// out. The loop exits once chClose is closed; checking its own chClose rather
+// than c.running keeps it from resuming after a Restart sets running again.
 func (c *Client) recvLoop(chClose chan util.Empty) {
 	var (
 		err  error
@@ -1187,8 +1230,8 @@ func (c *Client) recvLoop(chClose chan util.Empty) {
 
 					log.Info("%v\t%v\tReconnected", c.Handler.LogTag(), addr)
 
-					// Called synchronously after the new conn is installed and
-					// before OnConnected, so c.Conn is already the new connection.
+					// Called synchronously before OnConnected; c.Conn is
+					// already the new conn here.
 					c.Handler.OnReconnect(c, info)
 
 					go c.Handler.OnConnected(c)
@@ -1206,9 +1249,9 @@ func (c *Client) recvLoop(chClose chan util.Empty) {
 	}
 }
 
-// sendLoop drains chSend for one connection generation, stopping when chClose
-// is closed. Both channels are captured at start so a superseded loop drains its
-// own queue and exits instead of competing with the loop a Restart installs.
+// sendLoop sends messages from chSend for one generation until chClose is
+// closed, then drains the remaining ones. Working on its own channels keeps a
+// superseded loop from competing with the one a Restart starts.
 func (c *Client) sendLoop(chSend chan *Message, chClose chan util.Empty) {
 	addr := c.Conn.RemoteAddr().String()
 	log.Debug("%v\t%v\tsendLoop start", c.Handler.LogTag(), addr)
@@ -1221,6 +1264,8 @@ func (c *Client) sendLoop(chSend chan *Message, chClose chan util.Empty) {
 	}
 }
 
+// normalSendLoop writes queued messages one by one. While reconnecting, they
+// are dropped.
 func (c *Client) normalSendLoop(chSend chan *Message, chClose chan util.Empty) {
 	var msg *Message
 	var coders []MessageCoder
@@ -1253,6 +1298,8 @@ func (c *Client) normalSendLoop(chSend chan *Message, chClose chan util.Empty) {
 	}
 }
 
+// batchSendLoop is like normalSendLoop, but merges the messages already
+// queued into one write while the buffer is under SendBufferSize.
 func (c *Client) batchSendLoop(chSend chan *Message, chClose chan util.Empty) {
 	var msg *Message
 	var chLen int
@@ -1314,6 +1361,8 @@ func (c *Client) batchSendLoop(chSend chan *Message, chClose chan util.Empty) {
 	}
 }
 
+// newClientWithConn creates and starts a server-role Client for an accepted
+// conn. onStop is called when it stops.
 func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop func(*Client)) *Client {
 	log.Info("%v\t%v\tConnected", handler.LogTag(), conn.RemoteAddr())
 
@@ -1339,7 +1388,9 @@ func newClientWithConn(conn net.Conn, codec codec.Codec, handler Handler, onStop
 	return c
 }
 
-// NewClient creates a Client.
+// NewClient dials with dialer and starts a client-role Client on the conn.
+// args[0], if it is a Handler, is used as is; otherwise the Client uses a
+// clone of DefaultHandler. The Codec is codec.DefaultCodec.
 func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 	conn, err := dialer()
 	if err != nil {
@@ -1380,24 +1431,25 @@ func NewClient(dialer DialerFunc, args ...interface{}) (*Client, error) {
 	return c, nil
 }
 
-// ClientPool represents an arpc Client Pool.
+// ClientPool is a fixed set of client-role Clients.
 type ClientPool struct {
 	size    uint64
 	round   uint64
 	clients []*Client
 }
 
-// Size returns Client number.
+// Size returns the number of Clients.
 func (pool *ClientPool) Size() int {
 	return len(pool.clients)
 }
 
-// Get returns a Client by index.
+// Get returns the Client at index, modulo the pool size.
 func (pool *ClientPool) Get(index int) *Client {
 	return pool.clients[uint64(index)%pool.size]
 }
 
-// Next returns a Client by round robin.
+// Next returns the next Client in round robin, skipping the ones stopped or
+// reconnecting. If all of them are, it returns the last one tried.
 func (pool *ClientPool) Next() *Client {
 	var client = pool.clients[atomic.AddUint64(&pool.round, 1)%pool.size]
 	if client.running && !client.reconnecting {
@@ -1412,19 +1464,23 @@ func (pool *ClientPool) Next() *Client {
 	return client
 }
 
-// Handler returns Handler.
+// Handler returns the Handler of the next Client, which all Clients share
+// when the pool is created with one Handler.
 func (pool *ClientPool) Handler() Handler {
 	return pool.Next().Handler
 }
 
-// Stop stops all clients.
+// Stop stops all Clients.
 func (pool *ClientPool) Stop() {
 	for _, c := range pool.clients {
 		c.Stop()
 	}
 }
 
-// NewClientPool creates a ClientPool.
+// NewClientPool creates a ClientPool of size Clients dialed with dialer and
+// sharing one Handler: args[0] if it is a Handler, or else a clone of
+// DefaultHandler. If any dial fails, the created Clients are stopped and the
+// error is returned.
 func NewClientPool(dialer DialerFunc, size int, args ...interface{}) (*ClientPool, error) {
 	pool := &ClientPool{
 		size:    uint64(size),
@@ -1456,7 +1512,8 @@ func NewClientPool(dialer DialerFunc, size int, args ...interface{}) (*ClientPoo
 	return pool, nil
 }
 
-// NewClientPoolFromDialers creates a ClientPool by multiple dialers.
+// NewClientPoolFromDialers is like NewClientPool, with one Client per dialer.
+// It returns ErrClientInvalidPoolDialers if dialers is empty.
 func NewClientPoolFromDialers(dialers []DialerFunc, args ...interface{}) (*ClientPool, error) {
 	pool := &ClientPool{
 		size:    0,

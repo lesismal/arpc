@@ -13,10 +13,11 @@ import (
 	"github.com/lesismal/arpc/log"
 )
 
-// Empty struct
+// Empty is a zero-size type, mainly used as a signal channel element.
 type Empty struct{}
 
-// Recover handles panic and logs stack info
+// Recover recovers from a panic and logs it with the stack trace. It must be
+// called directly by defer.
 func Recover() {
 	if err := recover(); err != nil {
 		const size = 64 << 10
@@ -26,25 +27,30 @@ func Recover() {
 	}
 }
 
-// Safe wraps a function-calling with panic recovery
+// Safe calls call and recovers from any panic it raises.
 func Safe(call func()) {
 	defer Recover()
 	call()
 }
 
-// StrToBytes hacks string to []byte
+// StrToBytes converts s to []byte without copying. The result must not be
+// modified.
 func StrToBytes(s string) []byte {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}
 	return *(*[]byte)(unsafe.Pointer(&h))
 }
 
-// BytesToStr hacks []byte to string
+// BytesToStr converts b to string without copying. b must not be modified
+// while the result is in use.
 func BytesToStr(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
-// ValueToBytes converts values to []byte
+// ValueToBytes converts v to []byte: []byte and string (or pointers to them)
+// and error are used as-is without copying, other values are encoded by codec,
+// or acodec.DefaultCodec if codec is nil. It returns nil if v is nil or the
+// encoding fails.
 func ValueToBytes(codec acodec.Codec, v interface{}) []byte {
 	if v == nil {
 		return nil
@@ -79,14 +85,13 @@ func ValueToBytes(codec acodec.Codec, v interface{}) []byte {
 	return data
 }
 
-// ValueToBytesOwned converts values to []byte and reports whether the returned
-// slice is safe to hold across an asynchronous send without copying.
+// ValueToBytesOwned is like ValueToBytes, and also reports whether the result
+// is safe to keep after the call returns (e.g. queued for an async send)
+// without copying.
 //
-// owned is true when the bytes are either freshly allocated by the codec, or
-// alias an immutable string backing (string/error), both of which cannot be
-// mutated by the caller after this call. owned is false only for []byte/*[]byte
-// inputs, whose contents the caller may mutate; callers that keep the slice
-// beyond the call (e.g. the writev queue) must copy it into their own buffer.
+// owned is false only for []byte and *[]byte inputs, whose content the caller
+// may still modify; callers that keep such a slice must copy it. Strings,
+// errors and codec output cannot be modified by the caller, so owned is true.
 func ValueToBytesOwned(codec acodec.Codec, v interface{}) (data []byte, owned bool) {
 	if v == nil {
 		return nil, true
@@ -117,7 +122,10 @@ func ValueToBytesOwned(codec acodec.Codec, v interface{}) (data []byte, owned bo
 	}
 }
 
-// BytesToValue converts []byte to values
+// BytesToValue decodes data into v, which should be a pointer. *[]byte gets a
+// copy of data, *string gets string(data), *error gets errors.New(string(data)),
+// and other types are decoded by codec, or acodec.DefaultCodec if codec is nil.
+// It does nothing if v is nil.
 func BytesToValue(codec acodec.Codec, data []byte, v interface{}) error {
 	var err error
 	if v != nil {

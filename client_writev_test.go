@@ -17,7 +17,7 @@ import (
 const writevServerAddr = "localhost:11001"
 
 // newWritevHandler returns a coder-free handler with the writev async-send path
-// enabled, so newRequestMessage uses the head/body split construction.
+// enabled, so newRequestMessage keeps the data apart from the header.
 func newWritevHandler() Handler {
 	h := NewHandler()
 	h.SetAsyncWritev(true)

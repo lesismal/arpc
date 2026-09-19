@@ -200,7 +200,7 @@ func Test_handler_Register(t *testing.T) {
 		t.Fatalf("handler.Register() error = %v", err)
 	}
 
-	// Add(paired), Sub and Mul(standalone first methods) are all registered.
+	// Add (paired), Sub and Mul (standalone first methods) are all registered.
 	for _, name := range []string{"Svc.Add", "Svc.Sub", "Svc.Mul"} {
 		if _, ok := h.routes[name]; !ok {
 			t.Errorf("route %q not registered, routes = %v", name, h.routes)

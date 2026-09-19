@@ -33,7 +33,7 @@ func (r *sfReq) String() string {
 }
 
 // newSingleflightServer starts a server that counts how many times each method
-// is actually invoked and echoes a per-method response after a small delay(so
+// is actually invoked and echoes a per-method response after a small delay (so
 // concurrent Calls overlap and can be de-duplicated).
 func newSingleflightServer(t *testing.T, addr string, hits *int32) *Server {
 	svr := NewServer()
@@ -91,7 +91,7 @@ func TestClient_SingleflightDefaultKey(t *testing.T) {
 	wg.Wait()
 
 	// All n concurrent Calls share the same key, so the server should be hit
-	// far fewer than n times(ideally once, allow a little slack for timing).
+	// far fewer than n times (ideally once, with some slack for timing).
 	if got := atomic.LoadInt32(&hits); got >= n {
 		t.Fatalf("singleflight did not de-duplicate: server hits=%v, want < %v", got, n)
 	}
