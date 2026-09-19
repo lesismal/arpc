@@ -16,24 +16,33 @@ import (
 	"github.com/lesismal/arpc/util"
 )
 
-// Server represents an arpc Server.
+// Server is an arpc server. Each accepted conn is served by a Client in the
+// server role, sharing the Server's Codec and Handler.
 type Server struct {
+	// Accepted counts the accepted conns (not counting those rejected by
+	// MaxLoad). It is updated without atomics by the accept loop.
 	Accepted int64
+	// CurrLoad is the number of current conns.
 	CurrLoad int64
-	MaxLoad  int64
+	// MaxLoad is the max number of concurrent conns; new conns beyond it are
+	// closed at once. <= 0 means unlimited.
+	MaxLoad int64
 
-	// 64-aligned on 32-bit
+	// seq is kept 64-bit aligned on 32-bit platforms.
 	seq uint64
 
-	Codec   codec.Codec
+	// Codec encodes and decodes message bodies.
+	Codec codec.Codec
+	// Handler handles the messages and events of all conns.
 	Handler Handler
 
+	// Listener is the listener being served.
 	Listener net.Listener
 
 	mux sync.Mutex
 
-	// running is accessed atomically(runLoop reads it while Stop/Shutdown
-	// write it from another goroutine), 0 means stopped, 1 means running.
+	// running is 1 while serving, 0 otherwise. It is accessed atomically since
+	// Stop/Shutdown write it while runLoop reads it.
 	running int32
 	chStop  chan error
 	clients map[*Client]util.Empty
@@ -51,10 +60,11 @@ func (s *Server) isRunning() bool {
 	return atomic.LoadInt32(&s.running) == 1
 }
 
-// Serve starts service with listener.
+// Serve accepts conns on ln and serves them. It blocks until the Server is
+// stopped or Accept fails with a non-temporary error, which it returns.
 func (s *Server) Serve(ln net.Listener) error {
-	// Listener/chStop are read by Stop/Shutdown from another goroutine, so they
-	// must be published under the mutex.
+	// Stop/Shutdown read Listener and chStop from another goroutine, so set them
+	// under the mutex.
 	s.mux.Lock()
 	s.Listener = ln
 	s.chStop = make(chan error)
@@ -64,7 +74,7 @@ func (s *Server) Serve(ln net.Listener) error {
 	return s.runLoop()
 }
 
-// Run starts tcp service on addr.
+// Run listens on the TCP address addr and serves it, see Serve.
 func (s *Server) Run(addr string) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -80,6 +90,9 @@ func (s *Server) Run(addr string) error {
 	return s.runLoop()
 }
 
+// Broadcast sends a notify to all conns. It does not block: the message is
+// dropped for a conn whose send queue is full (see Handler.HandleOverstock).
+// args[0], if any, must be a map[interface{}]interface{} of message values.
 func (s *Server) Broadcast(method string, v interface{}, args ...interface{}) {
 	msg := s.NewMessage(CmdNotify, method, v, args...)
 	s.mux.Lock()
@@ -94,6 +107,8 @@ func (s *Server) Broadcast(method string, v interface{}, args ...interface{}) {
 	}
 }
 
+// BroadcastWithFilter is like Broadcast, but only sends to the conns for which
+// filter returns true. A nil filter matches all.
 func (s *Server) BroadcastWithFilter(method string, v interface{}, filter func(*Client) bool, args ...interface{}) {
 	msg := s.NewMessage(CmdNotify, method, v, args...)
 	s.mux.Lock()
@@ -110,6 +125,8 @@ func (s *Server) BroadcastWithFilter(method string, v interface{}, filter func(*
 	}
 }
 
+// ForEach calls h for each conn. It holds the Server's lock, so h must not
+// call methods of the Server that lock it.
 func (s *Server) ForEach(h func(*Client)) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -118,6 +135,8 @@ func (s *Server) ForEach(h func(*Client)) {
 	}
 }
 
+// ForEachWithFilter is like ForEach, but only calls h for the conns for which
+// filter returns true. A nil filter matches all.
 func (s *Server) ForEachWithFilter(h func(*Client), filter func(*Client) bool) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -128,7 +147,9 @@ func (s *Server) ForEachWithFilter(h func(*Client), filter func(*Client) bool) {
 	}
 }
 
-// Stop stops service.
+// Stop closes the listener and returns immediately, without waiting for the
+// accept loop to exit; use Shutdown to wait. When the loop exits, all conns
+// are stopped.
 func (s *Server) Stop() error {
 	s.setRunning(false)
 	s.mux.Lock()
@@ -146,7 +167,8 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-// Shutdown shutdown service.
+// Shutdown closes the listener and waits for the accept loop to exit and stop
+// all conns. It returns ErrTimeout if ctx is done first.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.setRunning(false)
 	s.mux.Lock()
@@ -163,7 +185,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// NewMessage creates a Message.
+// NewMessage creates a Message with the Server's Handler and Codec and a new
+// sequence number. args[0], if any, must be a map[interface{}]interface{} of
+// message values.
 func (s *Server) NewMessage(cmd byte, method string, v interface{}, args ...interface{}) *Message {
 	if len(args) == 0 {
 		return newMessage(cmd, method, v, false, false, atomic.AddUint64(&s.seq, 1), s.Handler, s.Codec, nil)
@@ -191,6 +215,7 @@ func (s *Server) deleteClient(c *Client) {
 	s.mux.Unlock()
 }
 
+// clearClients stops all conns asynchronously and empties the client set.
 func (s *Server) clearClients() {
 	s.mux.Lock()
 	for c := range s.clients {
@@ -200,6 +225,9 @@ func (s *Server) clearClients() {
 	s.mux.Unlock()
 }
 
+// runLoop accepts conns until the Server stops or Accept fails with a
+// non-temporary error; temporary errors are retried after 50ms. On exit it
+// stops all conns and closes chStop.
 func (s *Server) runLoop() error {
 	var (
 		err  error
@@ -243,7 +271,7 @@ func (s *Server) runLoop() error {
 	return err
 }
 
-// NewServer creates an arpc Server.
+// NewServer creates a Server with DefaultCodec and a clone of DefaultHandler.
 func NewServer() *Server {
 	h := DefaultHandler.Clone()
 	h.SetLogTag("[ARPC SVR]")

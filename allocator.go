@@ -11,19 +11,31 @@ import (
 	"unsafe"
 )
 
+// Allocator allocates and recycles byte buffers.
 type Allocator interface {
+	// Malloc returns a buffer of length size.
 	Malloc(size int) []byte
+	// Realloc resizes buf to size, keeping its content. The result may be a
+	// new buffer, in which case buf must not be used any more.
 	Realloc(buf []byte, size int) []byte
+	// Append appends more to buf, like the builtin append.
 	Append(buf []byte, more ...byte) []byte
+	// AppendString appends more to buf, like the builtin append.
 	AppendString(buf []byte, more string) []byte
+	// Free recycles buf, which must not be used after that.
 	Free(buf []byte)
 }
 
-// DefaultAllocator .
+// DefaultAllocator is the package-level Allocator: a BufferPool with a single
+// pool of 64-byte-initial buffers.
 var DefaultAllocator Allocator = New(64, 64)
 
-// BufferPool .
+// BufferPool is an Allocator backed by two sync.Pools: one for buffers smaller
+// than bigSize and one for the others. Buffers grow as needed and are reused
+// with their grown capacity.
 type BufferPool struct {
+	// Debug enables leak tracking: the stack of each Malloc is recorded until
+	// the buffer is freed, and freeing an untracked buffer panics.
 	Debug bool
 	mux   sync.Mutex
 
@@ -37,7 +49,9 @@ type BufferPool struct {
 	allocStacks map[uintptr]string
 }
 
-// New .
+// New creates a BufferPool. Buffers with a size >= bigSize come from the big
+// pool, others from the small pool. smallSize defaults to 64, bigSize to 64KB,
+// and bigSize is at least smallSize; if they are equal, one pool is used.
 func New(smallSize, bigSize int) Allocator {
 	if smallSize <= 0 {
 		smallSize = 64
@@ -72,7 +86,8 @@ func New(smallSize, bigSize int) Allocator {
 	return bp
 }
 
-// Malloc .
+// Malloc returns a pooled buffer of length size, growing it if its capacity
+// is not enough.
 func (bp *BufferPool) Malloc(size int) []byte {
 	pool := bp.smallPool
 	if size >= bp.bigSize {
@@ -95,7 +110,8 @@ func (bp *BufferPool) Malloc(size int) []byte {
 	return (*pbuf)[:size]
 }
 
-// Realloc .
+// Realloc resizes buf to size. When buf grows from below bigSize to bigSize
+// or more, it moves to a buffer from the big pool and the old one is freed.
 func (bp *BufferPool) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
@@ -123,6 +139,7 @@ func (bp *BufferPool) Realloc(buf []byte, size int) []byte {
 	return bp.reallocDebug(buf, size)
 }
 
+// reallocDebug is Realloc with alloc stack tracking.
 func (bp *BufferPool) reallocDebug(buf []byte, size int) []byte {
 	if cap(buf) == 0 {
 		panic("realloc zero size buf")
@@ -158,12 +175,14 @@ func (bp *BufferPool) reallocDebug(buf []byte, size int) []byte {
 	return (buf)[:size]
 }
 
-// Append .
+// Append appends more to buf, see AppendString.
 func (bp *BufferPool) Append(buf []byte, more ...byte) []byte {
 	return bp.AppendString(buf, *(*string)(unsafe.Pointer(&more)))
 }
 
-// AppendString .
+// AppendString appends more to buf. When the length grows from below bigSize
+// to bigSize or more, the result moves to a buffer from the big pool and buf
+// is freed.
 func (bp *BufferPool) AppendString(buf []byte, more string) []byte {
 	if !bp.Debug {
 		bl := len(buf)
@@ -185,6 +204,7 @@ func (bp *BufferPool) AppendString(buf []byte, more string) []byte {
 	return bp.appendStringDebug(buf, more)
 }
 
+// appendStringDebug is AppendString with alloc stack tracking.
 func (bp *BufferPool) appendStringDebug(buf []byte, more string) []byte {
 	if cap(buf) == 0 {
 		panic("append zero cap buf")
@@ -220,7 +240,7 @@ func (bp *BufferPool) appendStringDebug(buf []byte, more string) []byte {
 	return buf
 }
 
-// Free .
+// Free puts buf back to the pool chosen by its capacity.
 func (bp *BufferPool) Free(buf []byte) {
 	size := cap(buf)
 	pool := bp.smallPool
@@ -238,11 +258,15 @@ func (bp *BufferPool) Free(buf []byte) {
 	pool.Put(&buf)
 }
 
+// addAllocStack records the caller stack of the buffer at ptr; bp.mux must be
+// held.
 func (bp *BufferPool) addAllocStack(ptr uintptr) {
 	bp.allocCnt++
 	bp.allocStacks[ptr] = getStack()
 }
 
+// deleteAllocStack drops the record of the buffer at ptr, and panics if there
+// is none; bp.mux must be held.
 func (bp *BufferPool) deleteAllocStack(ptr uintptr) {
 	if _, ok := bp.allocStacks[ptr]; !ok {
 		panic("delete buffer which is not from pool")
@@ -251,6 +275,8 @@ func (bp *BufferPool) deleteAllocStack(ptr uintptr) {
 	delete(bp.allocStacks, ptr)
 }
 
+// LogDebugInfo prints the stacks of the buffers not freed yet and the
+// alloc/free counts to stdout. Only meaningful with Debug enabled.
 func (bp *BufferPool) LogDebugInfo() {
 	bp.mux.Lock()
 	defer bp.mux.Unlock()
@@ -276,15 +302,17 @@ func (bp *BufferPool) LogDebugInfo() {
 	fmt.Println("---------------------------------------------------------")
 }
 
-// NativeAllocator definition.
+// NativeAllocator allocates with make and lets the GC recycle buffers. It does
+// not implement Append and AppendString, so it is not a full Allocator.
 type NativeAllocator struct{}
 
-// Malloc .
+// Malloc returns make([]byte, size).
 func (a *NativeAllocator) Malloc(size int) []byte {
 	return make([]byte, size)
 }
 
-// Realloc .
+// Realloc returns buf resliced to size if its capacity is enough, otherwise a
+// new buffer with buf's content.
 func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
@@ -294,36 +322,36 @@ func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
 	return newBuf
 }
 
-// Free .
+// Free does nothing.
 func (a *NativeAllocator) Free(buf []byte) {
 }
 
-// Malloc exports default package method.
+// Malloc calls DefaultAllocator.Malloc.
 func Malloc(size int) []byte {
 	return DefaultAllocator.Malloc(size)
 }
 
-// Realloc exports default package method.
+// Realloc calls DefaultAllocator.Realloc.
 func Realloc(buf []byte, size int) []byte {
 	return DefaultAllocator.Realloc(buf, size)
 }
 
-// Append exports default package method.
+// Append calls DefaultAllocator.Append.
 func Append(buf []byte, more ...byte) []byte {
 	return DefaultAllocator.Append(buf, more...)
 }
 
-// AppendString exports default package method.
+// AppendString calls DefaultAllocator.AppendString.
 func AppendString(buf []byte, more string) []byte {
 	return DefaultAllocator.AppendString(buf, more)
 }
 
-// Free exports default package method.
+// Free calls DefaultAllocator.Free.
 func Free(buf []byte) {
 	DefaultAllocator.Free(buf)
 }
 
-// SetDebug .
+// SetDebug sets Debug of DefaultAllocator if it is a *BufferPool.
 func SetDebug(enable bool) {
 	bp, ok := DefaultAllocator.(*BufferPool)
 	if ok {
@@ -331,7 +359,7 @@ func SetDebug(enable bool) {
 	}
 }
 
-// LogDebugInfo .
+// LogDebugInfo calls LogDebugInfo of DefaultAllocator if it is a *BufferPool.
 func LogDebugInfo() {
 	bp, ok := DefaultAllocator.(*BufferPool)
 	if ok {
@@ -339,6 +367,8 @@ func LogDebugInfo() {
 	}
 }
 
+// getBufferPtr returns the address of buf's first element, which identifies
+// the buffer in debug mode. It panics on a zero-capacity buffer.
 func getBufferPtr(buf []byte) uintptr {
 	if cap(buf) == 0 {
 		panic("zero cap buffer")
@@ -346,6 +376,7 @@ func getBufferPtr(buf []byte) uintptr {
 	return uintptr(unsafe.Pointer(&((buf)[:1][0])))
 }
 
+// getStack returns up to 8 frames of the caller's caller stack.
 func getStack() string {
 	i := 2
 	str := ""

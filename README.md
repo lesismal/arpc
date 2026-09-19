@@ -10,8 +10,8 @@
 [4]: https://github.com/avelino/awesome-go#distributed-systems
 [5]: https://img.shields.io/badge/license-MIT-blue.svg
 [6]: LICENSE
-[7]: https://img.shields.io/github/actions/workflow/status/lesismal/arpc/build_linux.yml?branch=master&style=flat-square&logo=github-actions
-[8]: https://github.com/lesismal/arpc/actions?query=workflow%3build-linux
+[7]: https://img.shields.io/github/actions/workflow/status/lesismal/arpc/ci.yml?branch=master&style=flat-square&logo=github-actions
+[8]: https://github.com/lesismal/arpc/actions/workflows/ci.yml
 [9]: https://goreportcard.com/badge/github.com/lesismal/arpc
 [10]: https://goreportcard.com/report/github.com/lesismal/arpc
 [11]: https://codecov.io/gh/lesismal/arpc/branch/master/graph/badge.svg
@@ -514,16 +514,16 @@ client.Handler.HandleDisconnected(func(c *arpc.Client) {
 
 ### Handle Client's reconnect
 
-Called after each reconnect Dial attempt of a client-role Client, whether it succeeds or fails.
+Called after every reconnect attempt of a client-role Client, whether it succeeds or not.
 
 ```golang
 client, err := arpc.NewClient(...)
 client.Handler.HandleReconnect(func(c *arpc.Client, info *arpc.ReconnectInfo) {
 	// info.Times:    1-based attempt number in the current reconnect round
 	// info.MaxTimes: Handler.MaxReconnectTimes(), <= 0 means unlimited
-	// info.Addr:     target address
-	// info.Success:  whether this attempt connected
-	// info.Err:      Dial error when failed
+	// info.Addr:     remote address of the lost connection
+	// info.Success:  whether the Dial succeeded
+	// info.Err:      Dial error, nil on success
 	...
 })
 ```

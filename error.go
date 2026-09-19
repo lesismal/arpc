@@ -6,62 +6,69 @@ package arpc
 
 import "errors"
 
-// client error
+// client errors
 var (
-	// ErrClientTimeout represents a timeout error because of timer or context.
+	// ErrClientTimeout is returned when a call times out or its context is done.
 	ErrClientTimeout = errors.New("timeout")
 
-	// ErrClientInvalidTimeoutZero represents an error of 0 time parameter.
+	// ErrClientInvalidTimeoutZero is returned when a timeout of 0 is not allowed.
 	ErrClientInvalidTimeoutZero = errors.New("invalid timeout, should not be 0")
 
-	// ErrClientInvalidTimeoutLessThanZero represents an error of less than 0 time parameter.
+	// ErrClientInvalidTimeoutLessThanZero is returned for a negative timeout.
 	ErrClientInvalidTimeoutLessThanZero = errors.New("invalid timeout, should not be < 0")
 
-	// ErrClientInvalidTimeoutZeroWithNonNilCallback represents an error with 0 time parameter but with non-nil callback.
+	// ErrClientInvalidTimeoutZeroWithNonNilCallback is reserved for a timeout of 0
+	// with a non-nil callback. It is currently not returned by arpc.
 	ErrClientInvalidTimeoutZeroWithNonNilCallback = errors.New("invalid timeout 0 with non-nil callback")
 
-	// ErrClientOverstock represents an error of Client's send queue is full.
+	// ErrClientOverstock is returned when the Client's send queue stays full
+	// until the timeout.
 	ErrClientOverstock = errors.New("timeout: rpc Client's send queue is full")
 
-	// ErrClientReconnecting represents an error that Client is reconnecting.
+	// ErrClientReconnecting is returned when the Client is reconnecting.
 	ErrClientReconnecting = errors.New("client reconnecting")
 
-	// ErrClientStopped represents an error that Client is stopped.
+	// ErrClientStopped is returned when the Client has been stopped.
 	ErrClientStopped = errors.New("client stopped")
 
-	// ErrClientInvalidPoolDialers represents an error of empty dialer array.
+	// ErrClientInvalidPoolDialers is returned by NewClientPoolFromDialers when
+	// no dialer is given.
 	ErrClientInvalidPoolDialers = errors.New("invalid dialers: empty array")
 
-	// ErrClientInvalidAsyncHandler represents an error of invalid(nil) async handler.
+	// ErrClientInvalidAsyncHandler is returned when the async handler is nil.
 	ErrClientInvalidAsyncHandler = errors.New("invalid async handler: should not be nil")
 )
 
-// message error
+// message errors
 var (
-	// ErrInvalidRspMessage represents an error of invalid message CMD.
+	// ErrInvalidRspMessage is returned when a response message's Cmd is not
+	// CmdResponse.
 	ErrInvalidRspMessage = errors.New("invalid response message cmd")
 
-	// ErrMethodNotFound represents an error of method not found.
+	// ErrMethodNotFound is sent back to the caller when no handler is registered
+	// for the requested method.
 	ErrMethodNotFound = errors.New("method not found")
 
-	// ErrInvalidFlagBitIndex represents an error of invlaid flag bit index.
+	// ErrInvalidFlagBitIndex is returned when a flag bit index is out of 0-7.
 	ErrInvalidFlagBitIndex = errors.New("invalid index, should be 0-7")
 )
 
-// context error
+// context errors
 var (
-	// ErrContextResponseToNotify represents an error that response to a notify message.
+	// ErrContextResponseToNotify is returned when writing a response to a
+	// Notify message, which expects none.
 	ErrContextResponseToNotify = errors.New("should not response to a context with notify message")
 )
 
 // stream errors
 var (
-	// ErrStreamClosedSend represents an error of stream closed send.
+	// ErrStreamClosedSend is returned when sending on a Stream whose send side
+	// has been closed.
 	ErrStreamClosedSend = errors.New("stream has closed send")
 )
 
 // general errors
 var (
-	// ErrTimeout represents an error of timeout.
+	// ErrTimeout is returned when an operation times out.
 	ErrTimeout = errors.New("timeout")
 )

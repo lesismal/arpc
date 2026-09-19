@@ -1,0 +1,35 @@
+version: "2"
+
+linters:
+  default: standard
+  settings:
+    errcheck:
+      # Best-effort calls whose errors are intentionally ignored: the
+      # connection is being torn down, or the failure surfaces elsewhere.
+      exclude-functions:
+        - fmt.Fprintf
+        - (net.Conn).Close
+        - (net.Conn).Write
+        - (net.Conn).SetReadDeadline
+        - (net.Conn).SetWriteDeadline
+        - (net.Listener).Close
+        - (*net.TCPConn).SetNoDelay
+        - (*github.com/lesismal/arpc.Client).PushMsg
+        - (*github.com/lesismal/arpc.Context).Error
+        - (*github.com/lesismal/arpc.Context).Write
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [errcheck, unused]
+      # Tests deliberately fail from helper goroutines and pass nil contexts.
+      - path: _test\.go
+        linters: [staticcheck]
+        text: "SA2002|SA1012"
+      # Temporary() is still the only portable signal for retryable Accept errors.
+      - path: server\.go
+        linters: [staticcheck]
+        text: "SA1019: \\(net.Error\\).Temporary"
+
+formatters:
+  enable:
+    - gofmt

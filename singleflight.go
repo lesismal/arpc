@@ -29,8 +29,7 @@ type sfKey struct {
 	async  bool
 }
 
-// singleflightCall represents a single in-flight request shared by
-// de-duplicated callers.
+// singleflightCall is one in-flight request shared by de-duplicated callers.
 //
 //   - Blocking callers(Call/CallContext): the leader decodes the response once
 //     into result(and keeps the raw data as a fallback) and closes done;
@@ -66,16 +65,16 @@ type singleflightCall struct {
 	refs int32
 }
 
-// sfAsyncSub is a CallAsync follower waiting for the leader's result. Its
-// handler is invoked exactly once, either by the leader's fan-out or by its own
-// timeout, whichever happens first(guarded by fired).
+// sfAsyncSub is an async follower waiting for the leader's result. Its handler
+// is called exactly once, by the leader's fan-out or by its own timeout,
+// whichever comes first.
 type sfAsyncSub struct {
 	handler AsyncHandlerFunc
 	timer   *time.Timer
 	fired   int32
 }
 
-// fire invokes the subscriber's handler at most once and stops its timeout timer.
+// fire calls the handler if it has not been called yet, and stops the timer.
 func (sub *sfAsyncSub) fire(ctx *Context, err error) {
 	if atomic.CompareAndSwapInt32(&sub.fired, 0, 1) {
 		if sub.timer != nil {
@@ -85,17 +84,17 @@ func (sub *sfAsyncSub) fire(ctx *Context, err error) {
 	}
 }
 
-// singleflightGroup de-duplicates concurrent requests that share the same
-// sfKey: the first caller(the leader) issues the real request while later
-// callers(followers) wait for and share the leader's response.
+// singleflightGroup de-duplicates concurrent requests with the same sfKey: the
+// first caller (the leader) sends the request, and later callers (followers)
+// share its response.
 type singleflightGroup struct {
 	mu    sync.Mutex
 	calls map[sfKey]*singleflightCall
 }
 
-// acquire returns the in-flight call for k, creating one if absent. leader
-// reports whether this caller created it and therefore must drive the real
-// request(and eventually publish the result via finish or fanout+release).
+// acquire returns the in-flight call for k, creating it if absent. leader
+// reports whether it was created by this caller, which must then send the
+// request and publish the result via finish, or fanout and release.
 func (g *singleflightGroup) acquire(k sfKey) (call *singleflightCall, leader bool) {
 	g.mu.Lock()
 	if g.calls == nil {
