@@ -94,6 +94,12 @@ type Handler interface {
 	// OnDisconnected will be called when client is disconnected.
 	OnDisconnected(c *Client)
 
+	// HandleReconnect registers handler which will be called after each reconnect
+	// Dial attempt of a client-role Client, whether it succeeds or fails.
+	HandleReconnect(onReconnect func(c *Client, info *ReconnectInfo))
+	// OnReconnect will be called after each reconnect Dial attempt.
+	OnReconnect(c *Client, info *ReconnectInfo)
+
 	// MaxReconnectTimes returns client's max reconnect times.
 	MaxReconnectTimes() int
 	// SetMaxReconnectTimes sets client's max reconnect times for.
@@ -327,6 +333,7 @@ type handler struct {
 
 	onConnected      func(*Client)
 	onDisConnected   func(*Client)
+	onReconnect      func(c *Client, info *ReconnectInfo)
 	onOverstock      func(c *Client, m *Message)
 	onMessageDone    func(c *Client, m *Message)
 	onMessageDropped func(c *Client, m *Message)
@@ -423,6 +430,16 @@ func (h *handler) HandleDisconnected(onDisConnected func(*Client)) {
 func (h *handler) OnDisconnected(c *Client) {
 	if h.onDisConnected != nil {
 		h.onDisConnected(c)
+	}
+}
+
+func (h *handler) HandleReconnect(onReconnect func(c *Client, info *ReconnectInfo)) {
+	h.onReconnect = onReconnect
+}
+
+func (h *handler) OnReconnect(c *Client, info *ReconnectInfo) {
+	if h.onReconnect != nil {
+		h.onReconnect(c, info)
 	}
 }
 
@@ -1189,6 +1206,12 @@ func HandleConnected(onConnected func(*Client)) {
 // HandleDisconnected registers default handler which will be called when client disconnected.
 func HandleDisconnected(onDisConnected func(*Client)) {
 	DefaultHandler.HandleDisconnected(onDisConnected)
+}
+
+// HandleReconnect registers default handler which will be called after each
+// reconnect Dial attempt of a client-role Client.
+func HandleReconnect(onReconnect func(c *Client, info *ReconnectInfo)) {
+	DefaultHandler.HandleReconnect(onReconnect)
 }
 
 // HandleOverstock registers default handler which will be called when client send queue is overstock.

@@ -364,3 +364,20 @@ func TestSetHandler(t *testing.T) {
 	HandleFree(func([]byte) {})
 	SetHandler(d)
 }
+
+func Test_handler_HandleReconnect(t *testing.T) {
+	h := NewHandler()
+	h.OnReconnect(nil, &ReconnectInfo{})
+	called := false
+	h.HandleReconnect(func(c *Client, info *ReconnectInfo) { called = info.Success })
+	h.OnReconnect(nil, &ReconnectInfo{Success: true})
+	if !called {
+		t.Fatalf("OnReconnect callback not called")
+	}
+
+	d := DefaultHandler
+	SetHandler(NewHandler())
+	HandleReconnect(func(c *Client, info *ReconnectInfo) {})
+	HandleReconnect(nil)
+	SetHandler(d)
+}

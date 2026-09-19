@@ -41,6 +41,7 @@
 		- [Async Response](#async-response)
 		- [Handle New Connection](#handle-new-connection)
 		- [Handle Disconnected](#handle-disconnected)
+		- [Handle Client's reconnect](#handle-clients-reconnect)
 		- [Handle Client's send queue overstock](#handle-clients-send-queue-overstock)
 		- [Custom Net Protocol](#custom-net-protocol)
 		- [Custom Codec](#custom-codec)
@@ -464,6 +465,22 @@ svr.Handler.HandleDisconnected(func(c *arpc.Client) {
 // client
 client, err := arpc.NewClient(...)
 client.Handler.HandleDisconnected(func(c *arpc.Client) {
+	...
+})
+```
+
+### Handle Client's reconnect
+
+Called after each reconnect Dial attempt of a client-role Client, whether it succeeds or fails.
+
+```golang
+client, err := arpc.NewClient(...)
+client.Handler.HandleReconnect(func(c *arpc.Client, info *arpc.ReconnectInfo) {
+	// info.Times:    1-based attempt number in the current reconnect round
+	// info.MaxTimes: Handler.MaxReconnectTimes(), <= 0 means unlimited
+	// info.Addr:     target address
+	// info.Success:  whether this attempt connected
+	// info.Err:      Dial error when failed
 	...
 })
 ```
